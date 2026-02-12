@@ -1,0 +1,7 @@
+[
+  {"username": "gazanow", "category": "crisis", "language": "ar", "description": "Real-time Gaza updates"},
+  {"username": "PalestineNewsNetwork", "category": "news", "language": "ar", "description": "Palestine news network"},
+  {"username": "QudsNen", "category": "news", "language": "ar", "description": "Jerusalem news network"},
+  {"username": "GazaHealthMinistry", "category": "medical", "language": "ar", "description": "Gaza health ministry updates"},
+  {"username": "PalestineRCS", "category": "medical", "language": "ar", "description": "Palestine Red Crescent Society"}
+]

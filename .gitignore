@@ -1,0 +1,45 @@
+# Environment & secrets
+.env
+.env.local
+.env.production
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+*.egg
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker volumes (local)
+postgres_data/
+redis_data/
+qdrant_data/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Logs
+*.log
+
+# Coverage
+htmlcov/
+.coverage
+coverage.xml

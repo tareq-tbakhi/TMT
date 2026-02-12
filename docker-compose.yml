@@ -1,0 +1,138 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: tmt-postgres
+    environment:
+      POSTGRES_DB: tmt
+      POSTGRES_USER: tmt_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tmt_dev_password}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tmt_user -d tmt"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: tmt-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: tmt-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:6333/healthz || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tmt-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://tmt_user:${POSTGRES_PASSWORD:-tmt_dev_password}@postgres:5432/tmt
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:-dev-master-key-change-in-production}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  celery-worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tmt-celery-worker
+    environment:
+      DATABASE_URL: postgresql+asyncpg://tmt_user:${POSTGRES_PASSWORD:-tmt_dev_password}@postgres:5432/tmt
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
+      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:-dev-master-key-change-in-production}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
+      CLAUDE_API_KEY: ${CLAUDE_API_KEY:-}
+      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
+      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: celery -A tasks.celery_app worker --loglevel=info --queues=telegram.messages,alerts.new,embeddings.generate,analytics.update,sos.requests,sms.inbound,sms.outbound,map.updates
+
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: tmt-celery-beat
+    environment:
+      DATABASE_URL: postgresql+asyncpg://tmt_user:${POSTGRES_PASSWORD:-tmt_dev_password}@postgres:5432/tmt
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: celery -A tasks.celery_app beat --loglevel=info
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: tmt-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_URL: http://localhost:8000
+      VITE_WS_URL: ws://localhost:8000
+
+volumes:
+  postgres_data:
+  redis_data:
+  qdrant_data:
