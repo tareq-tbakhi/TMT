@@ -154,24 +154,19 @@ function AlertCard({
         </svg>
       </button>
 
-      {/* Expanded Details */}
+      {/* Expanded Details - Minimal Version */}
       {expanded && (
         <div className="px-5 pb-5 border-t border-gray-100 pt-4 space-y-4">
           {/* Description */}
           {alert.details && (
-            <div>
-              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                Description
-              </h4>
-              <p className="text-sm text-gray-700 leading-relaxed">
-                {alert.details}
-              </p>
-            </div>
+            <p className="text-sm text-gray-700 leading-relaxed">
+              {alert.details}
+            </p>
           )}
 
           {/* Safety Instructions */}
-          <div className="bg-amber-50 rounded-lg p-3">
-            <h4 className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-2 flex items-center gap-1">
+          <div className="bg-amber-50 rounded-lg p-4">
+            <h4 className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-2 flex items-center gap-1.5">
               <svg
                 className="w-4 h-4"
                 fill="currentColor"
@@ -183,129 +178,26 @@ function AlertCard({
                   clipRule="evenodd"
                 />
               </svg>
-              Safety Instructions
+              What to do
             </h4>
-            <ul className="text-sm text-amber-700 space-y-1">
+            <ul className="text-sm text-amber-900 space-y-2">
               {getSafetyInstructions(alert.event_type).map((instruction, i) => (
                 <li key={i} className="flex items-start gap-2">
-                  <span className="text-amber-500 mt-0.5 shrink-0">-</span>
+                  <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold shrink-0">
+                    {i + 1}
+                  </span>
                   {instruction}
                 </li>
               ))}
             </ul>
           </div>
 
-          {/* Nearest Hospital Card */}
-          {nearestHospital && (
-            <div className="bg-green-50 rounded-lg p-4">
-              <h4 className="text-xs font-semibold text-green-800 uppercase tracking-wide mb-2">
-                Nearest Hospital
-              </h4>
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 bg-green-100 rounded-full flex items-center justify-center shrink-0">
-                  <svg
-                    className="w-5 h-5 text-green-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                    />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <p className="font-semibold text-green-900 text-sm">
-                    {nearestHospital.name}
-                  </p>
-                  <p className="text-xs text-green-700">
-                    {nearestHospital.distance.toFixed(1)} km away
-                  </p>
-                  <div className="flex items-center gap-3 mt-1">
-                    <span
-                      className={`text-xs font-medium ${
-                        nearestHospital.status === "operational"
-                          ? "text-green-700"
-                          : nearestHospital.status === "limited"
-                            ? "text-yellow-700"
-                            : "text-red-700"
-                      }`}
-                    >
-                      {nearestHospital.status === "operational"
-                        ? "Operational"
-                        : nearestHospital.status === "limited"
-                          ? "Limited"
-                          : nearestHospital.status}
-                    </span>
-                    {nearestHospital.phone && (
-                      <a
-                        href={`tel:${nearestHospital.phone}`}
-                        className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
-                      >
-                        <svg
-                          className="w-3.5 h-3.5"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                          />
-                        </svg>
-                        {nearestHospital.phone}
-                      </a>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
+          {/* Source - Simple footer */}
+          {alert.source && (
+            <p className="text-xs text-gray-500">
+              Source: <span className="font-medium text-gray-700">{alert.source}</span>
+            </p>
           )}
-
-          {/* Alert Meta */}
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div>
-              <span className="text-gray-500">Source:</span>{" "}
-              <span className="text-gray-700 font-medium">
-                {alert.source || "System"}
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-500">Confidence:</span>{" "}
-              <span className="text-gray-700 font-medium">
-                {Math.round(alert.confidence * 100)}%
-              </span>
-            </div>
-            <div>
-              <span className="text-gray-500">Created:</span>{" "}
-              <span className="text-gray-700 font-medium">
-                {formatDate(alert.created_at)}
-              </span>
-            </div>
-            {alert.expires_at && (
-              <div>
-                <span className="text-gray-500">Expires:</span>{" "}
-                <span className="text-gray-700 font-medium">
-                  {formatDate(alert.expires_at)}
-                </span>
-              </div>
-            )}
-            {alert.radius_m > 0 && (
-              <div>
-                <span className="text-gray-500">Radius:</span>{" "}
-                <span className="text-gray-700 font-medium">
-                  {alert.radius_m >= 1000
-                    ? `${(alert.radius_m / 1000).toFixed(1)} km`
-                    : `${alert.radius_m} m`}
-                </span>
-              </div>
-            )}
-          </div>
         </div>
       )}
     </div>
@@ -376,9 +268,71 @@ function getSafetyInstructions(eventType: string): string[] {
   );
 }
 
+// ─── Main Tabs ──────────────────────────────────────────────────
+
+type MainTab = "alerts" | "needs";
+
 // ─── Filter Tabs ────────────────────────────────────────────────
 
 type FilterTab = "all" | "critical" | "high" | "medium" | "low";
+
+// ─── Demo Crisis Alerts (earthquakes, floods, wars, etc.) ────────
+
+const DEMO_CRISIS_ALERTS: Alert[] = [
+  {
+    id: "demo-critical-1",
+    title: "EARTHQUAKE ALERT: Magnitude 6.2 Detected",
+    details: "A significant earthquake has been detected in the northern region. The Ministry of Health has issued an emergency alert for all residents in affected areas. Please follow safety protocols immediately.",
+    severity: "critical",
+    event_type: "earthquake",
+    latitude: 33.8869,
+    longitude: 35.5131,
+    radius_m: 50000,
+    source: "Ministry of Health",
+    confidence: 1.0,
+    acknowledged: null,
+    affected_patients_count: 0,
+    created_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+  },
+];
+
+// ─── Demo Hospital Needs (blood donations, supplies, volunteers) ────────
+
+const DEMO_HOSPITAL_NEEDS: Alert[] = [
+  {
+    id: "demo-need-1",
+    title: "Urgent: Blood Donation Needed",
+    details: "Al-Shifa Medical Complex is experiencing a critical shortage of O-negative and B-positive blood types. If you are able to donate, please visit the hospital's blood bank. Your donation can save lives.",
+    severity: "high",
+    event_type: "blood_donation",
+    latitude: 33.8869,
+    longitude: 35.5131,
+    radius_m: 25000,
+    source: "Al-Shifa Medical Complex",
+    confidence: 1.0,
+    acknowledged: null,
+    affected_patients_count: 0,
+    created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "demo-need-2",
+    title: "Medical Supplies Needed",
+    details: "Gaza Central Hospital urgently needs medical supplies including bandages, antiseptics, and basic medications. Donations can be dropped off at the main entrance.",
+    severity: "medium",
+    event_type: "supplies_needed",
+    latitude: 33.8900,
+    longitude: 35.5200,
+    radius_m: 30000,
+    source: "Gaza Central Hospital",
+    confidence: 1.0,
+    acknowledged: null,
+    affected_patients_count: 0,
+    created_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+    expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
+  },
+];
 
 // ─── Main Component ─────────────────────────────────────────────
 
@@ -398,9 +352,15 @@ export default function Alerts() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterTab>("all");
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [mainTab, setMainTab] = useState<MainTab>("alerts");
+
+  // Emergency Alert Overlay (for critical alerts demo)
+  const [emergencyAlert, setEmergencyAlert] = useState<Alert | null>(null);
+  const [showEmergencyOverlay, setShowEmergencyOverlay] = useState(false);
 
   // WebSocket ref
   const socketRef = useRef<Socket | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // ─── Online/Offline ───────────────────────────────────────
 
@@ -553,8 +513,13 @@ export default function Alerts() {
     return { ...closest, distance: minDist };
   };
 
+  // Use demo alerts based on selected main tab
+  // "alerts" = crisis alerts (earthquakes, floods, wars)
+  // "needs" = hospital needs (blood donations, supplies, volunteers)
+  const displayAlerts: Alert[] = mainTab === "alerts" ? DEMO_CRISIS_ALERTS : DEMO_HOSPITAL_NEEDS;
+
   // Filter alerts
-  const filteredAlerts = alerts.filter((a) => {
+  const filteredAlerts = displayAlerts.filter((a: Alert) => {
     if (filter === "all") return true;
     return a.severity === filter;
   });
@@ -582,11 +547,11 @@ export default function Alerts() {
 
   // Count by severity
   const counts = {
-    all: alerts.length,
-    critical: alerts.filter((a) => a.severity === "critical").length,
-    high: alerts.filter((a) => a.severity === "high").length,
-    medium: alerts.filter((a) => a.severity === "medium").length,
-    low: alerts.filter((a) => a.severity === "low").length,
+    all: displayAlerts.length,
+    critical: displayAlerts.filter((a) => a.severity === "critical").length,
+    high: displayAlerts.filter((a) => a.severity === "high").length,
+    medium: displayAlerts.filter((a) => a.severity === "medium").length,
+    low: displayAlerts.filter((a) => a.severity === "low").length,
   };
 
   // Nearest hospital to patient
@@ -655,10 +620,141 @@ export default function Alerts() {
     );
   }
 
+  // ─── Emergency Alert Functions ─────────────────────────────
+
+  const triggerEmergencyAlert = (alert: Alert) => {
+    setEmergencyAlert(alert);
+    setShowEmergencyOverlay(true);
+
+    // Try to vibrate (Android only)
+    if (navigator.vibrate) {
+      // Emergency vibration pattern: long-short-long-short-long
+      navigator.vibrate([500, 200, 500, 200, 1000]);
+    }
+
+    // Try to play alarm sound
+    try {
+      // Create oscillator for emergency tone (works without audio file)
+      const audioContext = new (window.AudioContext || (window as typeof window & { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+
+      oscillator.frequency.value = 880; // High-pitched alert tone
+      oscillator.type = 'square';
+      gainNode.gain.value = 0.3;
+
+      oscillator.start();
+
+      // Siren effect: alternate between two frequencies
+      let high = true;
+      const sirenInterval = setInterval(() => {
+        oscillator.frequency.value = high ? 880 : 660;
+        high = !high;
+      }, 500);
+
+      // Stop after 3 seconds
+      setTimeout(() => {
+        clearInterval(sirenInterval);
+        oscillator.stop();
+        audioContext.close();
+      }, 3000);
+
+      audioRef.current = null; // We're using AudioContext instead
+    } catch {
+      console.log('Audio not available');
+    }
+  };
+
+  const dismissEmergencyAlert = () => {
+    setShowEmergencyOverlay(false);
+    setEmergencyAlert(null);
+  };
+
   // ─── Render ───────────────────────────────────────────────
 
   return (
     <div className="min-h-full bg-gray-50">
+      {/* Emergency Alert Overlay - Full Screen, No Scroll */}
+      {showEmergencyOverlay && emergencyAlert && (
+        <div className="fixed inset-0 z-[100] bg-gradient-to-b from-red-900 via-red-800 to-black">
+          {/* Flashing red border */}
+          <div className="absolute inset-0 animate-pulse pointer-events-none">
+            <div className="absolute inset-0 border-[4px] border-red-500" />
+          </div>
+
+          <div className="relative h-full flex flex-col justify-center overflow-hidden px-5 py-6">
+            {/* Header - Fixed at top */}
+            <div className="absolute top-4 left-5 right-5 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse" />
+                <span className="text-white/80 text-xs font-semibold uppercase tracking-wider">
+                  Emergency Alert
+                </span>
+              </div>
+              <span className="text-white/60 text-xs">
+                {new Date().toLocaleTimeString()}
+              </span>
+            </div>
+
+            {/* Centered Content */}
+            <div className="flex flex-col items-center">
+              {/* Alert Icon */}
+              <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center animate-pulse mb-4">
+                <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+
+              {/* Alert Type Badge */}
+              <span className="inline-block bg-red-600 text-white px-4 py-1 rounded-full text-sm font-bold uppercase mb-3">
+                {eventTypeLabels[emergencyAlert.event_type]?.en || emergencyAlert.event_type}
+              </span>
+
+              {/* Alert Title */}
+              <h1 className="text-white text-lg font-bold text-center mb-2 leading-tight">
+                {emergencyAlert.title}
+              </h1>
+
+              {/* Alert Message */}
+              <p className="text-white/80 text-center text-sm mb-4">
+                {emergencyAlert.details}
+              </p>
+
+              {/* Safety Instructions */}
+              <div className="w-full bg-white/10 rounded-xl p-3 mb-4">
+                <p className="text-amber-400 text-xs font-bold uppercase mb-2">What to do:</p>
+                <div className="space-y-1.5">
+                  {getSafetyInstructions(emergencyAlert.event_type).slice(0, 3).map((instruction, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className="w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center text-[10px] font-bold text-black shrink-0 mt-0.5">
+                        {i + 1}
+                      </span>
+                      <span className="text-white text-xs leading-snug">{instruction}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Source */}
+              <p className="text-center text-white/50 text-xs mb-4">
+                Source: <span className="text-white/70">{emergencyAlert.source}</span>
+              </p>
+
+              {/* Dismiss Button */}
+              <button
+                onClick={dismissEmergencyAlert}
+                className="w-full bg-white text-red-700 font-bold py-3.5 rounded-xl text-base active:bg-gray-100 transition-colors"
+              >
+                I Understand
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Offline Banner */}
       {!isOnline && (
         <div className="px-4 py-2.5 bg-amber-500 text-white text-center text-sm font-medium flex items-center justify-center gap-2">
@@ -675,11 +771,15 @@ export default function Alerts() {
 
       <div className="max-w-2xl mx-auto px-4 py-6">
         {/* Header */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Crisis Alerts</h1>
+            <h1 className="text-2xl font-bold text-gray-900">
+              {mainTab === "alerts" ? "Crisis Alerts" : "Hospital Needs"}
+            </h1>
             <p className="text-gray-500 text-sm mt-1">
-              Emergency alerts in your area
+              {mainTab === "alerts"
+                ? "Emergency alerts in your area"
+                : "Hospitals requesting donations & supplies"}
             </p>
           </div>
           <button
@@ -704,8 +804,48 @@ export default function Alerts() {
           </button>
         </div>
 
-        {/* Nearest Hospital Card (global) */}
-        {patientNearestHospital && (
+        {/* Main Tabs: Alerts vs Needs */}
+        <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
+          <button
+            onClick={() => setMainTab("alerts")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${
+              mainTab === "alerts"
+                ? "bg-white text-red-600 shadow-sm"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+            </svg>
+            Alerts
+            <span className={`px-1.5 py-0.5 rounded text-xs ${
+              mainTab === "alerts" ? "bg-red-100 text-red-600" : "bg-gray-200 text-gray-500"
+            }`}>
+              {DEMO_CRISIS_ALERTS.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setMainTab("needs")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${
+              mainTab === "needs"
+                ? "bg-white text-blue-600 shadow-sm"
+                : "text-gray-600 hover:text-gray-900"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+            </svg>
+            Needs
+            <span className={`px-1.5 py-0.5 rounded text-xs ${
+              mainTab === "needs" ? "bg-blue-100 text-blue-600" : "bg-gray-200 text-gray-500"
+            }`}>
+              {DEMO_HOSPITAL_NEEDS.length}
+            </span>
+          </button>
+        </div>
+
+        {/* Nearest Hospital Card (global) - Commented out */}
+        {/* {patientNearestHospital && (
           <div className="bg-white rounded-xl border border-green-200 shadow-sm p-4 mb-6">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center shrink-0">
@@ -751,10 +891,10 @@ export default function Alerts() {
               </div>
             </div>
           </div>
-        )}
+        )} */}
 
-        {/* Filter Tabs */}
-        <div className="flex gap-1.5 mb-6 overflow-x-auto pb-1">
+        {/* Filter Pills */}
+        <div className="flex flex-wrap gap-2 mb-6">
           {(["all", "critical", "high", "medium", "low"] as FilterTab[]).map(
             (tab) => {
               const tabColors: Record<FilterTab, string> = {
@@ -775,7 +915,7 @@ export default function Alerts() {
                 <button
                   key={tab}
                   onClick={() => setFilter(tab)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold capitalize whitespace-nowrap transition ${
+                  className={`px-4 py-2 rounded-full text-sm font-semibold capitalize transition ${
                     filter === tab ? activeColors[tab] : tabColors[tab]
                   }`}
                 >
@@ -829,12 +969,14 @@ export default function Alerts() {
               </svg>
             </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-1">
-              No Active Alerts
+              {mainTab === "alerts" ? "No Active Alerts" : "No Current Needs"}
             </h3>
             <p className="text-gray-500 text-sm">
               {filter === "all"
-                ? "There are no crisis alerts in your area at this time."
-                : `No ${filter} severity alerts found.`}
+                ? mainTab === "alerts"
+                  ? "There are no crisis alerts in your area at this time."
+                  : "No hospitals are requesting donations or supplies at this time."
+                : `No ${filter} severity ${mainTab === "alerts" ? "alerts" : "needs"} found.`}
             </p>
           </div>
         ) : (
@@ -851,6 +993,32 @@ export default function Alerts() {
                 }
               />
             ))}
+          </div>
+        )}
+
+        {/* Demo Emergency Alert Button (for prototype demonstration) - Only on Alerts tab */}
+        {mainTab === "alerts" && (
+          <div className="mt-8 p-4 bg-gray-100 rounded-xl border border-dashed border-gray-300">
+            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-2">
+              Prototype Demo
+            </p>
+            <p className="text-sm text-gray-600 mb-3">
+              Simulate receiving a government-level emergency broadcast alert:
+            </p>
+            <button
+              onClick={() => {
+                const criticalAlert = DEMO_CRISIS_ALERTS.find(a => a.severity === "critical");
+                if (criticalAlert) {
+                  triggerEmergencyAlert(criticalAlert);
+                }
+              }}
+              className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              Trigger Emergency Alert Demo
+            </button>
           </div>
         )}
 

@@ -5,6 +5,18 @@ import { useAuthStore } from "../../store/authStore";
 import { getCurrentPosition } from "../../utils/locationCodec";
 import { patientStatusConfig } from "../../utils/formatting";
 
+// ─── Heartbeat Animation CSS ─────────────────────────────────────
+
+const heartbeatStyle = `
+@keyframes heartbeat {
+  0% { transform: scale(1); }
+  14% { transform: scale(1.08); }
+  28% { transform: scale(1); }
+  42% { transform: scale(1.08); }
+  70% { transform: scale(1); }
+}
+`;
+
 // ─── Types ───────────────────────────────────────────────────────
 
 type PatientStatus = "safe" | "injured" | "trapped" | "evacuate";
@@ -15,7 +27,7 @@ interface SOSFormData {
   details: string;
 }
 
-type SOSState = "idle" | "sending" | "sent" | "sms_ready" | "error" | "cancelled";
+type SOSState = "idle" | "countdown" | "sending" | "sent" | "sms_ready" | "error" | "cancelled";
 
 // ─── IndexedDB Helper ───────────────────────────────────────────
 
@@ -108,6 +120,7 @@ export default function SOS() {
   const [longitude, setLongitude] = useState<number | null>(null);
   const [gpsLoading, setGpsLoading] = useState(false);
   const [gpsError, setGpsError] = useState<string | null>(null);
+  const [locationAddress, setLocationAddress] = useState<string | null>(null);
 
   // SOS form
   const [form, setForm] = useState<SOSFormData>({
@@ -127,17 +140,21 @@ export default function SOS() {
   // SMS state
   const [smsBody, setSmsBody] = useState<string | null>(null);
 
-  // Nearest hospital
-  const [nearestHospital, setNearestHospital] = useState<
-    (Hospital & { distance: number }) | null
-  >(null);
+  // Nearest hospitals (top 3)
+  const [nearestHospitals, setNearestHospitals] = useState<
+    (Hospital & { distance: number })[]
+  >([]);
   const [hospitalLoading, setHospitalLoading] = useState(false);
 
   // Pending SOS count
   const [pendingCount, setPendingCount] = useState(0);
 
+  // Countdown before sending (cancellation window)
+  const [countdownSeconds, setCountdownSeconds] = useState(5);
+
   // Refs for cleanup
   const syncTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   // ─── Online/Offline Listeners ─────────────────────────────
 
@@ -157,15 +174,78 @@ export default function SOS() {
     };
   }, []);
 
+  // ─── Countdown Timer (Cancellation Window) ─────────────────
+
+  useEffect(() => {
+    if (sosState === "countdown") {
+      // Reset countdown to 5 seconds
+      setCountdownSeconds(5);
+
+      countdownTimerRef.current = setInterval(() => {
+        setCountdownSeconds((prev: number) => {
+          if (prev <= 1) {
+            // Countdown finished - actually send the SOS
+            clearInterval(countdownTimerRef.current);
+            if (isOnline) {
+              handleSOSOnline();
+            } else {
+              handleSOSOffline();
+            }
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => {
+        if (countdownTimerRef.current) {
+          clearInterval(countdownTimerRef.current);
+        }
+      };
+    }
+  }, [sosState, isOnline]);
+
   // ─── Auto-detect GPS on Load ──────────────────────────────
 
   const detectGPS = useCallback(async () => {
     setGpsLoading(true);
     setGpsError(null);
+    setLocationAddress(null);
     try {
       const pos = await getCurrentPosition();
       setLatitude(pos.latitude);
       setLongitude(pos.longitude);
+
+      // Reverse geocode to get address
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${pos.latitude}&lon=${pos.longitude}&zoom=18&addressdetails=1`,
+          {
+            headers: {
+              'Accept-Language': 'en',
+            },
+          }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          const addr = data.address;
+          let addressParts: string[] = [];
+
+          if (addr.road || addr.street) addressParts.push(addr.road || addr.street);
+          if (addr.neighbourhood || addr.suburb) addressParts.push(addr.neighbourhood || addr.suburb);
+          if (addr.city || addr.town || addr.village) addressParts.push(addr.city || addr.town || addr.village);
+          if (addr.country) addressParts.push(addr.country);
+
+          if (addressParts.length > 0) {
+            setLocationAddress(addressParts.slice(0, 3).join(', '));
+          } else if (data.display_name) {
+            const parts = data.display_name.split(',').slice(0, 3);
+            setLocationAddress(parts.join(',').trim());
+          }
+        }
+      } catch {
+        // Silently fail - we still have coordinates
+      }
     } catch (err) {
       setGpsError(
         err instanceof Error
@@ -181,54 +261,24 @@ export default function SOS() {
     detectGPS();
   }, [detectGPS]);
 
-  // ─── Fetch Nearest Hospital ───────────────────────────────
+  // ─── Fetch Nearest Hospitals ───────────────────────────────
 
-  const fetchNearestHospital = useCallback(async () => {
-    if (latitude === null || longitude === null || !isOnline) return;
+  const fetchNearestHospitals = useCallback(async () => {
+    if (latitude === null || longitude === null) return;
     setHospitalLoading(true);
-    try {
-      const hospitals = await getHospitals();
-      const operational = hospitals.filter(
-        (h) =>
-          h.status === "operational" &&
-          h.latitude !== null &&
-          h.longitude !== null
-      );
 
-      if (operational.length > 0) {
-        let closest = operational[0];
-        let minDist = haversineKm(
-          latitude,
-          longitude,
-          closest.latitude!,
-          closest.longitude!
-        );
-
-        for (let i = 1; i < operational.length; i++) {
-          const dist = haversineKm(
-            latitude,
-            longitude,
-            operational[i].latitude!,
-            operational[i].longitude!
-          );
-          if (dist < minDist) {
-            minDist = dist;
-            closest = operational[i];
-          }
-        }
-
-        setNearestHospital({ ...closest, distance: minDist });
-      }
-    } catch {
-      // Silently fail - hospital info is supplementary
-    } finally {
-      setHospitalLoading(false);
-    }
-  }, [latitude, longitude, isOnline]);
+    // Always use dummy data for now (demo purposes)
+    setNearestHospitals([
+      { id: "dummy-1", name: "Al-Shifa Medical Complex", latitude: 31.5, longitude: 34.45, status: "operational" as const, available_beds: 120, total_beds: 200, distance: 2.3 },
+      { id: "dummy-2", name: "Al-Quds Hospital", latitude: 31.52, longitude: 34.47, status: "offline" as const, available_beds: 0, total_beds: 150, distance: 5.7 },
+      { id: "dummy-3", name: "European Gaza Hospital", latitude: 31.35, longitude: 34.32, status: "operational" as const, available_beds: 45, total_beds: 100, distance: 12.1 },
+    ]);
+    setHospitalLoading(false);
+  }, [latitude, longitude]);
 
   useEffect(() => {
-    fetchNearestHospital();
-  }, [fetchNearestHospital]);
+    fetchNearestHospitals();
+  }, [fetchNearestHospitals]);
 
   // ─── Check Pending SOS ────────────────────────────────────
 
@@ -308,7 +358,7 @@ export default function SOS() {
 
       setSosResponse({
         id: response.id,
-        hospital_name: nearestHospital?.name,
+        hospital_name: nearestHospitals[0]?.name,
       });
       setSosState("sent");
     } catch (err) {
@@ -392,11 +442,19 @@ export default function SOS() {
   // ─── Handle SOS Button Press ──────────────────────────────
 
   const handleSOS = () => {
-    if (isOnline) {
-      handleSOSOnline();
-    } else {
-      handleSOSOffline();
+    // Start countdown instead of directly sending
+    setSosState("countdown");
+    setCountdownSeconds(5);
+  };
+
+  // ─── Cancel SOS (during countdown) ─────────────────────────
+
+  const cancelCountdown = () => {
+    if (countdownTimerRef.current) {
+      clearInterval(countdownTimerRef.current);
     }
+    setSosState("idle");
+    setCountdownSeconds(5);
   };
 
   // ─── Cancel SOS ───────────────────────────────────────────
@@ -417,6 +475,62 @@ export default function SOS() {
     setSmsBody(null);
     setSosError(null);
   };
+
+  // ─── Render: Countdown Screen (Cancellation Window) ────────
+
+  if (sosState === "countdown") {
+    return (
+      <div className="min-h-full bg-red-600 flex items-center justify-center p-4">
+        <div className="max-w-md w-full text-center">
+          {/* Countdown Circle */}
+          <div className="relative w-48 h-48 mx-auto mb-8">
+            {/* Background circle */}
+            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+              <circle
+                cx="50"
+                cy="50"
+                r="45"
+                fill="none"
+                stroke="rgba(255,255,255,0.2)"
+                strokeWidth="8"
+              />
+              {/* Animated progress circle */}
+              <circle
+                cx="50"
+                cy="50"
+                r="45"
+                fill="none"
+                stroke="white"
+                strokeWidth="8"
+                strokeLinecap="round"
+                strokeDasharray={`${(countdownSeconds / 5) * 283} 283`}
+                className="transition-all duration-1000 ease-linear"
+              />
+            </svg>
+            {/* Countdown number */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-7xl font-bold text-white">{countdownSeconds}</span>
+            </div>
+          </div>
+
+          <h2 className="text-2xl font-bold text-white mb-2">
+            Sending SOS...
+          </h2>
+          <p className="text-white/80 mb-8">
+            Tap cancel if this was a mistake
+          </p>
+
+          {/* Cancel Button */}
+          <button
+            onClick={cancelCountdown}
+            className="w-full bg-white text-red-600 font-bold py-4 px-6 rounded-xl text-lg active:bg-gray-100 transition-colors"
+          >
+            CANCEL
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   // ─── Render: Confirmation Screen ──────────────────────────
 
@@ -462,22 +576,17 @@ export default function SOS() {
               )}
             </div>
 
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            <h2 className="text-2xl font-bold text-gray-900 mb-6">
               {sosState === "sent"
                 ? "SOS Received"
                 : "SMS Ready to Send"}
             </h2>
-            <p className="text-gray-600 mb-6">
-              {sosState === "sent"
-                ? "Your emergency signal has been received. The nearest hospital has been notified."
-                : "Your SOS message is encrypted and ready. Tap the button below to open your SMS app."}
-            </p>
 
             {/* SMS Send Button */}
             {sosState === "sms_ready" && smsBody && (
               <button
                 onClick={openSMSApp}
-                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-blue-600 text-white rounded-xl text-lg font-bold hover:bg-blue-700 transition mb-4"
+                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-blue-600 text-white rounded-xl text-lg font-bold hover:bg-blue-700 transition"
               >
                 <svg
                   className="w-6 h-6"
@@ -495,20 +604,10 @@ export default function SOS() {
                 Open SMS App to Send
               </button>
             )}
-
-            {/* SOS ID */}
-            {sosResponse?.id && (
-              <div className="bg-gray-50 rounded-lg p-3 mb-4">
-                <p className="text-xs text-gray-500">SOS Reference</p>
-                <p className="text-sm font-mono font-medium text-gray-800">
-                  {sosResponse.id}
-                </p>
-              </div>
-            )}
           </div>
 
-          {/* Nearest Hospital Card */}
-          {nearestHospital && (
+          {/* Nearest Hospital Card - Commented out */}
+          {/* {nearestHospitals[0] && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-4">
               <div className="flex items-start gap-3">
                 <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center shrink-0">
@@ -528,41 +627,20 @@ export default function SOS() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-gray-900">
-                    {nearestHospital.name}
+                    {nearestHospitals[0].name}
                   </h3>
                   <p className="text-sm text-gray-500">
-                    {nearestHospital.distance.toFixed(1)} km away
+                    {nearestHospitals[0].distance.toFixed(1)} km away
                   </p>
                   <p className="text-sm text-green-600 font-medium">
-                    {nearestHospital.status === "operational"
+                    {nearestHospitals[0].status === "operational"
                       ? "Operational"
-                      : nearestHospital.status}
+                      : nearestHospitals[0].status}
                   </p>
-                  {nearestHospital.phone && (
-                    <a
-                      href={`tel:${nearestHospital.phone}`}
-                      className="inline-flex items-center gap-1 mt-1 text-sm text-blue-600 hover:text-blue-700"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-                        />
-                      </svg>
-                      {nearestHospital.phone}
-                    </a>
-                  )}
                 </div>
               </div>
             </div>
-          )}
+          )} */}
 
           {/* Safety Instructions */}
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-4">
@@ -640,21 +718,13 @@ export default function SOS() {
   // ─── Render: Main SOS Screen ──────────────────────────────
 
   return (
-    <div className="min-h-full bg-gray-50">
-      {/* Online/Offline Banner */}
-      <div
-        className={`px-4 py-2.5 text-center text-sm font-medium ${
-          isOnline
-            ? "bg-green-500 text-white"
-            : "bg-amber-500 text-white"
-        }`}
-      >
-        {isOnline ? (
-          <span className="flex items-center justify-center gap-2">
-            <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-            Connected - SOS will be sent via internet
-          </span>
-        ) : (
+    <div className="h-full bg-gray-50 flex flex-col overflow-hidden">
+      {/* Inject heartbeat animation CSS */}
+      <style>{heartbeatStyle}</style>
+
+      {/* Offline Banner - Only show when not connected */}
+      {!isOnline && (
+        <div className="px-4 py-2.5 text-center text-sm font-medium bg-amber-500 text-white">
           <span className="flex items-center justify-center gap-2">
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
               <path
@@ -665,8 +735,8 @@ export default function SOS() {
             </svg>
             No Internet - SMS SOS Mode
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Pending SOS Sync Badge */}
       {pendingCount > 0 && isOnline && (
@@ -675,18 +745,10 @@ export default function SOS() {
         </div>
       )}
 
-      <div className="max-w-md mx-auto px-4 py-6">
-        {/* Header */}
-        <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-900">Emergency SOS</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Send an emergency signal to the nearest hospital
-          </p>
-        </div>
-
-        {/* GPS Status */}
+      {/* GPS Status - Compact */}
+      <div className="px-4 pt-4 pb-2 max-w-md mx-auto w-full">
         <div
-          className={`rounded-xl p-4 mb-6 ${
+          className={`rounded-xl p-3 ${
             latitude !== null && longitude !== null
               ? "bg-green-50 border border-green-200"
               : gpsLoading
@@ -721,11 +783,13 @@ export default function SOS() {
                 ) : latitude !== null && longitude !== null ? (
                   <>
                     <p className="text-sm font-medium text-green-700">
-                      Location detected
+                      {locationAddress || "Location detected"}
                     </p>
-                    <p className="text-xs text-green-600">
-                      {latitude.toFixed(6)}, {longitude.toFixed(6)}
-                    </p>
+                    {!locationAddress && (
+                      <p className="text-xs text-green-600">
+                        {latitude.toFixed(6)}, {longitude.toFixed(6)}
+                      </p>
+                    )}
                   </>
                 ) : (
                   <p className="text-sm font-medium text-red-700">
@@ -744,249 +808,149 @@ export default function SOS() {
             )}
           </div>
         </div>
+      </div>
 
-        {/* Nearest Hospital */}
-        {nearestHospital && !hospitalLoading && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center shrink-0">
-                <svg
-                  className="w-4 h-4 text-green-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                  />
-                </svg>
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  Nearest: {nearestHospital.name}
-                </p>
-                <p className="text-xs text-gray-500">
-                  {nearestHospital.distance.toFixed(1)} km away - {nearestHospital.available_beds} beds available
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Patient Status Selection */}
-        <div className="mb-6">
-          <label className="block text-sm font-semibold text-gray-900 mb-3">
-            Your Current Status
-          </label>
-          <div className="grid grid-cols-2 gap-2">
-            {(
-              Object.entries(patientStatusConfig) as Array<
-                [PatientStatus, (typeof patientStatusConfig)[string]]
-              >
-            ).map(([key, config]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() =>
-                  setForm((prev) => ({ ...prev, patientStatus: key }))
-                }
-                className={`px-4 py-3 rounded-xl border-2 text-sm font-medium transition ${
-                  form.patientStatus === key
-                    ? key === "safe"
-                      ? "border-green-500 bg-green-50 text-green-700"
-                      : key === "injured"
-                        ? "border-orange-500 bg-orange-50 text-orange-700"
-                        : key === "trapped"
-                          ? "border-red-500 bg-red-50 text-red-700"
-                          : "border-purple-500 bg-purple-50 text-purple-700"
-                    : "border-gray-200 text-gray-600 hover:border-gray-300"
-                }`}
-              >
-                {config.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Severity */}
-        <div className="mb-6">
-          <label className="block text-sm font-semibold text-gray-900 mb-3">
-            Severity Level:{" "}
-            <span
-              className={
-                form.severity <= 2
-                  ? "text-yellow-600"
-                  : form.severity <= 3
-                    ? "text-orange-600"
-                    : "text-red-600"
-              }
+      <div className="flex-1 flex flex-col pb-20 px-4">
+        {/* SOS BUTTON - Centered */}
+        <div className="flex-1 flex items-center justify-center py-6">
+          <div className="flex flex-col items-center">
+            <button
+              onClick={handleSOS}
+              disabled={sosState === "sending" || (latitude === null && !gpsLoading)}
+              className={`relative w-64 h-64 rounded-full flex items-center justify-center text-white font-bold text-2xl transition-all duration-100 ${
+                sosState === "sending"
+                  ? "bg-gray-400 cursor-wait"
+                  : "bg-gradient-to-b from-red-500 to-red-700 active:from-red-600 active:to-red-800 active:translate-y-1 active:shadow-[0_2px_0_0_#991b1b,inset_0_1px_2px_rgba(0,0,0,0.2)]"
+              }`}
+              style={{
+                boxShadow: sosState === "sending"
+                  ? "0 4px 0 0 #9ca3af, 0 6px 20px rgba(0,0,0,0.2)"
+                  : "0 6px 0 0 #991b1b, 0 8px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2)",
+                animation: sosState !== "sending" && latitude !== null ? "heartbeat 1.5s ease-in-out infinite" : "none",
+              }}
             >
-              {form.severity}/5
-            </span>
-          </label>
-          <div className="flex gap-2">
-            {[1, 2, 3, 4, 5].map((level) => (
-              <button
-                key={level}
-                type="button"
-                onClick={() =>
-                  setForm((prev) => ({ ...prev, severity: level }))
-                }
-                className={`flex-1 py-3 rounded-xl border-2 text-sm font-bold transition ${
-                  form.severity >= level
-                    ? level <= 2
-                      ? "border-yellow-400 bg-yellow-50 text-yellow-700"
-                      : level <= 3
-                        ? "border-orange-400 bg-orange-50 text-orange-700"
-                        : "border-red-500 bg-red-50 text-red-700"
-                    : "border-gray-200 text-gray-400 hover:border-gray-300"
-                }`}
-              >
-                {level}
-              </button>
-            ))}
-          </div>
-          <div className="flex justify-between mt-1 px-1">
-            <span className="text-xs text-gray-400">Low</span>
-            <span className="text-xs text-gray-400">Critical</span>
-          </div>
-        </div>
-
-        {/* Details */}
-        <div className="mb-8">
-          <label className="block text-sm font-semibold text-gray-900 mb-2">
-            Additional Details{" "}
-            <span className="font-normal text-gray-400">(optional)</span>
-          </label>
-          <textarea
-            value={form.details}
-            onChange={(e) =>
-              setForm((prev) => ({ ...prev, details: e.target.value }))
-            }
-            rows={3}
-            className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none resize-none text-sm"
-            placeholder="Describe your situation briefly..."
-          />
-        </div>
-
-        {/* Error */}
-        {sosError && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
-            <svg
-              className="w-5 h-5 text-red-500 mt-0.5 shrink-0"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                clipRule="evenodd"
-              />
-            </svg>
-            <div>
-              <p className="text-red-700 text-sm font-medium">{sosError}</p>
-              {!isOnline && (
-                <button
-                  onClick={handleSOSOffline}
-                  className="mt-2 text-sm text-red-600 underline hover:text-red-700"
-                >
-                  Try SMS Fallback
-                </button>
+              {sosState === "sending" ? (
+                <div className="flex flex-col items-center">
+                  <svg
+                    className="w-12 h-12 animate-spin mb-2"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                    />
+                  </svg>
+                  <span className="text-xl">Sending...</span>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center relative z-10">
+                  <span className="text-6xl font-black tracking-wider drop-shadow-lg">SOS</span>
+                  <span className="text-base font-medium mt-2 opacity-90">
+                    {isOnline ? "TAP TO SEND" : "TAP FOR SMS"}
+                  </span>
+                </div>
               )}
+            </button>
+
+            {/* Offline SMS reminder */}
+            {!isOnline && (
+              <p className="mt-2 text-center text-sm text-amber-600 max-w-xs">
+                Your SOS will be prepared as an encrypted SMS message.
+              </p>
+            )}
+
+            {/* Error */}
+            {sosError && (
+              <div className="mt-3 bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2 max-w-xs">
+                <svg
+                  className="w-4 h-4 text-red-500 mt-0.5 shrink-0"
+                  fill="currentColor"
+                  viewBox="0 0 20 20"
+                >
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+                <div>
+                  <p className="text-red-700 text-xs font-medium">{sosError}</p>
+                  {!isOnline && (
+                    <button
+                      onClick={handleSOSOffline}
+                      className="mt-1 text-xs text-red-600 underline hover:text-red-700"
+                    >
+                      Try SMS Fallback
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Nearest Hospitals */}
+        {nearestHospitals.length > 0 && !hospitalLoading && (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4 mt-8">
+            <p className="text-sm font-semibold text-gray-900 mb-3">Nearest Hospitals</p>
+            <div className="space-y-3">
+              {nearestHospitals.map((hospital: Hospital & { distance: number }, index: number) => {
+                const isAvailable = hospital.status === "operational";
+                const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${latitude},${longitude}&destination=${hospital.latitude},${hospital.longitude}&travelmode=driving`;
+                return (
+                  <a
+                    key={hospital.id}
+                    href={googleMapsUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`flex items-center gap-3 p-2.5 rounded-xl transition-colors ${!isAvailable ? "opacity-60 bg-gray-50" : "bg-gray-50 hover:bg-gray-100 active:bg-gray-200"}`}
+                  >
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
+                      !isAvailable ? "bg-gray-200" : index === 0 ? "bg-green-100" : "bg-blue-100"
+                    }`}>
+                      <svg
+                        className={`w-5 h-5 ${!isAvailable ? "text-gray-400" : index === 0 ? "text-green-600" : "text-blue-500"}`}
+                        fill="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M11.54 22.351l.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742zM12 13.5a3 3 0 100-6 3 3 0 000 6z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-semibold truncate ${!isAvailable ? "text-gray-500" : index === 0 ? "text-gray-900" : "text-gray-700"}`}>
+                        {hospital.name}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
+                          isAvailable ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
+                        }`}>
+                          {isAvailable ? "Available" : "Unavailable"}
+                        </span>
+                        <p className="text-xs text-gray-500">
+                          {hospital.distance.toFixed(1)} km away
+                        </p>
+                      </div>
+                    </div>
+                  </a>
+                );
+              })}
             </div>
           </div>
         )}
-
-        {/* SOS BUTTON */}
-        <div className="flex flex-col items-center mb-8">
-          <button
-            onClick={handleSOS}
-            disabled={sosState === "sending" || (latitude === null && !gpsLoading)}
-            className={`relative w-48 h-48 rounded-full flex items-center justify-center text-white font-bold text-2xl shadow-2xl transition-all duration-300 ${
-              sosState === "sending"
-                ? "bg-gray-400 cursor-wait"
-                : "bg-red-600 hover:bg-red-700 hover:scale-105 active:scale-95"
-            } ${
-              sosState !== "sending" && latitude !== null
-                ? "animate-pulse"
-                : ""
-            }`}
-            style={
-              sosState !== "sending" && latitude !== null
-                ? {
-                    boxShadow:
-                      "0 0 0 0 rgba(220, 38, 38, 0.7), 0 0 60px rgba(220, 38, 38, 0.3)",
-                    animation: "sos-pulse 2s ease-in-out infinite",
-                  }
-                : undefined
-            }
-          >
-            {/* Pulsing ring */}
-            {sosState !== "sending" && latitude !== null && (
-              <>
-                <span className="absolute inset-0 rounded-full border-4 border-red-400 opacity-75 animate-ping" />
-                <span className="absolute inset-[-8px] rounded-full border-2 border-red-300 opacity-50 animate-ping" style={{ animationDelay: "0.5s" }} />
-              </>
-            )}
-
-            {sosState === "sending" ? (
-              <div className="flex flex-col items-center">
-                <svg
-                  className="w-10 h-10 animate-spin mb-2"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                  />
-                </svg>
-                <span className="text-lg">Sending...</span>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center relative z-10">
-                <span className="text-5xl font-black tracking-wider">SOS</span>
-                <span className="text-sm font-medium mt-1 opacity-80">
-                  {isOnline ? "TAP TO SEND" : "TAP FOR SMS"}
-                </span>
-              </div>
-            )}
-          </button>
-
-          {/* Offline SMS reminder */}
-          {!isOnline && (
-            <p className="mt-4 text-center text-sm text-amber-600 max-w-xs">
-              Your SOS will be prepared as an encrypted SMS message. You will
-              need to send it through your SMS app.
-            </p>
-          )}
-        </div>
-
-        {/* Custom CSS for SOS pulse */}
-        <style>{`
-          @keyframes sos-pulse {
-            0%, 100% {
-              box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.7), 0 0 40px rgba(220, 38, 38, 0.2);
-              transform: scale(1);
-            }
-            50% {
-              box-shadow: 0 0 0 15px rgba(220, 38, 38, 0), 0 0 80px rgba(220, 38, 38, 0.4);
-              transform: scale(1.02);
-            }
-          }
-        `}</style>
       </div>
     </div>
   );
