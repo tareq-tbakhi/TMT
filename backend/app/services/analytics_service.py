@@ -105,14 +105,15 @@ async def get_dashboard_stats(db: AsyncSession) -> dict[str, Any]:
         "total_patients": total_patients,
         "active_patients": active_patients,
         "vulnerable_patients": vulnerable_patients,
+        "patients_at_risk": vulnerable_patients,
         "total_hospitals": total_hospitals,
         "operational_hospitals": operational_hospitals,
         "total_available_beds": total_beds,
         "total_icu_beds": total_icu,
         "active_alerts": active_alerts,
         "critical_alerts": critical_alerts,
-        "open_sos": open_sos,
-        "resolved_sos_24h": resolved_24h,
+        "pending_sos": open_sos,
+        "resolved_sos_today": resolved_24h,
     }
 
 
