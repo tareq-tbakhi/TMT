@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../../store/authStore";
 import { useAlertStore } from "../../store/alertStore";
+import { SocketProvider, useSocket } from "../../contexts/SocketContext";
 
 const navItems = [
   { path: "/dashboard", label: "nav.dashboard", icon: "\uD83D\uDCCA" },
@@ -14,11 +15,12 @@ const navItems = [
   { path: "/dashboard/status", label: "nav.status", icon: "\uD83C\uDFE5" },
 ];
 
-const DashboardLayout: React.FC = () => {
+const DashboardInner: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const unreadCount = useAlertStore((s) => s.unreadCount);
+  const { isConnected } = useSocket();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -89,6 +91,17 @@ const DashboardLayout: React.FC = () => {
 
         {/* Sidebar footer */}
         <div className="border-t border-gray-200 p-3">
+          {/* Connection status */}
+          <div className="flex items-center gap-2 px-3 py-1.5 mb-1">
+            <span
+              className={`h-2 w-2 rounded-full ${
+                isConnected ? "bg-green-500" : "bg-red-400"
+              }`}
+            />
+            <span className="text-xs text-gray-400">
+              {isConnected ? "Live" : "Reconnecting..."}
+            </span>
+          </div>
           <button
             onClick={toggleLanguage}
             className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
@@ -211,5 +224,11 @@ const DashboardLayout: React.FC = () => {
     </div>
   );
 };
+
+const DashboardLayout: React.FC = () => (
+  <SocketProvider>
+    <DashboardInner />
+  </SocketProvider>
+);
 
 export default DashboardLayout;

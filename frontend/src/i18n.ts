@@ -81,6 +81,7 @@ const resources = {
       "map.layer.sms_activity": "SMS Activity",
       "map.layer.patient_density": "Patient Density",
       "map.layer.telegram_intel": "Telegram Intel",
+      "map.layer.patient": "Patient Locations",
 
       // SOS
       "sos.title": "Emergency SOS",
@@ -329,6 +330,7 @@ const resources = {
       "map.layer.sms_activity": "\u0646\u0634\u0627\u0637 \u0627\u0644\u0631\u0633\u0627\u0626\u0644",
       "map.layer.patient_density": "\u0643\u062b\u0627\u0641\u0629 \u0627\u0644\u0645\u0631\u0636\u0649",
       "map.layer.telegram_intel": "\u0645\u0639\u0644\u0648\u0645\u0627\u062a \u062a\u064a\u0644\u064a\u062c\u0631\u0627\u0645",
+      "map.layer.patient": "\u0645\u0648\u0627\u0642\u0639 \u0627\u0644\u0645\u0631\u0636\u0649",
 
       // SOS
       "sos.title": "\u0637\u0648\u0627\u0631\u0626 SOS",

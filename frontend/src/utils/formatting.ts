@@ -22,7 +22,8 @@ export function formatDate(
 /**
  * Returns a relative time string like "5 minutes ago".
  */
-export function timeAgo(date: string | Date): string {
+export function timeAgo(date: string | Date | null | undefined): string {
+  if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
   const now = new Date();
   const seconds = Math.floor((now.getTime() - d.getTime()) / 1000);

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import StatusBadge from "./StatusBadge";
 import { timeAgo, eventTypeLabels } from "../../utils/formatting";
+import type { MapEventPatientInfo } from "../../services/api";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -42,6 +43,20 @@ const eventTypeIcons: Record<string, string> = {
   other: "\uD83D\uDCCC",
 };
 
+const patientStatusIcons: Record<string, { icon: string; label: string; color: string }> = {
+  injured: { icon: "\uD83E\uDE78", label: "Injured", color: "text-red-700 bg-red-50" },
+  trapped: { icon: "\uD83D\uDEA8", label: "Trapped", color: "text-red-800 bg-red-100" },
+  evacuate: { icon: "\uD83C\uDFC3", label: "Evacuate", color: "text-orange-700 bg-orange-50" },
+  safe: { icon: "\u2705", label: "Safe", color: "text-green-700 bg-green-50" },
+};
+
+const severityBorderColors: Record<string, string> = {
+  critical: "border-s-red-600",
+  high: "border-s-orange-500",
+  medium: "border-s-yellow-500",
+  low: "border-s-blue-400",
+};
+
 const AlertCard: React.FC<AlertCardProps> = ({
   alert,
   onAcknowledge,
@@ -56,6 +71,10 @@ const AlertCard: React.FC<AlertCardProps> = ({
   const eventIcon = eventTypeIcons[alert.event_type] ?? "\uD83D\uDCCC";
   const meta = (alert.metadata_ ?? alert.metadata) as Record<string, unknown> | undefined;
   const priorityScore = alert.priority_score ?? (meta?.priority_score as number) ?? 0;
+  const isSOS = alert.source === "sos" || alert.event_type === "medical_emergency";
+  const patientInfo = meta?.patient_info as MapEventPatientInfo | undefined;
+  const patientStatus = meta?.patient_status as string | undefined;
+  const psConfig = patientStatus ? patientStatusIcons[patientStatus] : null;
 
   const handleReportFalse = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -123,12 +142,14 @@ const AlertCard: React.FC<AlertCardProps> = ({
     ? `${alert.latitude!.toFixed(4)}, ${alert.longitude!.toFixed(4)}`
     : locationDescription || (detailsLocation ? "See details" : "Unknown");
 
+  const borderColor = alert.acknowledged
+    ? "border-gray-200"
+    : `border-s-4 ${severityBorderColors[alert.severity] ?? "border-s-red-400"} border-e-gray-200 border-t-gray-200 border-b-gray-200`;
+
   return (
     <div
       className={`cursor-pointer rounded-lg border bg-white p-4 transition-all hover:shadow-md ${
-        alert.acknowledged
-          ? "border-gray-200 opacity-70"
-          : "border-s-4 border-s-red-400 border-e-gray-200 border-t-gray-200 border-b-gray-200"
+        alert.acknowledged ? `${borderColor} opacity-70` : borderColor
       } ${className}`}
       onClick={() => setExpanded(!expanded)}
     >
@@ -137,6 +158,7 @@ const AlertCard: React.FC<AlertCardProps> = ({
         <div className="flex items-start gap-3 min-w-0 flex-1">
           <span className="mt-0.5 text-xl shrink-0">{eventIcon}</span>
           <div className="min-w-0 flex-1">
+            {/* Row 1: Title + badges */}
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <h3 className="text-sm font-semibold text-gray-900 truncate">
                 {alert.title}
@@ -158,9 +180,32 @@ const AlertCard: React.FC<AlertCardProps> = ({
                   P{priorityScore}
                 </span>
               )}
+              {psConfig && (
+                <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${psConfig.color}`}>
+                  {psConfig.icon} {psConfig.label}
+                </span>
+              )}
+              {meta?.response_urgency && (
+                <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
+                  meta.response_urgency === "immediate" ? "bg-red-100 text-red-700" :
+                  meta.response_urgency === "within_1h" ? "bg-orange-100 text-orange-700" :
+                  "bg-gray-100 text-gray-600"
+                }`}>
+                  {String(meta.response_urgency).replace(/_/g, " ")}
+                </span>
+              )}
+              {meta?.reported_false && (
+                <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">
+                  Reported False
+                </span>
+              )}
             </div>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
-              <span>{eventLabel}</span>
+
+            {/* Row 2: Key metadata */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+              <span className="font-medium text-gray-600">{eventLabel}</span>
+              <span>{timeAgo(alert.created_at)}</span>
+              {alert.source && <span className="text-gray-400">via {alert.source}</span>}
               <span className="inline-flex items-center gap-1">
                 <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -168,30 +213,65 @@ const AlertCard: React.FC<AlertCardProps> = ({
                 </svg>
                 {locationDescription || locationSummary}
               </span>
-              <span>{timeAgo(alert.created_at)}</span>
-              {alert.source && <span>via {alert.source}</span>}
-              <span>Confidence: {Math.round(alert.confidence * 100)}%</span>
-              {meta?.response_urgency && (
-                <span className={`font-medium ${
-                  meta.response_urgency === "immediate" ? "text-red-600" :
-                  meta.response_urgency === "within_1h" ? "text-orange-600" :
-                  "text-gray-500"
-                }`}>
-                  {String(meta.response_urgency).replace(/_/g, " ")}
-                </span>
-              )}
-              {meta?.patient_trust_score != null && Number(meta.patient_trust_score) < 0.5 && (
-                <span className="font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
-                  Low trust ({Math.round(Number(meta.patient_trust_score) * 100)}%)
-                  {meta.patient_false_alarms ? ` - ${meta.patient_false_alarms} false alarm(s)` : ""}
-                </span>
-              )}
-              {meta?.reported_false && (
-                <span className="font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
-                  Reported False
-                </span>
-              )}
+              <span className="text-gray-400">{Math.round(alert.confidence * 100)}% conf</span>
             </div>
+
+            {/* Row 3: SOS patient info (inline, always visible for SOS alerts) */}
+            {isSOS && patientInfo && (
+              <div className="mt-2 flex items-center gap-3 rounded-md bg-gray-50 px-3 py-2">
+                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-red-100 text-xs font-bold text-red-700">
+                  {patientInfo.name?.charAt(0)?.toUpperCase() ?? "?"}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                    <span className="text-sm font-medium text-gray-900">{patientInfo.name ?? "Unknown"}</span>
+                    {patientInfo.phone && (
+                      <a
+                        href={`tel:${patientInfo.phone}`}
+                        className="text-xs text-blue-600 hover:underline"
+                        dir="ltr"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {patientInfo.phone}
+                      </a>
+                    )}
+                    {patientInfo.blood_type && (
+                      <span className="rounded bg-red-50 px-1.5 py-0.5 text-xs font-medium text-red-700">
+                        {patientInfo.blood_type}
+                      </span>
+                    )}
+                    {(patientInfo.allergies?.length ?? 0) > 0 && (
+                      <span className="rounded bg-yellow-50 px-1.5 py-0.5 text-xs text-yellow-700">
+                        Allergies: {patientInfo.allergies!.join(", ")}
+                      </span>
+                    )}
+                  </div>
+                  {(patientInfo.emergency_contacts?.length ?? 0) > 0 && (
+                    <div className="mt-0.5 text-xs text-gray-500">
+                      ICE: {patientInfo.emergency_contacts![0].name}{" "}
+                      <a
+                        href={`tel:${patientInfo.emergency_contacts![0].phone}`}
+                        className="text-blue-600 hover:underline"
+                        dir="ltr"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {patientInfo.emergency_contacts![0].phone}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Trust warning (only when low) */}
+            {meta?.patient_trust_score != null && Number(meta.patient_trust_score) < 0.5 && (
+              <div className="mt-1">
+                <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                  Low trust ({Math.round(Number(meta.patient_trust_score) * 100)}%)
+                  {meta.patient_false_alarms ? ` \u00B7 ${meta.patient_false_alarms} false alarm(s)` : ""}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

@@ -1,3 +1,6 @@
+import uuid
+from datetime import datetime, timezone
+
 import socketio
 
 sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
@@ -60,10 +63,24 @@ async def broadcast_map_event(event_data: dict):
 async def broadcast_hospital_status(hospital_data: dict):
     """Push hospital status update to all clients."""
     await sio.emit("hospital_status", hospital_data, room="alerts")
-    await sio.emit("map_event", {
-        "type": "hospital_status",
-        "data": hospital_data,
-    }, room="livemap")
+    # Emit as a proper MapEvent so the LiveMap can render it
+    lat = hospital_data.get("latitude")
+    lon = hospital_data.get("longitude")
+    if lat is not None and lon is not None:
+        await sio.emit("map_event", {
+            "id": f"ws-hosp-{hospital_data.get('hospital_id', uuid.uuid4().hex[:8])}",
+            "event_type": "hospital_status",
+            "latitude": lat,
+            "longitude": lon,
+            "source": "system",
+            "severity": 1,
+            "title": f"{hospital_data.get('name', 'Hospital')} — {hospital_data.get('status', 'unknown')}",
+            "details": f"Beds: {hospital_data.get('available_beds', '?')}, ICU: {hospital_data.get('icu_beds', '?')}",
+            "layer": "hospital",
+            "metadata": {"status": hospital_data.get("status", "operational")},
+            "created_at": hospital_data.get("updated_at", datetime.now(timezone.utc).isoformat()),
+            "expires_at": None,
+        }, room="livemap")
 
 
 async def notify_patient(patient_id: str, alert_data: dict):
@@ -74,12 +91,89 @@ async def notify_patient(patient_id: str, alert_data: dict):
 async def broadcast_sos(sos_data: dict):
     """Broadcast SOS to all connected dashboards and map."""
     await sio.emit("new_sos", sos_data, room="alerts")
-    await sio.emit("map_event", {
-        "type": "sos",
-        "data": sos_data,
-    }, room="livemap")
+    # Emit as a proper MapEvent so the LiveMap can render it
+    lat = sos_data.get("latitude")
+    lon = sos_data.get("longitude")
+    if lat is not None and lon is not None:
+        await sio.emit("map_event", {
+            "id": f"ws-sos-{sos_data.get('id', uuid.uuid4().hex[:8])}",
+            "event_type": "medical_emergency",
+            "latitude": lat,
+            "longitude": lon,
+            "source": sos_data.get("source", "app"),
+            "severity": sos_data.get("severity", 4),
+            "title": f"SOS — {sos_data.get('patient_status', 'unknown')}",
+            "details": sos_data.get("details"),
+            "layer": "sos",
+            "metadata": {
+                "patient_id": sos_data.get("patient_id"),
+                "patient_status": sos_data.get("patient_status"),
+                "patient_info": sos_data.get("patient_info"),
+            },
+            "created_at": sos_data.get("created_at", datetime.now(timezone.utc).isoformat()),
+            "expires_at": None,
+        }, room="livemap")
 
 
 async def broadcast_aid_request(aid_request_data: dict):
     """Broadcast new aid request to all connected dashboards."""
     await sio.emit("new_aid_request", aid_request_data, room="alerts")
+
+
+async def broadcast_patient_location(location_data: dict):
+    """Push a patient location update to dashboards, live map, and the patient's room."""
+    await sio.emit("patient_location", location_data, room="alerts")
+    patient_id = location_data.get("patient_id")
+    if patient_id:
+        await sio.emit("patient_location", location_data, room=f"patient_{patient_id}")
+    lat = location_data.get("latitude")
+    lon = location_data.get("longitude")
+    if lat is not None and lon is not None:
+        await sio.emit("map_event", {
+            "id": f"ws-loc-{patient_id or uuid.uuid4().hex[:8]}",
+            "event_type": "patient_location",
+            "latitude": lat,
+            "longitude": lon,
+            "source": "app",
+            "severity": 1,
+            "title": f"Patient: {location_data.get('patient_name', 'Unknown')}",
+            "details": None,
+            "layer": "patient",
+            "metadata": {
+                "patient_id": patient_id,
+                "patient_name": location_data.get("patient_name"),
+                "patient_info": location_data.get("patient_info"),
+            },
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "expires_at": None,
+        }, room="livemap")
+
+
+async def broadcast_sos_resolved(resolution_data: dict):
+    """Broadcast SOS auto-resolution to dashboards and the patient's room."""
+    await sio.emit("sos_resolved", resolution_data, room="alerts")
+    patient_id = resolution_data.get("patient_id")
+    if patient_id:
+        await sio.emit("sos_resolved", resolution_data, room=f"patient_{patient_id}")
+    lat = resolution_data.get("latitude")
+    lon = resolution_data.get("longitude")
+    if lat is not None and lon is not None:
+        await sio.emit("map_event", {
+            "id": f"ws-res-{resolution_data.get('sos_id', uuid.uuid4().hex[:8])}",
+            "event_type": "sos_resolved",
+            "latitude": lat,
+            "longitude": lon,
+            "source": "system",
+            "severity": 1,
+            "title": "SOS auto-resolved — patient at hospital",
+            "details": resolution_data.get("hospital_name"),
+            "layer": "sos",
+            "metadata": {
+                "patient_id": patient_id,
+                "sos_id": resolution_data.get("sos_id"),
+                "hospital_id": resolution_data.get("hospital_id"),
+                "auto_resolved": True,
+            },
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "expires_at": None,
+        }, room="livemap")

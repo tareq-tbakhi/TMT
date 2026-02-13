@@ -2,10 +2,10 @@ import React, { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
-import { io } from "socket.io-client";
 import StatsCard from "../../components/common/StatsCard";
 import StatusBadge from "../../components/common/StatusBadge";
 import { useAlertStore } from "../../store/alertStore";
+import { useSocketEvent } from "../../contexts/SocketContext";
 import { timeAgo } from "../../utils/formatting";
 import type { AnalyticsStats, Alert } from "../../services/api";
 
@@ -86,34 +86,29 @@ const Dashboard: React.FC = () => {
     load();
   }, [fetchStats, fetchAlerts]);
 
-  // Real-time updates via WebSocket
-  useEffect(() => {
-    const socket = io(API_URL, {
-      path: "/socket.io",
-      transports: ["websocket", "polling"],
-    });
+  // Real-time updates via shared WebSocket
+  useSocketEvent<Alert>("new_alert", (alert) => {
+    setRecentAlerts((prev) => [alert, ...prev].slice(0, 5));
+    fetchStats();
+  });
 
-    socket.on("connect", () => {
-      socket.emit("join_alerts");
-    });
+  useSocketEvent("new_sos", () => {
+    fetchStats();
+  });
 
-    socket.on("new_alert", (alert: Alert) => {
-      setRecentAlerts((prev) => [alert, ...prev].slice(0, 5));
-      fetchStats();
-    });
+  useSocketEvent("hospital_status", () => {
+    fetchStats();
+  });
 
-    socket.on("new_sos", () => {
-      fetchStats();
-    });
+  useSocketEvent("sos_resolved", () => {
+    fetchStats();
+    fetchAlerts();
+  });
 
-    socket.on("hospital_status", () => {
-      fetchStats();
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [fetchStats]);
+  useSocketEvent("patient_location", () => {
+    // Stats may change (e.g. patients_at_risk) when patients move
+    fetchStats();
+  });
 
   if (loading) {
     return (
@@ -242,10 +237,13 @@ const Dashboard: React.FC = () => {
 
         {/* Recent Alerts */}
         <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-5 py-3">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
             <h3 className="text-sm font-semibold text-gray-900">
               Recent Alerts
             </h3>
+            <a href="/dashboard/alerts" className="text-xs text-blue-600 hover:text-blue-800">
+              View all
+            </a>
           </div>
           <div className="divide-y divide-gray-100">
             {recentAlerts.length === 0 ? (
@@ -253,24 +251,67 @@ const Dashboard: React.FC = () => {
                 {t("alerts.noAlerts")}
               </div>
             ) : (
-              recentAlerts.slice(0, 5).map((alert) => (
-                <div
-                  key={alert.id}
-                  className="flex items-start gap-3 px-5 py-3 hover:bg-gray-50 transition-colors"
-                >
-                  <div className="mt-0.5 shrink-0">
-                    <StatusBadge severity={alert.severity} size="sm" />
+              recentAlerts.slice(0, 5).map((alert) => {
+                const sevBorder =
+                  alert.severity === "critical" ? "border-s-red-600" :
+                  alert.severity === "high" ? "border-s-orange-500" :
+                  alert.severity === "medium" ? "border-s-yellow-500" :
+                  "border-s-blue-400";
+                const meta = (alert as unknown as { metadata_?: Record<string, unknown>; metadata?: Record<string, unknown> });
+                const alertMeta = (meta.metadata_ ?? meta.metadata) as Record<string, unknown> | undefined;
+                const pInfo = alertMeta?.patient_info as { name?: string; phone?: string; blood_type?: string } | undefined;
+                const pStatus = alertMeta?.patient_status as string | undefined;
+                const priorityScore = (alertMeta?.priority_score as number) ?? 0;
+
+                return (
+                  <div
+                    key={alert.id}
+                    className={`flex items-start gap-3 border-s-3 ${sevBorder} px-4 py-3 hover:bg-gray-50 transition-colors`}
+                  >
+                    <div className="mt-0.5 shrink-0">
+                      <StatusBadge severity={alert.severity} size="sm" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-gray-900 truncate flex-1">
+                          {alert.title}
+                        </p>
+                        {priorityScore > 0 && (
+                          <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
+                            priorityScore >= 80 ? "bg-red-100 text-red-700" :
+                            priorityScore >= 60 ? "bg-orange-100 text-orange-700" :
+                            "bg-gray-100 text-gray-500"
+                          }`}>
+                            P{priorityScore}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-xs text-gray-500">
+                          {alert.event_type} &middot; {timeAgo(alert.created_at)}
+                        </span>
+                        {pStatus && (
+                          <span className={`text-[10px] font-medium rounded px-1 py-0.5 ${
+                            pStatus === "trapped" ? "bg-red-100 text-red-700" :
+                            pStatus === "injured" ? "bg-red-50 text-red-600" :
+                            pStatus === "evacuate" ? "bg-orange-50 text-orange-600" :
+                            "bg-green-50 text-green-600"
+                          }`}>
+                            {pStatus}
+                          </span>
+                        )}
+                      </div>
+                      {pInfo?.name && (
+                        <p className="text-xs text-gray-500 mt-0.5 truncate">
+                          {pInfo.name}
+                          {pInfo.phone && <span className="text-gray-400 ms-1" dir="ltr">{pInfo.phone}</span>}
+                          {pInfo.blood_type && <span className="ms-1 text-red-600 font-medium">{pInfo.blood_type}</span>}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 truncate">
-                      {alert.title}
-                    </p>
-                    <p className="text-xs text-gray-500">
-                      {alert.event_type} &middot; {timeAgo(alert.created_at)}
-                    </p>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { io } from "socket.io-client";
 import AlertCard from "../../components/common/AlertCard";
 import { useAlertStore } from "../../store/alertStore";
+import { useSocketEvent } from "../../contexts/SocketContext";
 import { eventTypeLabels } from "../../utils/formatting";
 import type { Alert } from "../../services/api";
 
@@ -78,25 +78,11 @@ const CrisisAlerts: React.FC = () => {
     fetchAlerts();
   }, [fetchAlerts]);
 
-  // Socket.IO real-time subscription
-  useEffect(() => {
-    const socket = io(API_URL, {
-      path: "/socket.io",
-      transports: ["websocket", "polling"],
-    });
-
-    socket.on("connect", () => {
-      socket.emit("join_alerts");
-    });
-
-    socket.on("new_alert", (alert: Alert) => {
-      addAlert(alert);
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [addAlert]);
+  // Real-time alert updates via shared socket (addAlert already called in global context,
+  // but we also refetch to get server-ranked list)
+  useSocketEvent("new_alert", () => {
+    fetchAlerts();
+  });
 
   const handleAcknowledge = (id: string) => {
     acknowledgeAlert(id);
@@ -192,12 +178,45 @@ const CrisisAlerts: React.FC = () => {
         )}
       </div>
 
-      {/* Alert count */}
-      <div className="text-sm text-gray-500">
-        Showing {filteredAlerts.length} alert{filteredAlerts.length !== 1 ? "s" : ""}
+      {/* Severity summary bar */}
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3">
+        <span className="text-sm font-medium text-gray-700">
+          {filteredAlerts.length} alert{filteredAlerts.length !== 1 ? "s" : ""}
+        </span>
+        <span className="h-4 w-px bg-gray-200" />
+        {[
+          { key: "critical", label: "Critical", bg: "bg-red-600" },
+          { key: "high", label: "High", bg: "bg-orange-500" },
+          { key: "medium", label: "Medium", bg: "bg-yellow-500" },
+          { key: "low", label: "Low", bg: "bg-blue-400" },
+        ].map(({ key, label, bg }) => {
+          const count = filteredAlerts.filter((a) => a.severity === key).length;
+          if (count === 0) return null;
+          return (
+            <button
+              key={key}
+              onClick={() => setSeverityFilter(severityFilter === key ? "" : key)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                severityFilter === key
+                  ? "ring-2 ring-offset-1 ring-gray-400"
+                  : "hover:opacity-80"
+              }`}
+            >
+              <span className={`h-2 w-2 rounded-full ${bg}`} />
+              <span className="text-gray-700">{count}</span>
+              <span className="text-gray-400">{label}</span>
+            </button>
+          );
+        })}
+        <span className="h-4 w-px bg-gray-200" />
         {filteredAlerts.filter((a) => !a.acknowledged).length > 0 && (
-          <span className="ms-2 inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+          <span className="inline-flex items-center rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700">
             {filteredAlerts.filter((a) => !a.acknowledged).length} unacknowledged
+          </span>
+        )}
+        {filteredAlerts.filter((a) => a.source === "sos").length > 0 && (
+          <span className="inline-flex items-center rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600">
+            {filteredAlerts.filter((a) => a.source === "sos").length} SOS
           </span>
         )}
       </div>

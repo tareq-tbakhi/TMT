@@ -7,11 +7,18 @@ import asyncio
 import uuid
 from datetime import datetime
 
+from sqlalchemy import func as sa_func
+
 from app.db.postgres import engine, Base, async_session
 from app.models.user import User, UserRole
 from app.models.hospital import Hospital, HospitalStatus
 from app.models.patient import Patient, MobilityStatus, LivingSituation
 from app.api.middleware.auth import hash_password
+
+
+def _make_point(longitude: float, latitude: float):
+    """PostGIS point expression for seed data."""
+    return sa_func.ST_SetSRID(sa_func.ST_MakePoint(longitude, latitude), 4326)
 
 
 async def seed():
@@ -27,6 +34,7 @@ async def seed():
             name="Al-Shifa Medical Complex",
             latitude=31.5195,
             longitude=34.4382,
+            location=_make_point(34.4382, 31.5195),
             status=HospitalStatus.OPERATIONAL,
             bed_capacity=500,
             icu_beds=40,
@@ -45,6 +53,7 @@ async def seed():
             name="European Gaza Hospital",
             latitude=31.3225,
             longitude=34.3100,
+            location=_make_point(34.3100, 31.3225),
             status=HospitalStatus.LIMITED,
             bed_capacity=250,
             icu_beds=20,
@@ -99,6 +108,7 @@ async def seed():
             name="Ahmad Khalil",
             latitude=31.5100,
             longitude=34.4400,
+            location=_make_point(34.4400, 31.5100),
             mobility=MobilityStatus.CAN_WALK,
             living_situation=LivingSituation.WITH_FAMILY,
             blood_type="O+",

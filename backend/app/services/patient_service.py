@@ -16,7 +16,7 @@ from geoalchemy2 import Geography
 from sqlalchemy import select, func, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.patient import Patient, MobilityStatus, LivingSituation
+from app.models.patient import Patient, MobilityStatus, LivingSituation, Gender
 from app.models.medical_record import MedicalRecord
 from app.models.sos_request import SosRequest, SOSStatus, SOSSource, PatientStatus
 from app.models.audit_log import AuditLog
@@ -38,12 +38,34 @@ def _patient_to_dict(patient: Patient) -> dict[str, Any]:
         "id": str(patient.id),
         "phone": patient.phone,
         "name": patient.name,
+        # Demographics
+        "date_of_birth": patient.date_of_birth.isoformat() if patient.date_of_birth else None,
+        "gender": patient.gender.value if patient.gender else None,
+        "national_id": patient.national_id,
+        "primary_language": patient.primary_language,
+        # Location
         "latitude": patient.latitude,
         "longitude": patient.longitude,
+        "location_name": patient.location_name,
+        # Physical
         "mobility": patient.mobility.value if patient.mobility else None,
         "living_situation": patient.living_situation.value if patient.living_situation else None,
         "blood_type": patient.blood_type,
-        "emergency_contacts": patient.emergency_contacts,
+        "height_cm": patient.height_cm,
+        "weight_kg": patient.weight_kg,
+        # Medical
+        "chronic_conditions": patient.chronic_conditions or [],
+        "allergies": patient.allergies or [],
+        "current_medications": patient.current_medications or [],
+        "special_equipment": patient.special_equipment or [],
+        "insurance_info": patient.insurance_info,
+        "notes": patient.notes,
+        # Contacts
+        "emergency_contacts": patient.emergency_contacts or [],
+        # System
+        "false_alarm_count": patient.false_alarm_count,
+        "total_sos_count": patient.total_sos_count,
+        "trust_score": patient.trust_score,
         "consent_given_at": patient.consent_given_at.isoformat() if patient.consent_given_at else None,
         "is_active": patient.is_active,
         "created_at": patient.created_at.isoformat() if patient.created_at else None,
@@ -151,6 +173,8 @@ async def update_patient(
         fields["mobility"] = MobilityStatus(fields["mobility"])
     if "living_situation" in fields and isinstance(fields["living_situation"], str):
         fields["living_situation"] = LivingSituation(fields["living_situation"])
+    if "gender" in fields and isinstance(fields["gender"], str):
+        fields["gender"] = Gender(fields["gender"])
 
     for key, value in fields.items():
         if hasattr(patient, key) and key not in ("id", "created_at"):
@@ -486,6 +510,8 @@ def _sos_to_dict(sos: SosRequest) -> dict[str, Any]:
         "severity": sos.severity,
         "source": sos.source,
         "hospital_notified_id": sos.hospital_notified_id,
+        "origin_hospital_id": sos.origin_hospital_id,
+        "auto_resolved": sos.auto_resolved,
         "details": sos.details,
         "created_at": sos.created_at,
         "resolved_at": sos.resolved_at,
@@ -503,7 +529,27 @@ async def create_sos_request(
     source: SOSSource = SOSSource.API,
     details: str | None = None,
 ) -> SosRequest:
-    """Create a new SOS request."""
+    """Create a new SOS request.
+
+    If the SOS location falls within 500 m of any hospital (including
+    non-operational ones), ``origin_hospital_id`` is set so the
+    auto-resolution service knows the SOS started from a hospital.
+    """
+    from app.services import hospital_service
+    from app.services.sos_resolution_service import HOSPITAL_ARRIVAL_RADIUS_M
+
+    # Detect if SOS originates from within a hospital
+    origin_hospital_id = None
+    if latitude and longitude:
+        nearby = await hospital_service.find_nearest_hospitals(
+            db, latitude, longitude,
+            radius_m=HOSPITAL_ARRIVAL_RADIUS_M,
+            limit=1,
+            operational_only=False,
+        )
+        if nearby:
+            origin_hospital_id = nearby[0]["id"]
+
     sos = SosRequest(
         id=uuid.uuid4(),
         patient_id=patient_id,
@@ -515,11 +561,16 @@ async def create_sos_request(
         severity=severity,
         source=source,
         details=details,
+        origin_hospital_id=origin_hospital_id,
     )
     db.add(sos)
     await db.flush()
     await db.refresh(sos)
-    logger.info("Created SOS %s for patient %s (severity=%d)", sos.id, patient_id, severity)
+    if origin_hospital_id:
+        logger.info("Created SOS %s for patient %s (severity=%d, origin_hospital=%s)",
+                     sos.id, patient_id, severity, origin_hospital_id)
+    else:
+        logger.info("Created SOS %s for patient %s (severity=%d)", sos.id, patient_id, severity)
     return sos
 
 
@@ -552,6 +603,23 @@ async def list_sos_requests(
     query = query.limit(limit).offset(offset)
     result = await db.execute(query)
     return [_sos_to_dict(s) for s in result.scalars().all()], total
+
+
+async def list_patient_sos(
+    db: AsyncSession,
+    patient_id: uuid.UUID,
+    *,
+    limit: int = 20,
+) -> list[dict[str, Any]]:
+    """Return recent SOS requests for a specific patient."""
+    query = (
+        select(SosRequest)
+        .where(SosRequest.patient_id == patient_id)
+        .order_by(SosRequest.created_at.desc())
+        .limit(limit)
+    )
+    result = await db.execute(query)
+    return [_sos_to_dict(s) for s in result.scalars().all()]
 
 
 async def update_sos_request(

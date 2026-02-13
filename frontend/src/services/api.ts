@@ -128,15 +128,80 @@ export interface Patient {
   id: string;
   phone: string;
   name: string;
+  // Demographics
+  date_of_birth: string | null;
+  gender: string | null;
+  national_id: string | null;
+  primary_language: string | null;
+  // Location
   latitude: number | null;
   longitude: number | null;
+  location_name: string | null;
+  // Physical
   mobility: string;
   living_situation: string;
   blood_type: string | null;
-  emergency_contacts: Array<{ name: string; phone: string }>;
+  height_cm: number | null;
+  weight_kg: number | null;
+  // Medical
+  chronic_conditions: string[];
+  allergies: string[];
+  current_medications: string[];
+  special_equipment: string[];
+  insurance_info: string | null;
+  notes: string | null;
+  // Contacts
+  emergency_contacts: Array<{ name: string; phone: string; relationship?: string }>;
+  // System
+  false_alarm_count: number;
+  total_sos_count: number;
+  trust_score: number;
   is_active: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface MedicalRecord {
+  id: string;
+  patient_id: string;
+  conditions: string[];
+  medications: string[];
+  allergies: string[];
+  special_equipment: string[];
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SOSHistoryItem {
+  id: string;
+  patient_id: string;
+  latitude: number | null;
+  longitude: number | null;
+  status: string;
+  patient_status: string;
+  severity: number;
+  source: string;
+  hospital_notified_id: string | null;
+  origin_hospital_id: string | null;
+  auto_resolved: boolean;
+  details: string | null;
+  created_at: string;
+  resolved_at: string | null;
+}
+
+export interface NearestHospitalResponse {
+  hospital: {
+    id: string;
+    name: string;
+    distance_km: number;
+    status: string;
+    available_beds: number;
+    phone: string | null;
+    latitude: number | null;
+    longitude: number | null;
+  } | null;
+  message?: string;
 }
 
 export function getPatient(patientId: string): Promise<Patient> {
@@ -150,6 +215,29 @@ export function updatePatient(
   return request<Patient>(`/patients/${patientId}`, {
     method: "PUT",
     body: data,
+  });
+}
+
+export function getPatientRecords(patientId: string): Promise<MedicalRecord[]> {
+  return request<MedicalRecord[]>(`/patients/${patientId}/records`);
+}
+
+export function getPatientSOS(patientId: string): Promise<SOSHistoryItem[]> {
+  return request<SOSHistoryItem[]>(`/patients/${patientId}/sos`);
+}
+
+export function getPatientNearestHospital(patientId: string): Promise<NearestHospitalResponse> {
+  return request<NearestHospitalResponse>(`/patients/${patientId}/nearest-hospital`);
+}
+
+export function updatePatientLocation(
+  patientId: string,
+  latitude: number,
+  longitude: number
+): Promise<{ status: string; latitude: number; longitude: number }> {
+  return request(`/patients/${patientId}/location`, {
+    method: "POST",
+    body: { latitude, longitude },
   });
 }
 
@@ -197,7 +285,9 @@ export interface Hospital {
 }
 
 export function getHospitals(): Promise<Hospital[]> {
-  return request<Hospital[]>("/hospitals");
+  return request<{ hospitals: Hospital[]; total: number }>("/hospitals").then(
+    (res) => res.hospitals
+  );
 }
 
 export function updateHospitalStatus(
@@ -322,6 +412,28 @@ export function getHeatmapData(): Promise<HeatmapPoint[]> {
 }
 
 // ─── Map endpoints ──────────────────────────────────────────────
+
+/** Patient data embedded in SOS / patient map-event metadata. */
+export interface MapEventPatientInfo {
+  name?: string;
+  phone?: string;
+  blood_type?: string;
+  mobility?: string;
+  gender?: string;
+  date_of_birth?: string;
+  chronic_conditions?: string[];
+  allergies?: string[];
+  current_medications?: string[];
+  special_equipment?: string[];
+  emergency_contacts?: Array<{
+    name: string;
+    phone: string;
+    relation?: string;
+  }>;
+  trust_score?: number;
+  total_sos_count?: number;
+  false_alarm_count?: number;
+}
 
 export interface MapEvent {
   id: string;

@@ -130,6 +130,31 @@ async def process_inbound_sms(
     latitude = sos_data.get("latitude", patient.latitude)
     longitude = sos_data.get("longitude", patient.longitude)
 
+    # Sync patient's stored location with the freshest data from SMS
+    if latitude is not None and longitude is not None:
+        try:
+            from app.services import patient_service
+            await patient_service.update_patient_location(db, patient.id, latitude, longitude)
+        except Exception:
+            logger.warning("Failed to sync SMS location for patient %s", patient.id)
+
+    # Detect if SOS originates from within a hospital (e.g. hospital under attack)
+    origin_hospital_id = None
+    if latitude is not None and longitude is not None:
+        try:
+            from app.services import hospital_service
+            from app.services.sos_resolution_service import HOSPITAL_ARRIVAL_RADIUS_M
+            nearby = await hospital_service.find_nearest_hospitals(
+                db, latitude, longitude,
+                radius_m=HOSPITAL_ARRIVAL_RADIUS_M,
+                limit=1,
+                operational_only=False,
+            )
+            if nearby:
+                origin_hospital_id = nearby[0]["id"]
+        except Exception:
+            logger.warning("Failed to detect origin hospital for SMS SOS from patient %s", patient.id)
+
     sos = SosRequest(
         id=uuid.uuid4(),
         patient_id=patient.id,
@@ -145,6 +170,7 @@ async def process_inbound_sms(
         severity=severity,
         source=SOSSource.SMS,
         details=sos_data.get("details"),
+        origin_hospital_id=origin_hospital_id,
     )
     db.add(sos)
     await db.flush()

@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Enum, DateTime, Float, Integer, ForeignKey
+from sqlalchemy import Column, String, Enum, DateTime, Float, Integer, Boolean, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from geoalchemy2 import Geometry
 
@@ -42,6 +42,8 @@ class SosRequest(Base):
     severity = Column(Integer, default=3)  # 1-5
     source = Column(Enum(SOSSource), default=SOSSource.API)
     hospital_notified_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), nullable=True)
+    origin_hospital_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), nullable=True)
+    auto_resolved = Column(Boolean, default=False)
     details = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     resolved_at = Column(DateTime, nullable=True)

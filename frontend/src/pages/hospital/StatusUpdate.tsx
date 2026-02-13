@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import L from "leaflet";
 import { useAuthStore } from "../../store/authStore";
 import StatusBadge from "../../components/common/StatusBadge";
 import { timeAgo } from "../../utils/formatting";
@@ -56,6 +57,221 @@ const supplyLevelColors: Record<string, string> = {
   medium: "bg-yellow-500",
   low: "bg-orange-500",
   critical: "bg-red-500",
+};
+
+/* ------------------------------------------------------------------ */
+/* Leaflet icon fix (bundlers break the default icon paths)            */
+/* ------------------------------------------------------------------ */
+const hospitalIcon = L.icon({
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+  popupAnchor: [1, -34],
+  shadowSize: [41, 41],
+});
+
+/* ------------------------------------------------------------------ */
+/* Location Map Picker                                                 */
+/* ------------------------------------------------------------------ */
+interface LocationMapPickerProps {
+  latitude: number | null;
+  longitude: number | null;
+  coverageRadius: number;
+  onLocationChange: (lat: number, lng: number) => void;
+  onRadiusChange: (km: number) => void;
+}
+
+const LocationMapPicker: React.FC<LocationMapPickerProps> = ({
+  latitude,
+  longitude,
+  coverageRadius,
+  onLocationChange,
+  onRadiusChange,
+}) => {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const mapInstanceRef = useRef<L.Map | null>(null);
+  const markerRef = useRef<L.Marker | null>(null);
+  const circleRef = useRef<L.Circle | null>(null);
+  const [locating, setLocating] = useState(false);
+
+  // Place or move the marker + coverage circle
+  const placeMarker = useCallback(
+    (lat: number, lng: number, radius: number, panTo = true) => {
+      const map = mapInstanceRef.current;
+      if (!map) return;
+
+      if (markerRef.current) {
+        markerRef.current.setLatLng([lat, lng]);
+      } else {
+        markerRef.current = L.marker([lat, lng], {
+          draggable: true,
+          icon: hospitalIcon,
+        })
+          .addTo(map)
+          .bindPopup("Drag me or click the map to move");
+        markerRef.current.on("dragend", () => {
+          const pos = markerRef.current!.getLatLng();
+          onLocationChange(
+            parseFloat(pos.lat.toFixed(6)),
+            parseFloat(pos.lng.toFixed(6))
+          );
+          if (circleRef.current) circleRef.current.setLatLng(pos);
+        });
+      }
+
+      if (circleRef.current) {
+        circleRef.current.setLatLng([lat, lng]);
+        circleRef.current.setRadius(radius * 1000);
+      } else {
+        circleRef.current = L.circle([lat, lng], {
+          radius: radius * 1000,
+          color: "#6366f1",
+          fillColor: "#6366f1",
+          fillOpacity: 0.1,
+          weight: 2,
+          dashArray: "6 4",
+        }).addTo(map);
+      }
+
+      if (panTo) map.setView([lat, lng], map.getZoom());
+    },
+    [onLocationChange]
+  );
+
+  // Initialise the Leaflet map once
+  useEffect(() => {
+    if (!mapRef.current || mapInstanceRef.current) return;
+
+    const center: [number, number] =
+      latitude != null && longitude != null
+        ? [latitude, longitude]
+        : [31.5, 34.46]; // Default: Gaza
+
+    const map = L.map(mapRef.current, {
+      center,
+      zoom: 13,
+      zoomControl: true,
+    });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      attribution: "&copy; OpenStreetMap contributors",
+      maxZoom: 19,
+    }).addTo(map);
+
+    // Click to place marker
+    map.on("click", (e: L.LeafletMouseEvent) => {
+      const lat = parseFloat(e.latlng.lat.toFixed(6));
+      const lng = parseFloat(e.latlng.lng.toFixed(6));
+      onLocationChange(lat, lng);
+    });
+
+    mapInstanceRef.current = map;
+
+    // Place initial marker if coordinates exist
+    if (latitude != null && longitude != null) {
+      placeMarker(latitude, longitude, coverageRadius, false);
+    }
+
+    return () => {
+      map.remove();
+      mapInstanceRef.current = null;
+      markerRef.current = null;
+      circleRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // React to external lat/lng changes (including first load after fetch)
+  useEffect(() => {
+    if (latitude != null && longitude != null && mapInstanceRef.current) {
+      placeMarker(latitude, longitude, coverageRadius);
+    }
+  }, [latitude, longitude, coverageRadius, placeMarker]);
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = parseFloat(pos.coords.latitude.toFixed(6));
+        const lng = parseFloat(pos.coords.longitude.toFixed(6));
+        onLocationChange(lat, lng);
+        mapInstanceRef.current?.setView([lat, lng], 15);
+        setLocating(false);
+      },
+      () => setLocating(false),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  return (
+    <div className="space-y-2">
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          onClick={handleUseCurrentLocation}
+          disabled={locating}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:opacity-50"
+        >
+          {locating ? (
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" />
+          ) : (
+            <svg
+              className="h-3.5 w-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <circle cx={12} cy={12} r={3} />
+              <path d="M12 2v4m0 12v4m10-10h-4M6 12H2" />
+            </svg>
+          )}
+          Use Current Location
+        </button>
+
+        {latitude != null && longitude != null && (
+          <span className="text-xs text-gray-500">
+            {latitude.toFixed(4)}, {longitude.toFixed(4)}
+          </span>
+        )}
+
+        <div className="ml-auto flex items-center gap-2">
+          <label className="text-xs font-medium text-gray-600">
+            Coverage Radius
+          </label>
+          <input
+            type="range"
+            min={1}
+            max={50}
+            value={coverageRadius}
+            onChange={(e) => onRadiusChange(parseInt(e.target.value))}
+            className="h-1.5 w-24 cursor-pointer accent-indigo-600"
+          />
+          <span className="w-12 text-xs font-semibold text-indigo-600">
+            {coverageRadius} km
+          </span>
+        </div>
+      </div>
+
+      {/* Map */}
+      <div
+        ref={mapRef}
+        className="h-64 w-full rounded-lg border border-gray-300 sm:h-72"
+        style={{ zIndex: 0 }}
+      />
+
+      {latitude == null && (
+        <p className="text-xs text-gray-400">
+          Click the map or use current location to set the hospital position
+        </p>
+      )}
+    </div>
+  );
 };
 
 const StatusUpdate: React.FC = () => {
@@ -375,49 +591,20 @@ const StatusUpdate: React.FC = () => {
               className={inputCls}
             />
           </div>
-          <div>
+          {/* Location Map Picker — spans full width */}
+          <div className="sm:col-span-2 lg:col-span-3">
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              Latitude
+              Location
             </label>
-            <input
-              type="number"
-              step="0.0001"
-              value={latitude ?? ""}
-              onChange={(e) =>
-                setLatitude(e.target.value ? parseFloat(e.target.value) : null)
-              }
-              placeholder="31.5000"
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Longitude
-            </label>
-            <input
-              type="number"
-              step="0.0001"
-              value={longitude ?? ""}
-              onChange={(e) =>
-                setLongitude(e.target.value ? parseFloat(e.target.value) : null)
-              }
-              placeholder="34.4700"
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Coverage Radius (km)
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={coverageRadius}
-              onChange={(e) =>
-                setCoverageRadius(parseInt(e.target.value) || 15)
-              }
-              className={inputCls}
+            <LocationMapPicker
+              latitude={latitude}
+              longitude={longitude}
+              coverageRadius={coverageRadius}
+              onLocationChange={(lat, lng) => {
+                setLatitude(lat);
+                setLongitude(lng);
+              }}
+              onRadiusChange={setCoverageRadius}
             />
           </div>
         </div>

@@ -270,6 +270,7 @@ Respond ONLY with valid JSON:
                         ),
                         "patient_trust_score": patient_info.get("trust_score", 1.0) if patient_info else 1.0,
                         "patient_false_alarms": patient_info.get("false_alarm_count", 0) if patient_info else 0,
+                        "patient_info": sos_data.get("patient_info"),
                     },
                     broadcast=True,
                     notify_patients=True,

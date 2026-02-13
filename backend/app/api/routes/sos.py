@@ -98,6 +98,15 @@ async def send_sos(
     lat = payload.latitude or patient.get("latitude")
     lon = payload.longitude or patient.get("longitude")
 
+    # Sync the patient's stored location with the freshest data
+    if payload.latitude is not None and payload.longitude is not None:
+        try:
+            await patient_service.update_patient_location(
+                db, current_user.patient_id, payload.latitude, payload.longitude
+            )
+        except Exception:
+            pass  # Non-critical — SOS creation is the priority
+
     sos = await patient_service.create_sos_request(
         db,
         patient_id=current_user.patient_id,
@@ -144,6 +153,22 @@ async def send_sos(
         "details": sos.details,
         "created_at": sos.created_at.isoformat() if sos.created_at else None,
         "patient_trust_score": patient.get("trust_score", 1.0) if patient else 1.0,
+        "patient_info": {
+            "name": patient.get("name"),
+            "phone": patient.get("phone"),
+            "blood_type": patient.get("blood_type"),
+            "mobility": patient.get("mobility"),
+            "gender": patient.get("gender"),
+            "date_of_birth": str(patient.get("date_of_birth")) if patient.get("date_of_birth") else None,
+            "chronic_conditions": patient.get("chronic_conditions", []),
+            "allergies": patient.get("allergies", []),
+            "current_medications": patient.get("current_medications", []),
+            "special_equipment": patient.get("special_equipment", []),
+            "emergency_contacts": patient.get("emergency_contacts", []),
+            "trust_score": patient.get("trust_score", 1.0),
+            "total_sos_count": patient.get("total_sos_count", 0),
+            "false_alarm_count": patient.get("false_alarm_count", 0),
+        } if patient else None,
     }
     await broadcast_sos(sos_payload)
 

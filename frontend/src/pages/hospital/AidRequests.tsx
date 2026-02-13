@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { io } from "socket.io-client";
 import { useAuthStore } from "../../store/authStore";
+import { useSocketEvent } from "../../contexts/SocketContext";
 import { timeAgo } from "../../utils/formatting";
 import {
   getAidRequests,
@@ -9,10 +9,9 @@ import {
   createAidRequest,
   respondToAidRequest,
   updateAidRequestStatus,
+  getHospitals,
 } from "../../services/api";
-import type { AidRequest, AidResponse } from "../../services/api";
-
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+import type { AidRequest, AidResponse, Hospital } from "../../services/api";
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -71,12 +70,16 @@ interface NewRequestModalProps {
   open: boolean;
   onClose: () => void;
   onCreated: (req: AidRequest) => void;
+  defaultContactName?: string;
+  defaultContactPhone?: string;
 }
 
 const NewRequestModal: React.FC<NewRequestModalProps> = ({
   open,
   onClose,
   onCreated,
+  defaultContactName = "",
+  defaultContactPhone = "",
 }) => {
   const { t } = useTranslation();
   const [submitting, setSubmitting] = useState(false);
@@ -88,9 +91,18 @@ const NewRequestModal: React.FC<NewRequestModalProps> = ({
     urgency: "medium",
     quantity: "",
     unit: "",
-    contact_phone: "",
-    contact_name: "",
+    contact_phone: defaultContactPhone,
+    contact_name: defaultContactName,
   });
+
+  // Update defaults when they become available (async hospital fetch)
+  useEffect(() => {
+    setForm((prev) => ({
+      ...prev,
+      contact_name: prev.contact_name || defaultContactName,
+      contact_phone: prev.contact_phone || defaultContactPhone,
+    }));
+  }, [defaultContactName, defaultContactPhone]);
 
   const handleChange = (
     e: React.ChangeEvent<
@@ -722,6 +734,7 @@ const AidRequests: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [myHospital, setMyHospital] = useState<Hospital | null>(null);
 
   // Filters
   const [categoryFilter, setCategoryFilter] = useState("");
@@ -730,6 +743,17 @@ const AidRequests: React.FC = () => {
 
   // Modal
   const [showNewModal, setShowNewModal] = useState(false);
+
+  // ── Fetch current hospital info for defaults ──────────────
+  useEffect(() => {
+    if (!hospitalId) return;
+    getHospitals()
+      .then((hospitals) => {
+        const mine = hospitals.find((h) => h.id === hospitalId);
+        if (mine) setMyHospital(mine);
+      })
+      .catch(() => {});
+  }, [hospitalId]);
 
   // ── Fetch aid requests ──────────────────────────────────────
 
@@ -757,31 +781,15 @@ const AidRequests: React.FC = () => {
     fetchRequests();
   }, [fetchRequests]);
 
-  // ── WebSocket for real-time updates ─────────────────────────
+  // ── Real-time aid request updates via shared socket ─────────
 
-  useEffect(() => {
-    const socket = io(API_URL, {
-      path: "/socket.io",
-      transports: ["websocket", "polling"],
+  useSocketEvent<AidRequest>("new_aid_request", (newRequest) => {
+    setRequests((prev) => {
+      if (prev.some((r) => r.id === newRequest.id)) return prev;
+      return [newRequest, ...prev];
     });
-
-    socket.on("connect", () => {
-      socket.emit("join_alerts");
-    });
-
-    socket.on("new_aid_request", (newRequest: AidRequest) => {
-      setRequests((prev) => {
-        // Avoid duplicates
-        if (prev.some((r) => r.id === newRequest.id)) return prev;
-        return [newRequest, ...prev];
-      });
-      setTotal((prev) => prev + 1);
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, []);
+    setTotal((prev) => prev + 1);
+  });
 
   // ── Handlers ────────────────────────────────────────────────
 
@@ -982,6 +990,8 @@ const AidRequests: React.FC = () => {
         open={showNewModal}
         onClose={() => setShowNewModal(false)}
         onCreated={handleCreated}
+        defaultContactName={myHospital?.name ?? ""}
+        defaultContactPhone={myHospital?.phone ?? ""}
       />
     </div>
   );

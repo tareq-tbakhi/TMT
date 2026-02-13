@@ -9,11 +9,12 @@ import {
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
-import { io } from "socket.io-client";
 import { useMapStore } from "../../store/mapStore";
 import StatusBadge from "../../components/common/StatusBadge";
+import { useSocketEvent } from "../../contexts/SocketContext";
 import { timeAgo, eventTypeLabels } from "../../utils/formatting";
-import type { MapEvent } from "../../services/api";
+import type { MapEvent, Hospital, MapEventPatientInfo } from "../../services/api";
+import { getHospitals } from "../../services/api";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -48,6 +49,32 @@ function createColoredIcon(color: string): L.DivIcon {
   });
 }
 
+// Pulsing SOS marker icon — radiating ring by severity color
+function createPulsingSosIcon(severity: number): L.DivIcon {
+  const color = severityToColor(severity);
+  return L.divIcon({
+    className: "sos-marker",
+    html: `<div style="position:relative;">
+      <div style="
+        position:absolute; top:-10px; left:-10px;
+        width:20px; height:20px; border-radius:50%;
+        background-color:${color}; opacity:0.3;
+        animation: sos-map-pulse 2s ease-out infinite;
+      "></div>
+      <div style="
+        position:relative;
+        background-color:${color};
+        width:14px; height:14px; border-radius:50%;
+        border:2px solid white;
+        box-shadow:0 1px 4px rgba(0,0,0,0.3);
+      "></div>
+    </div>`,
+    iconSize: [14, 14],
+    iconAnchor: [7, 7],
+    popupAnchor: [0, -10],
+  });
+}
+
 const layerIcons: Record<string, L.DivIcon> = {
   sos: createColoredIcon("#ef4444"),
   crisis: createColoredIcon("#f59e0b"),
@@ -55,6 +82,7 @@ const layerIcons: Record<string, L.DivIcon> = {
   sms_activity: createColoredIcon("#3b82f6"),
   patient_density: createColoredIcon("#8b5cf6"),
   telegram_intel: createColoredIcon("#06b6d4"),
+  patient: createColoredIcon("#6366f1"),
 };
 
 const hospitalStatusColors: Record<string, string> = {
@@ -63,6 +91,31 @@ const hospitalStatusColors: Record<string, string> = {
   full: "#ef4444",
   destroyed: "#1f2937",
 };
+
+// Hospital marker icon — uses a cross symbol
+function createHospitalIcon(statusColor: string): L.DivIcon {
+  return L.divIcon({
+    className: "hospital-marker",
+    html: `<div style="
+      background-color: white;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 3px solid ${statusColor};
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      font-weight: bold;
+      color: ${statusColor};
+      line-height: 1;
+    ">+</div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 14],
+    popupAnchor: [0, -16],
+  });
+}
 
 // Severity to color mapping for SOS/crisis circles
 function severityToColor(severity: number): string {
@@ -100,6 +153,12 @@ const LAYERS: {
     i18nKey: "map.layer.telegram_intel",
     icon: "&#x1F4E1;",
   },
+  {
+    key: "patient",
+    label: "Patient Locations",
+    i18nKey: "map.layer.patient",
+    icon: "&#x1F4CD;",
+  },
 ];
 
 // Component to auto-fit map bounds when events change
@@ -135,6 +194,7 @@ const LiveMap: React.FC = () => {
   const [timeSlider, setTimeSlider] = useState(100);
   const [severityFilter, setSeverityFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
+  const [hospitals, setHospitals] = useState<Hospital[]>([]);
 
   // Fetch initial events
   const fetchEvents = useCallback(async () => {
@@ -167,25 +227,17 @@ const LiveMap: React.FC = () => {
     fetchEvents();
   }, [fetchEvents]);
 
-  // WebSocket for real-time updates
+  // Fetch hospitals for the hospital layer
   useEffect(() => {
-    const socket = io(API_URL, {
-      path: "/socket.io",
-      transports: ["websocket", "polling"],
-    });
+    getHospitals()
+      .then((data) => setHospitals(data))
+      .catch(() => {});
+  }, []);
 
-    socket.on("connect", () => {
-      socket.emit("join_map");
-    });
-
-    socket.on("map_event", (event: MapEvent) => {
-      addEvent(event);
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, [addEvent]);
+  // Real-time map events via shared socket
+  useSocketEvent<MapEvent>("map_event", (event) => {
+    addEvent(event);
+  });
 
   // Filter events based on active layers, time slider, and filters
   const filteredEvents = useMemo(() => {
@@ -249,7 +301,40 @@ const LiveMap: React.FC = () => {
 
           <MapBoundsUpdater events={filteredEvents} />
 
-          {/* Render markers */}
+          {/* Render hospital markers with coverage circles */}
+          {activeLayers.has("hospital") &&
+            hospitals
+              .filter((h) => h.latitude != null && h.longitude != null)
+              .map((hospital) => {
+                const statusColor =
+                  hospitalStatusColors[hospital.status] ?? "#22c55e";
+                const radiusM = (hospital.coverage_radius_km || 5) * 1000;
+                return (
+                  <React.Fragment key={`hospital-${hospital.id}`}>
+                    <Circle
+                      center={[hospital.latitude!, hospital.longitude!]}
+                      radius={radiusM}
+                      pathOptions={{
+                        color: statusColor,
+                        fillColor: statusColor,
+                        fillOpacity: 0.07,
+                        weight: 2,
+                        dashArray: "6 4",
+                      }}
+                    />
+                    <Marker
+                      position={[hospital.latitude!, hospital.longitude!]}
+                      icon={createHospitalIcon(statusColor)}
+                    >
+                      <Popup>
+                        <HospitalPopup hospital={hospital} />
+                      </Popup>
+                    </Marker>
+                  </React.Fragment>
+                );
+              })}
+
+          {/* Render event markers */}
           {filteredEvents.map((event) => {
             // Crisis events get circle overlays
             if (event.layer === "crisis") {
@@ -293,6 +378,36 @@ const LiveMap: React.FC = () => {
                 >
                   <Popup>
                     <EventPopup event={event} />
+                  </Popup>
+                </Marker>
+              );
+            }
+
+            // SOS markers — pulsing icon + enriched popup
+            if (event.layer === "sos") {
+              return (
+                <Marker
+                  key={event.id}
+                  position={[event.latitude, event.longitude]}
+                  icon={createPulsingSosIcon(event.severity)}
+                >
+                  <Popup maxWidth={340}>
+                    <SOSPopup event={event} />
+                  </Popup>
+                </Marker>
+              );
+            }
+
+            // Patient location markers — enriched popup
+            if (event.layer === "patient") {
+              return (
+                <Marker
+                  key={event.id}
+                  position={[event.latitude, event.longitude]}
+                  icon={layerIcons.patient}
+                >
+                  <Popup maxWidth={300}>
+                    <PatientLocationPopup event={event} />
                   </Popup>
                 </Marker>
               );
@@ -345,7 +460,8 @@ const LiveMap: React.FC = () => {
             </div>
             <div className="border-t border-gray-100 px-4 py-2">
               <p className="text-xs text-gray-500">
-                {filteredEvents.length} events visible
+                {filteredEvents.length} events
+                {activeLayers.has("hospital") && `, ${hospitals.filter((h) => h.latitude != null).length} hospitals`}
               </p>
             </div>
           </div>
@@ -463,6 +579,46 @@ const LiveMap: React.FC = () => {
   );
 };
 
+// Sub-component for hospital popups
+const HospitalPopup: React.FC<{ hospital: Hospital }> = ({ hospital }) => {
+  const statusColor = hospitalStatusColors[hospital.status] ?? "#22c55e";
+  const statusLabel = hospital.status.charAt(0).toUpperCase() + hospital.status.slice(1);
+
+  return (
+    <div className="min-w-[200px] text-sm">
+      <div className="flex items-center gap-2 mb-1">
+        <span
+          className="inline-block h-2.5 w-2.5 rounded-full"
+          style={{ backgroundColor: statusColor }}
+        />
+        <span className="font-semibold text-gray-900">{hospital.name}</span>
+      </div>
+      <span
+        className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium mb-2"
+        style={{
+          backgroundColor: statusColor + "20",
+          color: statusColor,
+        }}
+      >
+        {statusLabel}
+      </span>
+      <div className="space-y-0.5 text-xs text-gray-600">
+        <p>Beds: {hospital.available_beds}/{hospital.bed_capacity}</p>
+        <p>ICU: {hospital.icu_beds}</p>
+        {hospital.coverage_radius_km > 0 && (
+          <p>Coverage: {hospital.coverage_radius_km} km</p>
+        )}
+        {hospital.phone && <p>Phone: {hospital.phone}</p>}
+        {hospital.specialties?.length > 0 && (
+          <p className="mt-1">
+            {hospital.specialties.join(", ")}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // Sub-component for map popups
 const EventPopup: React.FC<{ event: MapEvent }> = ({ event }) => {
   const eventLabel =
@@ -493,6 +649,234 @@ const EventPopup: React.FC<{ event: MapEvent }> = ({ event }) => {
         {event.details && (
           <p className="mt-1 text-gray-500">{event.details}</p>
         )}
+      </div>
+    </div>
+  );
+};
+
+// Sub-component for SOS event popups — rich patient info
+const mobilityLabels: Record<string, string> = {
+  can_walk: "Can Walk",
+  wheelchair: "Wheelchair",
+  bedridden: "Bedridden",
+  other: "Other",
+};
+
+const SOSPopup: React.FC<{ event: MapEvent }> = ({ event }) => {
+  const info = event.metadata?.patient_info as MapEventPatientInfo | undefined;
+  const patientStatus = event.metadata?.patient_status as string | undefined;
+
+  const severityLabel =
+    event.severity >= 4
+      ? "critical"
+      : event.severity >= 3
+      ? "high"
+      : event.severity >= 2
+      ? "medium"
+      : "low";
+
+  return (
+    <div className="min-w-[280px] max-w-[320px] text-sm">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-2">
+        <span className="font-bold text-red-700 text-base">
+          SOS{patientStatus ? ` — ${patientStatus}` : ""}
+        </span>
+        <StatusBadge severity={severityLabel} size="sm" />
+      </div>
+
+      {info ? (
+        <>
+          {/* Patient identity */}
+          <div className="flex items-center gap-2 mb-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-red-100 text-sm font-bold text-red-700">
+              {info.name?.charAt(0)?.toUpperCase() ?? "?"}
+            </div>
+            <div>
+              <p className="font-semibold text-gray-900">{info.name ?? "Unknown"}</p>
+              {info.phone && (
+                <a href={`tel:${info.phone}`} className="text-xs text-blue-600 hover:underline" dir="ltr">
+                  {info.phone}
+                </a>
+              )}
+            </div>
+          </div>
+
+          {/* Quick info badges */}
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {info.blood_type && (
+              <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+                {info.blood_type}
+              </span>
+            )}
+            {info.mobility && info.mobility !== "can_walk" && (
+              <span className="rounded-full bg-orange-50 px-2 py-0.5 text-xs font-medium text-orange-700">
+                {mobilityLabels[info.mobility] ?? info.mobility}
+              </span>
+            )}
+            {info.gender && (
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                {info.gender}
+              </span>
+            )}
+          </div>
+
+          {/* Trust score mini-bar */}
+          {info.trust_score != null && (
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs text-gray-400">Trust</span>
+              <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${
+                    info.trust_score >= 0.7
+                      ? "bg-green-500"
+                      : info.trust_score >= 0.4
+                      ? "bg-yellow-500"
+                      : "bg-red-500"
+                  }`}
+                  style={{ width: `${info.trust_score * 100}%` }}
+                />
+              </div>
+              <span className="text-xs text-gray-500">
+                {(info.trust_score * 100).toFixed(0)}%
+              </span>
+            </div>
+          )}
+
+          {/* Medical alerts */}
+          {((info.allergies?.length ?? 0) > 0 ||
+            (info.chronic_conditions?.length ?? 0) > 0) && (
+            <div className="mb-2 space-y-1">
+              {(info.allergies?.length ?? 0) > 0 && (
+                <div>
+                  <span className="text-xs font-medium text-yellow-700">Allergies: </span>
+                  <span className="text-xs text-gray-600">{info.allergies!.join(", ")}</span>
+                </div>
+              )}
+              {(info.chronic_conditions?.length ?? 0) > 0 && (
+                <div>
+                  <span className="text-xs font-medium text-red-700">Conditions: </span>
+                  <span className="text-xs text-gray-600">{info.chronic_conditions!.join(", ")}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Medications */}
+          {(info.current_medications?.length ?? 0) > 0 && (
+            <div className="mb-2">
+              <span className="text-xs font-medium text-blue-700">Medications: </span>
+              <span className="text-xs text-gray-600">{info.current_medications!.join(", ")}</span>
+            </div>
+          )}
+
+          {/* Emergency contacts */}
+          {(info.emergency_contacts?.length ?? 0) > 0 && (
+            <div className="mb-2">
+              <p className="text-xs font-medium text-gray-500 mb-1">Emergency Contacts</p>
+              {info.emergency_contacts!.slice(0, 2).map((c, i) => (
+                <div key={i} className="flex items-center justify-between text-xs py-0.5">
+                  <span className="text-gray-700">
+                    {c.name}
+                    {c.relation && <span className="text-gray-400 ml-1">({c.relation})</span>}
+                  </span>
+                  <a href={`tel:${c.phone}`} className="text-blue-600 hover:underline" dir="ltr">
+                    {c.phone}
+                  </a>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="text-xs text-gray-500 mb-2">
+          Patient ID: {(event.metadata?.patient_id as string) ?? "Unknown"}
+        </div>
+      )}
+
+      {/* Footer */}
+      <div className="border-t border-gray-100 pt-1.5 mt-1.5 flex justify-between text-xs text-gray-400">
+        <span>{event.source}</span>
+        <span>{timeAgo(event.created_at)}</span>
+      </div>
+      {event.details && (
+        <p className="mt-1 text-xs text-gray-500 italic">{event.details}</p>
+      )}
+    </div>
+  );
+};
+
+// Sub-component for patient location popups — lighter than SOS
+const PatientLocationPopup: React.FC<{ event: MapEvent }> = ({ event }) => {
+  const info = event.metadata?.patient_info as MapEventPatientInfo | undefined;
+  const patientName =
+    info?.name ?? (event.metadata?.patient_name as string) ?? "Unknown Patient";
+
+  return (
+    <div className="min-w-[240px] max-w-[280px] text-sm">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-sm font-bold text-indigo-700">
+          {patientName.charAt(0).toUpperCase()}
+        </div>
+        <div>
+          <p className="font-semibold text-gray-900">{patientName}</p>
+          {info?.phone && (
+            <a href={`tel:${info.phone}`} className="text-xs text-blue-600 hover:underline" dir="ltr">
+              {info.phone}
+            </a>
+          )}
+        </div>
+      </div>
+
+      {info && (
+        <>
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {info.blood_type && (
+              <span className="rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700">
+                {info.blood_type}
+              </span>
+            )}
+            {info.mobility && (
+              <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                {mobilityLabels[info.mobility] ?? info.mobility}
+              </span>
+            )}
+          </div>
+
+          {(info.allergies?.length ?? 0) > 0 && (
+            <div className="mb-1">
+              <span className="text-xs font-medium text-yellow-700">Allergies: </span>
+              <span className="text-xs text-gray-600">{info.allergies!.join(", ")}</span>
+            </div>
+          )}
+
+          {(info.emergency_contacts?.length ?? 0) > 0 && (
+            <div className="mb-1">
+              <p className="text-xs font-medium text-gray-500 mb-0.5">Emergency Contact</p>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-700">
+                  {info.emergency_contacts![0].name}
+                  {info.emergency_contacts![0].relation && (
+                    <span className="text-gray-400 ml-1">
+                      ({info.emergency_contacts![0].relation})
+                    </span>
+                  )}
+                </span>
+                <a
+                  href={`tel:${info.emergency_contacts![0].phone}`}
+                  className="text-blue-600 hover:underline"
+                  dir="ltr"
+                >
+                  {info.emergency_contacts![0].phone}
+                </a>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      <div className="border-t border-gray-100 pt-1.5 mt-1.5 text-xs text-gray-400">
+        {timeAgo(event.created_at)}
       </div>
     </div>
   );

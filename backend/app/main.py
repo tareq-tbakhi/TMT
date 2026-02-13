@@ -89,6 +89,50 @@ async def startup():
     except Exception:
         pass
 
+    # Step 6: Add Gender enum type (own transaction for CREATE TYPE)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(
+                "DO $$ BEGIN "
+                "  CREATE TYPE gender AS ENUM ('male', 'female', 'other'); "
+                "EXCEPTION WHEN duplicate_object THEN NULL; END $$;"
+            ))
+    except Exception:
+        pass
+
+    # Step 7: Add medical / demographic fields to patients table (idempotent)
+    try:
+        async with engine.begin() as conn:
+            for stmt in [
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS date_of_birth DATE",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS gender gender",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS national_id VARCHAR",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS primary_language VARCHAR DEFAULT 'ar'",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS location_name VARCHAR",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS height_cm FLOAT",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS weight_kg FLOAT",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS chronic_conditions JSONB DEFAULT '[]'::jsonb",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS allergies JSONB DEFAULT '[]'::jsonb",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS current_medications JSONB DEFAULT '[]'::jsonb",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS special_equipment JSONB DEFAULT '[]'::jsonb",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS insurance_info VARCHAR",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS notes VARCHAR",
+            ]:
+                await conn.execute(text(stmt))
+    except Exception:
+        pass
+
+    # Step 8: Add live-location tracking columns to sos_requests (idempotent)
+    try:
+        async with engine.begin() as conn:
+            for stmt in [
+                "ALTER TABLE sos_requests ADD COLUMN IF NOT EXISTS origin_hospital_id UUID REFERENCES hospitals(id)",
+                "ALTER TABLE sos_requests ADD COLUMN IF NOT EXISTS auto_resolved BOOLEAN DEFAULT FALSE",
+            ]:
+                await conn.execute(text(stmt))
+    except Exception:
+        pass
+
 
 @app.on_event("shutdown")
 async def shutdown():

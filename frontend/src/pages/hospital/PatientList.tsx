@@ -12,9 +12,14 @@ interface PatientRow {
   phone: string;
   latitude: number | null;
   longitude: number | null;
+  location_name: string | null;
   mobility: string;
   living_situation: string;
   blood_type: string | null;
+  gender: string | null;
+  date_of_birth: string | null;
+  chronic_conditions: string[];
+  allergies: string[];
   emergency_contacts?: Record<string, unknown>[];
   is_active: boolean;
   created_at: string;
@@ -94,9 +99,10 @@ const PatientList: React.FC = () => {
     navigate(`/dashboard/patients/${id}`);
   };
 
-  const locationText = (lat: number | null, lon: number | null) => {
-    if (lat == null || lon == null) return "Unknown";
-    return `${lat.toFixed(3)}, ${lon.toFixed(3)}`;
+  const locationText = (p: PatientRow) => {
+    if (p.location_name) return p.location_name;
+    if (p.latitude == null || p.longitude == null) return "Unknown";
+    return `${p.latitude.toFixed(3)}, ${p.longitude.toFixed(3)}`;
   };
 
   return (
@@ -246,8 +252,8 @@ const PatientList: React.FC = () => {
                           </p>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {locationText(patient.latitude, patient.longitude)}
+                      <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate" title={locationText(patient)}>
+                        {locationText(patient)}
                       </td>
                       <td className="px-4 py-3">
                         <span
@@ -334,8 +340,8 @@ const PatientList: React.FC = () => {
                       <span className="text-xs font-medium text-gray-400 w-16">
                         Location
                       </span>
-                      <span>
-                        {locationText(patient.latitude, patient.longitude)}
+                      <span className="truncate max-w-[140px]" title={locationText(patient)}>
+                        {locationText(patient)}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 text-gray-600">
@@ -359,6 +365,23 @@ const PatientList: React.FC = () => {
                       </div>
                     )}
                   </div>
+
+                  {/* Medical tags (quick glance) */}
+                  {((patient.chronic_conditions?.length ?? 0) > 0 ||
+                    (patient.allergies?.length ?? 0) > 0) && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {(patient.chronic_conditions ?? []).slice(0, 2).map((c, i) => (
+                        <span key={`c-${i}`} className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-600">
+                          {c}
+                        </span>
+                      ))}
+                      {(patient.allergies ?? []).slice(0, 2).map((a, i) => (
+                        <span key={`a-${i}`} className="rounded-full bg-yellow-50 px-2 py-0.5 text-[10px] font-medium text-yellow-600">
+                          {a}
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
                   <div className="mt-3 border-t border-gray-100 pt-2 text-xs text-gray-400">
                     Updated {timeAgo(patient.updated_at)}
