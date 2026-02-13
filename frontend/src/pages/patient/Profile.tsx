@@ -187,10 +187,10 @@ export default function Profile() {
   // ─── Fetch Patient ─────────────────────────────────────────
 
   const fetchPatient = useCallback(async () => {
-    if (!user?.id) return;
+    if (!user?.patientId) return;
     setLoading(true);
     try {
-      const data = await getPatient(user.id) as ExtendedPatient;
+      const data = await getPatient(user.patientId!) as ExtendedPatient;
       setPatient(data);
     } catch (err) {
       setError(
@@ -199,7 +199,7 @@ export default function Profile() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.patientId]);
 
   useEffect(() => {
     fetchPatient();
@@ -366,11 +366,43 @@ export default function Profile() {
     }
   };
 
+  // ─── No Patient Record Guard ─────────────────────────────
+
+  if (!user?.patientId) {
+    return (
+      <div className="min-h-full bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-xl shadow-sm p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg
+              className="w-8 h-8 text-amber-500"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"
+              />
+            </svg>
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">
+            No Patient Record
+          </h2>
+          <p className="text-gray-600">
+            No patient record linked to this account.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   // ─── Loading / Error ──────────────────────────────────────
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-full bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <svg
             className="w-12 h-12 text-red-500 animate-spin mx-auto mb-4"
@@ -399,7 +431,7 @@ export default function Profile() {
 
   if (error && !patient) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="min-h-full bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-xl shadow-sm p-8 max-w-md w-full text-center">
           <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
             <svg
@@ -436,7 +468,7 @@ export default function Profile() {
   // ─── Render ───────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <div className="min-h-full bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">

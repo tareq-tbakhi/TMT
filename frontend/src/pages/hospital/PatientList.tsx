@@ -58,6 +58,12 @@ const PatientList: React.FC = () => {
         `${API_URL}/api/v1/patients?${params.toString()}`,
         { headers }
       );
+      if (res.status === 401) {
+        localStorage.removeItem("tmt-token");
+        localStorage.removeItem("tmt-user");
+        window.location.href = "/login";
+        return;
+      }
       if (res.ok) {
         const data = (await res.json()) as PatientRow[];
         setPatients(data);

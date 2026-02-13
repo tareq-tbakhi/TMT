@@ -18,6 +18,9 @@ interface AlertData {
   details: string | null;
   acknowledged: string | null;
   affected_patients_count?: number;
+  priority_score?: number;
+  metadata_?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
 }
 
 interface AlertCardProps {
@@ -46,10 +49,39 @@ const AlertCard: React.FC<AlertCardProps> = ({
 }) => {
   const [expanded, setExpanded] = useState(false);
   const [acknowledging, setAcknowledging] = useState(false);
+  const [reportingFalse, setReportingFalse] = useState(false);
 
   const eventLabel =
     eventTypeLabels[alert.event_type]?.en ?? alert.event_type;
   const eventIcon = eventTypeIcons[alert.event_type] ?? "\uD83D\uDCCC";
+  const meta = (alert.metadata_ ?? alert.metadata) as Record<string, unknown> | undefined;
+  const priorityScore = alert.priority_score ?? (meta?.priority_score as number) ?? 0;
+
+  const handleReportFalse = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (reportingFalse) return;
+    if (!window.confirm("Report this alert as a false alarm? This will affect the patient's trust score.")) return;
+
+    setReportingFalse(true);
+    try {
+      const token = localStorage.getItem("tmt-token");
+      await fetch(
+        `${API_URL}/api/v1/alerts/${alert.id}/report-false`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ reason: "Reported as false alarm by hospital" }),
+        }
+      );
+    } catch {
+      // Silently fail
+    } finally {
+      setReportingFalse(false);
+    }
+  };
 
   const handleAcknowledge = async (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -102,6 +134,22 @@ const AlertCard: React.FC<AlertCardProps> = ({
                 {alert.title}
               </h3>
               <StatusBadge severity={alert.severity} size="sm" />
+              {priorityScore > 0 && (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${
+                    priorityScore >= 80
+                      ? "bg-red-100 text-red-800"
+                      : priorityScore >= 60
+                      ? "bg-orange-100 text-orange-800"
+                      : priorityScore >= 40
+                      ? "bg-yellow-100 text-yellow-800"
+                      : "bg-gray-100 text-gray-600"
+                  }`}
+                  title="AI Priority Score"
+                >
+                  P{priorityScore}
+                </span>
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500">
               <span>{eventLabel}</span>
@@ -109,24 +157,55 @@ const AlertCard: React.FC<AlertCardProps> = ({
               <span>{timeAgo(alert.created_at)}</span>
               {alert.source && <span>via {alert.source}</span>}
               <span>Confidence: {Math.round(alert.confidence * 100)}%</span>
+              {meta?.response_urgency && (
+                <span className={`font-medium ${
+                  meta.response_urgency === "immediate" ? "text-red-600" :
+                  meta.response_urgency === "within_1h" ? "text-orange-600" :
+                  "text-gray-500"
+                }`}>
+                  {String(meta.response_urgency).replace(/_/g, " ")}
+                </span>
+              )}
+              {meta?.patient_trust_score != null && Number(meta.patient_trust_score) < 0.5 && (
+                <span className="font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                  Low trust ({Math.round(Number(meta.patient_trust_score) * 100)}%)
+                  {meta.patient_false_alarms ? ` - ${meta.patient_false_alarms} false alarm(s)` : ""}
+                </span>
+              )}
+              {meta?.reported_false && (
+                <span className="font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
+                  Reported False
+                </span>
+              )}
             </div>
           </div>
         </div>
 
-        {!alert.acknowledged && (
-          <button
-            onClick={handleAcknowledge}
-            disabled={acknowledging}
-            className="shrink-0 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            {acknowledging ? "..." : "Acknowledge"}
-          </button>
-        )}
-        {alert.acknowledged && (
-          <span className="shrink-0 rounded-md bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-500">
-            Acknowledged
-          </span>
-        )}
+        <div className="flex shrink-0 flex-col gap-1.5">
+          {!alert.acknowledged && (
+            <button
+              onClick={handleAcknowledge}
+              disabled={acknowledging}
+              className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {acknowledging ? "..." : "Acknowledge"}
+            </button>
+          )}
+          {alert.acknowledged && (
+            <span className="rounded-md bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-500">
+              Acknowledged
+            </span>
+          )}
+          {!meta?.reported_false && (
+            <button
+              onClick={handleReportFalse}
+              disabled={reportingFalse}
+              className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50 transition-colors"
+            >
+              {reportingFalse ? "..." : "Report False"}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Expanded Details */}
@@ -144,6 +223,30 @@ const AlertCard: React.FC<AlertCardProps> = ({
           {alert.radius_m != null && alert.radius_m > 0 && (
             <p className="text-sm text-gray-600">
               <span className="font-medium">Radius:</span> {alert.radius_m}m
+            </p>
+          )}
+          {meta?.recommendation && (
+            <p className="text-sm text-blue-700 bg-blue-50 rounded px-2 py-1">
+              <span className="font-medium">AI Recommendation:</span>{" "}
+              {String(meta.recommendation)}
+            </p>
+          )}
+          {Array.isArray(meta?.priority_factors) && (meta.priority_factors as string[]).length > 0 && (
+            <div className="text-xs text-gray-600">
+              <span className="font-medium">Priority Factors:</span>
+              <ul className="mt-1 ms-4 list-disc space-y-0.5">
+                {(meta.priority_factors as string[]).map((f, i) => (
+                  <li key={i}>{f}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {meta?.nearby_alert_count != null && Number(meta.nearby_alert_count) > 0 && (
+            <p className="text-xs text-gray-600">
+              <span className="font-medium">Nearby alerts:</span> {String(meta.nearby_alert_count)}
+              {meta.telegram_corroborated && (
+                <span className="ms-2 text-cyan-600 font-medium">Telegram confirmed</span>
+              )}
             </p>
           )}
           <p className="text-xs text-gray-400">

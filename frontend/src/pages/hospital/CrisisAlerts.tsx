@@ -29,6 +29,7 @@ const CrisisAlerts: React.FC = () => {
   const { alerts, setAlerts, addAlert, acknowledgeAlert } = useAlertStore();
   const [severityFilter, setSeverityFilter] = useState("");
   const [eventTypeFilter, setEventTypeFilter] = useState("");
+  const [sortByPriority, setSortByPriority] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,19 +40,29 @@ const CrisisAlerts: React.FC = () => {
     };
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    const params = new URLSearchParams();
-    if (severityFilter) params.set("severity", severityFilter);
-    if (eventTypeFilter) params.set("event_type", eventTypeFilter);
-
     try {
       setLoading(true);
+      // Use prioritized endpoint for AI-ranked alerts
+      const endpoint = sortByPriority ? "alerts/prioritized" : "alerts";
+      const params = new URLSearchParams();
+      if (!sortByPriority) {
+        if (severityFilter) params.set("severity", severityFilter);
+        if (eventTypeFilter) params.set("event_type", eventTypeFilter);
+      }
+      const qs = params.toString();
       const res = await fetch(
-        `${API_URL}/api/v1/alerts?${params.toString()}`,
+        `${API_URL}/api/v1/${endpoint}${qs ? `?${qs}` : ""}`,
         { headers }
       );
+      if (res.status === 401) {
+        localStorage.removeItem("tmt-token");
+        localStorage.removeItem("tmt-user");
+        window.location.href = "/login";
+        return;
+      }
       if (res.ok) {
-        const data = (await res.json()) as { alerts: Alert[]; total: number };
-        setAlerts(data.alerts);
+        const data = await res.json();
+        setAlerts(data.alerts ?? []);
       } else {
         setError("Failed to load alerts");
       }
@@ -60,7 +71,7 @@ const CrisisAlerts: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [severityFilter, eventTypeFilter, setAlerts]);
+  }, [severityFilter, eventTypeFilter, sortByPriority, setAlerts]);
 
   // Initial load and re-fetch on filter change
   useEffect(() => {
@@ -72,6 +83,10 @@ const CrisisAlerts: React.FC = () => {
     const socket = io(API_URL, {
       path: "/socket.io",
       transports: ["websocket", "polling"],
+    });
+
+    socket.on("connect", () => {
+      socket.emit("join_alerts");
     });
 
     socket.on("new_alert", (alert: Alert) => {
@@ -128,7 +143,20 @@ const CrisisAlerts: React.FC = () => {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <button
+          onClick={() => setSortByPriority(!sortByPriority)}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            sortByPriority
+              ? "bg-purple-600 text-white shadow-sm"
+              : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+          }`}
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          AI Priority
+        </button>
         <select
           value={severityFilter}
           onChange={(e) => setSeverityFilter(e.target.value)}

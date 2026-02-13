@@ -98,7 +98,7 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-    command: celery -A tasks.celery_app worker --loglevel=info --queues=telegram.messages,alerts.new,embeddings.generate,analytics.update,sos.requests,sms.inbound,sms.outbound,map.updates
+    command: celery -A tasks.celery_app worker --loglevel=info --queues=telegram.messages,alerts.new,embeddings.generate,analytics.update,sos.requests,sms.inbound,sms.outbound,map.updates,verification
 
   celery-beat:
     build:

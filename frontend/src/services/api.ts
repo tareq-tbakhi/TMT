@@ -323,5 +323,7 @@ export function getMapEvents(params?: {
   if (params?.hours) searchParams.set("hours", String(params.hours));
   if (params?.layer) searchParams.set("layer", params.layer);
   const qs = searchParams.toString();
-  return request<MapEvent[]>(`/map/events${qs ? `?${qs}` : ""}`);
+  return request<{ events: MapEvent[] }>(`/map/events${qs ? `?${qs}` : ""}`).then(
+    (res) => res.events
+  );
 }

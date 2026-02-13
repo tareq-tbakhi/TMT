@@ -16,6 +16,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Any
 
+from geoalchemy2 import Geography
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -213,8 +214,8 @@ async def get_events_in_area(
             GeoEvent.created_at >= cutoff,
             (GeoEvent.expires_at.is_(None)) | (GeoEvent.expires_at > now),
             func.ST_DWithin(
-                GeoEvent.location.cast(func.Geography),
-                centre.cast(func.Geography),
+                GeoEvent.location.cast(Geography),
+                centre.cast(Geography),
                 radius_m,
             ),
         )

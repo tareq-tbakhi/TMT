@@ -9,6 +9,15 @@ celery_app = Celery(
     "tmt",
     broker=settings.REDIS_URL,
     backend=settings.REDIS_URL,
+    include=[
+        "tasks.alert_tasks",
+        "tasks.telegram_tasks",
+        "tasks.embedding_tasks",
+        "tasks.sms_tasks",
+        "tasks.map_tasks",
+        "tasks.sos_tasks",
+        "tasks.verification_tasks",
+    ],
 )
 
 celery_app.conf.update(
@@ -23,6 +32,8 @@ celery_app.conf.update(
         "tasks.embedding_tasks.*": {"queue": "embeddings.generate"},
         "tasks.sms_tasks.*": {"queue": "sms.inbound"},
         "tasks.map_tasks.*": {"queue": "map.updates"},
+        "tasks.sos_tasks.*": {"queue": "sos.requests"},
+        "tasks.verification_tasks.*": {"queue": "verification"},
     },
     beat_schedule={
         "telegram-fetch-messages": {
@@ -37,7 +48,9 @@ celery_app.conf.update(
             "task": "tasks.alert_tasks.refresh_analytics_cache",
             "schedule": 300.0,  # Every 5 minutes
         },
+        "verify-telegram-events": {
+            "task": "tasks.verification_tasks.verify_recent_telegram_events",
+            "schedule": 1800.0,  # Every 30 minutes
+        },
     },
 )
-
-celery_app.autodiscover_tasks(["tasks"])

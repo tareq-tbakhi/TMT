@@ -628,7 +628,7 @@ export default function Alerts() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-full bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <svg
             className="w-12 h-12 text-red-500 animate-spin mx-auto mb-4"
@@ -658,7 +658,7 @@ export default function Alerts() {
   // ─── Render ───────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-full bg-gray-50">
       {/* Offline Banner */}
       {!isOnline && (
         <div className="px-4 py-2.5 bg-amber-500 text-white text-center text-sm font-medium flex items-center justify-center gap-2">

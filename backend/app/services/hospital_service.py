@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from geoalchemy2 import Geography
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -229,8 +230,8 @@ async def find_nearest_hospitals(
     centre = _make_point(longitude, latitude)
 
     distance_expr = func.ST_Distance(
-        Hospital.location.cast(func.Geography),
-        centre.cast(func.Geography),
+        Hospital.location.cast(Geography),
+        centre.cast(Geography),
     ).label("distance_m")
 
     query = (
@@ -238,8 +239,8 @@ async def find_nearest_hospitals(
         .where(
             Hospital.location.isnot(None),
             func.ST_DWithin(
-                Hospital.location.cast(func.Geography),
-                centre.cast(func.Geography),
+                Hospital.location.cast(Geography),
+                centre.cast(Geography),
                 radius_m,
             ),
         )
@@ -276,8 +277,8 @@ async def find_nearest_operational_hospital(
     centre = _make_point(longitude, latitude)
 
     distance_expr = func.ST_Distance(
-        Hospital.location.cast(func.Geography),
-        centre.cast(func.Geography),
+        Hospital.location.cast(Geography),
+        centre.cast(Geography),
     ).label("distance_m")
 
     query = (
@@ -287,8 +288,8 @@ async def find_nearest_operational_hospital(
             Hospital.status == HospitalStatus.OPERATIONAL,
             Hospital.available_beds > 0,
             func.ST_DWithin(
-                Hospital.location.cast(func.Geography),
-                centre.cast(func.Geography),
+                Hospital.location.cast(Geography),
+                centre.cast(Geography),
                 radius_m,
             ),
         )

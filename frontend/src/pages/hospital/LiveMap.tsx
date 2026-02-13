@@ -147,12 +147,14 @@ const LiveMap: React.FC = () => {
     try {
       setLoading(true);
       const res = await fetch(
-        `${API_URL}/api/v1/livemap/events?hours=${timeRange}`,
+        `${API_URL}/api/v1/map/events?hours=${timeRange}`,
         { headers }
       );
       if (res.ok) {
-        const data = (await res.json()) as MapEvent[];
-        setEvents(data);
+        const data = await res.json();
+        // Backend returns { events, total, hours, generated_at }
+        const events = Array.isArray(data) ? data : (data.events ?? []);
+        setEvents(events as MapEvent[]);
       }
     } catch {
       // Silent fail
@@ -170,6 +172,10 @@ const LiveMap: React.FC = () => {
     const socket = io(API_URL, {
       path: "/socket.io",
       transports: ["websocket", "polling"],
+    });
+
+    socket.on("connect", () => {
+      socket.emit("join_map");
     });
 
     socket.on("map_event", (event: MapEvent) => {

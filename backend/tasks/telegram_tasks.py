@@ -57,7 +57,43 @@ def run_gap_detection():
 
 @celery_app.task(name="tasks.telegram_tasks.create_alert_from_crisis")
 def create_alert_from_crisis(crisis_data: dict):
-    """Create an alert from processed crisis data."""
+    """Create an alert from processed Telegram crisis data."""
     logger.info(f"Creating alert from crisis data: {crisis_data.get('event_type')}")
-    # This would create an alert via the alert service
-    # Requires DB session — handled in the async context
+
+    async def _run():
+        from app.services.alert_service import create_alert
+        from app.db.postgres import async_session
+
+        event_type = crisis_data.get("event_type", "other")
+        lat = crisis_data.get("latitude")
+        lon = crisis_data.get("longitude")
+
+        if lat is None or lon is None:
+            lat = lat or 31.5017
+            lon = lon or 34.4668
+
+        async with async_session() as db:
+            try:
+                alert = await create_alert(
+                    db,
+                    event_type=event_type,
+                    latitude=lat,
+                    longitude=lon,
+                    title=crisis_data.get("title", f"Crisis Alert — {event_type}"),
+                    details=crisis_data.get("details"),
+                    source="telegram",
+                    confidence=crisis_data.get("confidence", 0.5),
+                    severity_override=crisis_data.get("severity"),
+                    metadata=crisis_data.get("metadata", {}),
+                    broadcast=True,
+                    notify_patients=True,
+                )
+                await db.commit()
+                logger.info("Alert created from Telegram crisis: %s", alert.get("id"))
+                return alert
+            except Exception as e:
+                await db.rollback()
+                logger.exception("Failed to create alert from crisis: %s", e)
+                return None
+
+    return _run_async(_run())

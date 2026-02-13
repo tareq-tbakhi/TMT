@@ -12,6 +12,7 @@ import uuid
 from datetime import datetime
 from typing import Any
 
+from geoalchemy2 import Geography
 from sqlalchemy import select, func, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -227,8 +228,8 @@ async def search_patients_in_area(
         .where(
             Patient.location.isnot(None),
             func.ST_DWithin(
-                Patient.location.cast(func.Geography),
-                centre.cast(func.Geography),
+                Patient.location.cast(Geography),
+                centre.cast(Geography),
                 radius_m,
             ),
         )
@@ -238,8 +239,8 @@ async def search_patients_in_area(
 
     query = query.order_by(
         func.ST_Distance(
-            Patient.location.cast(func.Geography),
-            centre.cast(func.Geography),
+            Patient.location.cast(Geography),
+            centre.cast(Geography),
         )
     )
     result = await db.execute(query)
@@ -265,8 +266,8 @@ async def get_vulnerable_patients_in_radius(
             Patient.location.isnot(None),
             Patient.is_active.is_(True),
             func.ST_DWithin(
-                Patient.location.cast(func.Geography),
-                centre.cast(func.Geography),
+                Patient.location.cast(Geography),
+                centre.cast(Geography),
                 radius_m,
             ),
             and_(
@@ -282,8 +283,8 @@ async def get_vulnerable_patients_in_radius(
     )
     query = query.order_by(
         func.ST_Distance(
-            Patient.location.cast(func.Geography),
-            centre.cast(func.Geography),
+            Patient.location.cast(Geography),
+            centre.cast(Geography),
         )
     )
     result = await db.execute(query)

@@ -13,9 +13,11 @@ from typing import Any
 from sqlalchemy import select, func, and_, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from geoalchemy2 import Geography
 from app.models.alert import Alert, AlertSeverity, EventType
 from app.models.patient import Patient, MobilityStatus, LivingSituation
 from app.api.websocket.handler import broadcast_alert, notify_patient
+from app.services.livemap_service import create_geo_event
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +164,26 @@ async def create_alert(
             except Exception:
                 logger.debug("Could not notify patient %s for alert %s", p["id"], alert.id)
 
+    # Also create a GeoEvent so the alert appears on the Live Map
+    severity_int = {"low": 1, "medium": 2, "high": 3, "critical": 5}.get(severity.value, 2)
+    try:
+        await create_geo_event(
+            db,
+            event_type=event_type.value,
+            latitude=latitude,
+            longitude=longitude,
+            source="system",
+            layer="crisis",
+            severity=severity_int,
+            title=title,
+            details=details,
+            metadata={"alert_id": str(alert.id), "radius_m": radius_m, **(metadata or {})},
+            expires_hours=expires_hours,
+            broadcast=broadcast,
+        )
+    except Exception:
+        logger.debug("Could not create geo event for alert %s", alert.id)
+
     logger.info(
         "Created alert %s [%s/%s] — %d affected patients",
         alert.id, event_type.value, severity.value, len(affected),
@@ -229,8 +251,8 @@ async def get_alerts_near(
         .where(
             Alert.location.isnot(None),
             func.ST_DWithin(
-                Alert.location.cast(func.Geography),
-                centre.cast(func.Geography),
+                Alert.location.cast(Geography),
+                centre.cast(Geography),
                 radius_m,
             ),
         )
@@ -274,6 +296,36 @@ async def acknowledge_alert(
 # Affected-patient matching (PostGIS)
 # ---------------------------------------------------------------------------
 
+async def get_alerts_prioritized(
+    db: AsyncSession,
+    *,
+    active_only: bool = True,
+    limit: int = 100,
+    offset: int = 0,
+) -> list[dict[str, Any]]:
+    """Return alerts sorted by priority score (from metadata) descending.
+
+    Alerts without a priority_score default to a score derived from severity.
+    """
+    alerts = await get_alerts(
+        db, active_only=active_only, limit=limit, offset=offset,
+    )
+
+    severity_scores = {"critical": 80, "high": 60, "medium": 40, "low": 20}
+
+    for alert in alerts:
+        meta = alert.get("metadata_") or alert.get("metadata") or {}
+        if "priority_score" not in meta:
+            # Derive a score from severity for older alerts without AI scoring
+            sev = alert.get("severity", "low")
+            meta["priority_score"] = severity_scores.get(sev, 30)
+        alert["priority_score"] = meta.get("priority_score", 30)
+
+    # Sort by priority_score descending, then by created_at descending
+    alerts.sort(key=lambda a: (a.get("priority_score", 0)), reverse=True)
+    return alerts
+
+
 async def find_affected_patients(
     db: AsyncSession,
     *,
@@ -306,15 +358,15 @@ async def find_affected_patients(
             Patient.location.isnot(None),
             Patient.is_active.is_(True),
             func.ST_DWithin(
-                Patient.location.cast(func.Geography),
-                centre.cast(func.Geography),
+                Patient.location.cast(Geography),
+                centre.cast(Geography),
                 radius_m,
             ),
         )
         .order_by(
             func.ST_Distance(
-                Patient.location.cast(func.Geography),
-                centre.cast(func.Geography),
+                Patient.location.cast(Geography),
+                centre.cast(Geography),
             )
         )
     )
@@ -355,8 +407,8 @@ async def find_affected_vulnerable_patients(
             Patient.location.isnot(None),
             Patient.is_active.is_(True),
             func.ST_DWithin(
-                Patient.location.cast(func.Geography),
-                centre.cast(func.Geography),
+                Patient.location.cast(Geography),
+                centre.cast(Geography),
                 alert.radius_m,
             ),
             and_(
@@ -370,8 +422,8 @@ async def find_affected_vulnerable_patients(
         )
         .order_by(
             func.ST_Distance(
-                Patient.location.cast(func.Geography),
-                centre.cast(func.Geography),
+                Patient.location.cast(Geography),
+                centre.cast(Geography),
             )
         )
     )

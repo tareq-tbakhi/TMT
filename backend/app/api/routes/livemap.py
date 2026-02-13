@@ -42,7 +42,7 @@ class GeoEventResponse(BaseModel):
     title: Optional[str] = None
     details: Optional[str] = None
     layer: str
-    metadata_: Optional[dict] = None
+    metadata: Optional[dict] = None
     created_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None
 
@@ -173,6 +173,36 @@ async def get_map_events(
         hours=hours,
         generated_at=datetime.utcnow(),
     )
+
+
+@router.get("/map/clusters")
+async def get_map_clusters(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    hours: int = Query(default=24, ge=1, le=168),
+    precision: float = Query(default=0.01, ge=0.001, le=1.0, description="Grid cell size in degrees (~0.01 = 1km)"),
+    min_size: int = Query(default=2, ge=1, le=100, description="Minimum events to form a cluster"),
+):
+    """
+    Get clustered geo events for the map.
+    Clusters events by grid cells and returns centroids with counts and max severity.
+    Useful for identifying high-density crisis areas.
+    """
+    clusters = await livemap_service.cluster_events(
+        db,
+        hours=hours,
+        precision_deg=precision,
+        min_cluster_size=min_size,
+    )
+
+    return {
+        "clusters": clusters,
+        "total": len(clusters),
+        "hours": hours,
+        "precision_deg": precision,
+        "generated_at": datetime.utcnow().isoformat(),
+    }
 
 
 @router.get("/map/layers", response_model=MapLayersResponse)

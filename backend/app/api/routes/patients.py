@@ -5,7 +5,7 @@ Endpoints:
     GET  /patients         — List patients with optional search/filter (doctor / hospital_admin)
     POST /patients         — Register a new patient (public)
     POST /patients/login   — Patient login (returns JWT)
-    GET  /patients/{id}    — Get patient by ID (doctor / hospital_admin)
+    GET  /patients/{id}    — Get patient by ID (patient self-access / hospital_admin / super_admin)
     PUT  /patients/{id}    — Update patient profile (patient self-update)
 """
 
@@ -218,9 +218,26 @@ async def get_patient(
     patient_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
+    current_user: User = Depends(get_current_user),
 ):
-    """Get patient details. Requires hospital_admin role."""
+    """Get patient details.
+
+    Patients can access their own record. Hospital admins and super admins
+    can access any patient record.
+    """
+    # Permission check: patients can only access their own record
+    if current_user.role == UserRole.PATIENT:
+        if current_user.patient_id != patient_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only access your own patient record",
+            )
+    elif current_user.role not in (UserRole.HOSPITAL_ADMIN, UserRole.SUPER_ADMIN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Insufficient permissions",
+        )
+
     patient = await patient_service.get_patient(db, patient_id)
     if patient is None:
         raise HTTPException(

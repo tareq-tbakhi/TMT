@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
+import { io } from "socket.io-client";
 import StatsCard from "../../components/common/StatsCard";
 import StatusBadge from "../../components/common/StatusBadge";
 import { useAlertStore } from "../../store/alertStore";
@@ -66,6 +67,26 @@ const Dashboard: React.FC = () => {
 
     fetchData();
   }, [setAlerts]);
+
+  // Real-time alert updates
+  useEffect(() => {
+    const socket = io(API_URL, {
+      path: "/socket.io",
+      transports: ["websocket", "polling"],
+    });
+
+    socket.on("connect", () => {
+      socket.emit("join_alerts");
+    });
+
+    socket.on("new_alert", (alert: Alert) => {
+      setRecentAlerts((prev) => [alert, ...prev].slice(0, 5));
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, []);
 
   if (loading) {
     return (

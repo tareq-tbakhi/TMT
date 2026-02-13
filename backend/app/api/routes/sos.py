@@ -119,8 +119,20 @@ async def send_sos(
         db=db,
     )
 
+    # Increment patient's SOS count for trust tracking
+    try:
+        from sqlalchemy import select as sa_select
+        from app.models.patient import Patient as PatientModel
+        p_result = await db.execute(sa_select(PatientModel).where(PatientModel.id == current_user.patient_id))
+        patient_obj = p_result.scalar_one_or_none()
+        if patient_obj:
+            patient_obj.total_sos_count = (patient_obj.total_sos_count or 0) + 1
+            await db.flush()
+    except Exception:
+        pass  # Non-critical
+
     # Broadcast SOS to dashboards and live map
-    await broadcast_sos({
+    sos_payload = {
         "id": str(sos.id),
         "patient_id": str(sos.patient_id),
         "latitude": sos.latitude,
@@ -131,7 +143,17 @@ async def send_sos(
         "source": sos.source.value,
         "details": sos.details,
         "created_at": sos.created_at.isoformat() if sos.created_at else None,
-    })
+        "patient_trust_score": patient.get("trust_score", 1.0) if patient else 1.0,
+    }
+    await broadcast_sos(sos_payload)
+
+    # Trigger AI triage → creates Alert record visible on dashboard & map
+    try:
+        from tasks.sos_tasks import triage_sos_request
+        triage_sos_request.delay(sos_payload)
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Could not enqueue SOS triage task: %s", exc)
 
     return sos
 

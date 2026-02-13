@@ -56,6 +56,18 @@ async def startup():
             await conn.execute(text("UPDATE users SET role = 'hospital_admin' WHERE role = 'doctor'"))
         except Exception:
             pass
+        # Add trust tracking columns to patients table (idempotent)
+        for col, typ, default in [
+            ("false_alarm_count", "INTEGER", "0"),
+            ("total_sos_count", "INTEGER", "0"),
+            ("trust_score", "FLOAT", "1.0"),
+        ]:
+            try:
+                await conn.execute(text(
+                    f"ALTER TABLE patients ADD COLUMN IF NOT EXISTS {col} {typ} DEFAULT {default}"
+                ))
+            except Exception:
+                pass
 
 
 @app.on_event("shutdown")
