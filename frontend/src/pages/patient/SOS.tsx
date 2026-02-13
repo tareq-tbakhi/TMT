@@ -542,12 +542,12 @@ export default function SOS() {
           <div className="bg-white rounded-2xl shadow-xl p-8 text-center mb-6">
             <div
               className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${
-                sosState === "sent" ? "bg-green-100" : "bg-blue-100"
+                sosState === "sent" ? "bg-orange-100" : "bg-blue-100"
               }`}
             >
               {sosState === "sent" ? (
                 <svg
-                  className="w-10 h-10 text-green-500"
+                  className="w-10 h-10 text-orange-500"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
@@ -667,21 +667,13 @@ export default function SOS() {
             </ul>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-3">
-            <button
-              onClick={handleCancel}
-              className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition"
-            >
-              Cancel SOS
-            </button>
-            <button
-              onClick={resetSOS}
-              className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition"
-            >
-              Send Another
-            </button>
-          </div>
+          {/* Action Button */}
+          <button
+            onClick={handleCancel}
+            className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition"
+          >
+            Cancel SOS
+          </button>
         </div>
       </div>
     );
