@@ -43,3 +43,5 @@ celerybeat.pid
 htmlcov/
 .coverage
 coverage.xml
+frontend/package-lock.json
+.env.example
