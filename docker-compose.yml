@@ -98,7 +98,12 @@ services:
         condition: service_healthy
     volumes:
       - ./backend:/app
-    command: celery -A tasks.celery_app worker --loglevel=info --queues=telegram.messages,alerts.new,embeddings.generate,analytics.update,sos.requests,sms.inbound,sms.outbound,map.updates,verification
+    command: >
+      celery -A tasks.celery_app worker
+      --loglevel=info
+      --queues=sos.triage,alerts.new,sms.inbound,map.updates,intel.analysis,embeddings.generate,verification
+      --concurrency=4
+      -Ofair
 
   celery-beat:
     build:

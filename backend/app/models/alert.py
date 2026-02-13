@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Enum, DateTime, Float, Integer
+from sqlalchemy import Column, String, Enum, DateTime, Float, Integer, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from geoalchemy2 import Geometry
 
@@ -41,10 +41,14 @@ class Alert(Base):
     radius_m = Column(Float, default=1000)  # Affected radius in meters
     title = Column(String, nullable=False)
     details = Column(String, nullable=True)
-    source = Column(String, nullable=True)  # "telegram", "user_report", "system"
+    source = Column(String, nullable=True)  # "telegram", "user_report", "system", "sos"
     confidence = Column(Float, default=0.5)
-    acknowledged = Column(String, nullable=True)  # hospital_id that acknowledged
+    acknowledged = Column(String, nullable=True)  # facility_id that acknowledged
     metadata_ = Column("metadata", JSONB, default=dict)
     affected_patients_count = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=True)
+
+    # --- Multi-department routing ---
+    routed_department = Column(String, nullable=True)  # "hospital", "police", "civil_defense"
+    target_facility_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), nullable=True)

@@ -3,7 +3,7 @@ SOS API routes.
 
 Endpoints:
     POST /sos             — Send SOS via internet (patient role)
-    GET  /sos             — List SOS requests (hospital role)
+    GET  /sos             — List SOS requests (department admin role)
     PUT  /sos/{id}/status — Update SOS request status
 """
 
@@ -16,9 +16,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, DEPARTMENT_ADMIN_ROLES
 from app.models.sos_request import SosRequest, SOSStatus, SOSSource, PatientStatus
-from app.api.middleware.auth import get_current_user, require_role
+from app.api.middleware.auth import get_current_user, require_role, require_any_department_admin
 from app.api.middleware.audit import log_audit
 from app.services import patient_service
 from app.api.websocket.handler import broadcast_sos
@@ -53,6 +53,8 @@ class SOSResponse(BaseModel):
     severity: int
     source: SOSSource
     hospital_notified_id: Optional[UUID] = None
+    routed_department: Optional[str] = None
+    facility_notified_id: Optional[UUID] = None
     details: Optional[str] = None
     created_at: Optional[datetime] = None
     resolved_at: Optional[datetime] = None
@@ -183,26 +185,98 @@ async def send_sos(
     return sos
 
 
+@router.post("/sos/bulk", status_code=status.HTTP_202_ACCEPTED)
+async def bulk_sos(
+    payloads: list[SOSCreateRequest],
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
+):
+    """
+    Bulk SOS dispatch — for mass-casualty events.
+    Hospital admins can submit multiple SOS on behalf of patients.
+    Each SOS is triaged in parallel via Celery group.
+    """
+    if len(payloads) > 50:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Maximum 50 SOS requests per bulk submission",
+        )
+
+    sos_payloads = []
+    for p in payloads:
+        lat = p.latitude or 31.5017
+        lon = p.longitude or 34.4668
+        sos_payloads.append({
+            "latitude": lat,
+            "longitude": lon,
+            "patient_status": p.patient_status.value,
+            "severity": p.severity,
+            "details": p.details,
+            "source": "bulk_api",
+        })
+
+    # Dispatch all triage tasks in parallel via Celery group
+    try:
+        from celery import group
+        from tasks.sos_tasks import triage_sos_request
+
+        job = group(
+            triage_sos_request.s(payload) for payload in sos_payloads
+        )
+        result = job.apply_async()
+
+        await log_audit(
+            action="create",
+            resource="sos_request",
+            user_id=current_user.id,
+            details=f"Bulk SOS dispatched: {len(sos_payloads)} requests",
+            request=request,
+            db=db,
+        )
+
+        return {
+            "batch_id": str(result.id),
+            "count": len(sos_payloads),
+            "status": "dispatched",
+        }
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Bulk SOS dispatch failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to dispatch bulk SOS tasks",
+        )
+
+
 @router.get("/sos", response_model=SOSListResponse)
 async def list_sos_requests(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
+    current_user: User = Depends(require_any_department_admin()),
     status_filter: Optional[SOSStatus] = None,
     severity_min: Optional[int] = None,
+    routed_department: Optional[str] = None,
     limit: int = 50,
     offset: int = 0,
 ):
     """
-    List SOS requests. Hospital staff see SOS requests relevant to their area.
+    List SOS requests. Department staff see SOS relevant to their department/facility.
+    Super admin sees all. Can filter by routed_department.
     """
     hospital_id = current_user.hospital_id
 
+    # Determine department filter
+    dept_filter = routed_department
+    if current_user.role != UserRole.SUPER_ADMIN and dept_filter is None:
+        dept_filter = current_user.department_type
+
     sos_list, total = await patient_service.list_sos_requests(
         db,
-        hospital_id=hospital_id,
+        hospital_id=hospital_id if current_user.role != UserRole.SUPER_ADMIN else None,
         status_filter=status_filter,
         severity_min=severity_min,
+        routed_department=dept_filter,
         limit=limit,
         offset=offset,
     )
@@ -211,7 +285,7 @@ async def list_sos_requests(
         action="read",
         resource="sos_request",
         user_id=current_user.id,
-        details=f"Listed SOS requests (status={status_filter}, min_sev={severity_min})",
+        details=f"Listed SOS requests (status={status_filter}, dept={dept_filter})",
         request=request,
         db=db,
     )
@@ -228,7 +302,7 @@ async def update_sos_status(
     payload: SOSStatusUpdateRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
+    current_user: User = Depends(require_any_department_admin()),
 ):
     """Update the status of an SOS request (e.g., acknowledge, dispatch, resolve)."""
     update_data: dict = {"status": payload.status}

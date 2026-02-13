@@ -2,13 +2,14 @@
 Super Admin API routes.
 
 Endpoints:
-    GET    /admin/users         — List all users (paginated, searchable)
-    POST   /admin/users         — Create a user (any role)
-    PUT    /admin/users/{id}    — Update user (role, active status)
-    DELETE /admin/users/{id}    — Deactivate a user
-    GET    /admin/stats         — System-wide statistics
-    PUT    /hospitals/{id}      — Full hospital update (super admin)
-    DELETE /hospitals/{id}      — Delete a hospital (super admin)
+    GET    /admin/users           — List all users (paginated, searchable)
+    POST   /admin/users           — Create a user (any role)
+    PUT    /admin/users/{id}      — Update user (role, active status)
+    DELETE /admin/users/{id}      — Deactivate a user
+    GET    /admin/stats           — System-wide statistics
+    GET    /admin/facilities      — List all facilities by department
+    PUT    /hospitals/{id}        — Full facility update (super admin)
+    DELETE /hospitals/{id}        — Delete a facility (super admin)
 """
 
 from datetime import datetime
@@ -22,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
 from app.models.user import User, UserRole
-from app.models.hospital import Hospital
+from app.models.hospital import Hospital, DepartmentType
 from app.models.patient import Patient
 from app.models.alert import Alert
 from app.models.sos_request import SosRequest
@@ -60,7 +61,7 @@ class UserCreateRequest(BaseModel):
     password: str = Field(..., min_length=6)
     email: Optional[str] = None
     role: str = "hospital_admin"
-    hospital_id: Optional[UUID] = None
+    hospital_id: Optional[UUID] = None  # facility_id (still called hospital_id for compat)
 
 
 class UserUpdateRequest(BaseModel):
@@ -74,12 +75,16 @@ class SystemStatsResponse(BaseModel):
     total_users: int
     total_patients: int
     total_hospitals: int
+    total_police_stations: int
+    total_civil_defense: int
+    total_facilities: int
     total_alerts: int
     total_sos: int
 
 
 class HospitalFullUpdateRequest(BaseModel):
     name: Optional[str] = None
+    department_type: Optional[str] = None
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     status: Optional[str] = None
@@ -90,6 +95,15 @@ class HospitalFullUpdateRequest(BaseModel):
     coverage_radius_km: Optional[float] = None
     phone: Optional[str] = None
     supply_levels: Optional[dict] = None
+    # Police
+    patrol_units: Optional[int] = None
+    available_units: Optional[int] = None
+    jurisdiction_area: Optional[str] = None
+    # Civil Defense
+    rescue_teams: Optional[int] = None
+    available_teams: Optional[int] = None
+    equipment_types: Optional[list[str]] = None
+    shelter_capacity: Optional[int] = None
 
 
 # ---------------------------------------------------------------------------
@@ -146,7 +160,7 @@ async def create_user(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.SUPER_ADMIN)),
 ):
-    """Create a new user. Super admin only."""
+    """Create a new user. Super admin only. Supports all roles including police_admin and civil_defense_admin."""
     existing = await db.execute(select(User).where(User.phone == payload.phone))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Phone already in use")
@@ -274,7 +288,19 @@ async def get_system_stats(
     """Get system-wide statistics. Super admin only."""
     total_users = (await db.execute(select(func.count(User.id)))).scalar_one()
     total_patients = (await db.execute(select(func.count(Patient.id)))).scalar_one()
-    total_hospitals = (await db.execute(select(func.count(Hospital.id)))).scalar_one()
+    total_facilities = (await db.execute(select(func.count(Hospital.id)))).scalar_one()
+
+    # Count by department type
+    total_hospitals = (await db.execute(
+        select(func.count(Hospital.id)).where(Hospital.department_type == DepartmentType.HOSPITAL)
+    )).scalar_one()
+    total_police = (await db.execute(
+        select(func.count(Hospital.id)).where(Hospital.department_type == DepartmentType.POLICE)
+    )).scalar_one()
+    total_cd = (await db.execute(
+        select(func.count(Hospital.id)).where(Hospital.department_type == DepartmentType.CIVIL_DEFENSE)
+    )).scalar_one()
+
     total_alerts = (await db.execute(select(func.count(Alert.id)))).scalar_one()
     total_sos = (await db.execute(select(func.count(SosRequest.id)))).scalar_one()
 
@@ -282,9 +308,31 @@ async def get_system_stats(
         total_users=total_users,
         total_patients=total_patients,
         total_hospitals=total_hospitals,
+        total_police_stations=total_police,
+        total_civil_defense=total_cd,
+        total_facilities=total_facilities,
         total_alerts=total_alerts,
         total_sos=total_sos,
     )
+
+
+# ---------------------------------------------------------------------------
+# Facility Management (Super Admin) — list by department
+# ---------------------------------------------------------------------------
+
+@router.get("/admin/facilities")
+async def list_facilities(
+    department_type: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.SUPER_ADMIN)),
+):
+    """List all facilities, optionally filtered by department type."""
+    query = select(Hospital).order_by(Hospital.created_at.desc())
+    if department_type:
+        query = query.where(Hospital.department_type == DepartmentType(department_type))
+    result = await db.execute(query)
+    facilities = result.scalars().all()
+    return [hospital_service._hospital_to_dict(f) for f in facilities]
 
 
 # ---------------------------------------------------------------------------
@@ -299,21 +347,21 @@ async def full_update_hospital(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.SUPER_ADMIN)),
 ):
-    """Full hospital update. Super admin only."""
+    """Full facility update. Super admin only."""
     update_data = payload.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No fields to update")
 
     hospital = await hospital_service.update_hospital(db, hospital_id, **update_data)
     if hospital is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hospital not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Facility not found")
 
     await log_audit(
         action="update",
         resource="hospital",
         resource_id=str(hospital_id),
         user_id=current_user.id,
-        details=f"Super admin updated hospital: {list(update_data.keys())}",
+        details=f"Super admin updated facility: {list(update_data.keys())}",
         request=request,
         db=db,
     )
@@ -328,11 +376,11 @@ async def delete_hospital(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.SUPER_ADMIN)),
 ):
-    """Delete a hospital. Super admin only."""
+    """Delete a facility. Super admin only."""
     result = await db.execute(select(Hospital).where(Hospital.id == hospital_id))
     hospital = result.scalar_one_or_none()
     if hospital is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Hospital not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Facility not found")
 
     await db.delete(hospital)
     await db.flush()
@@ -342,7 +390,7 @@ async def delete_hospital(
         resource="hospital",
         resource_id=str(hospital_id),
         user_id=current_user.id,
-        details=f"Deleted hospital {hospital.name}",
+        details=f"Deleted facility {hospital.name}",
         request=request,
         db=db,
     )

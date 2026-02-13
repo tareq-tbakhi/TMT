@@ -17,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, ROLE_TO_DEPARTMENT
 from app.models.alert import Alert, AlertSeverity, EventType
 from app.api.middleware.auth import get_current_user, require_role
 from app.api.middleware.audit import log_audit
@@ -62,15 +62,25 @@ class AlertResponse(BaseModel):
     acknowledged: Optional[str] = None
     metadata_: Optional[dict] = Field(None, alias="metadata")
     affected_patients_count: int = 0
+    routed_department: Optional[str] = None
+    target_facility_id: Optional[UUID] = None
     created_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
 
+class AlertStatsResponse(BaseModel):
+    total: int = 0
+    sos_count: int = 0
+    unacknowledged: int = 0
+    by_severity: dict[str, int] = {}
+
+
 class AlertListResponse(BaseModel):
     alerts: list[AlertResponse]
     total: int
+    stats: AlertStatsResponse | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -120,39 +130,48 @@ async def list_alerts(
     current_user: User = Depends(get_current_user),
     severity: Optional[AlertSeverity] = None,
     event_type: Optional[EventType] = None,
+    source: Optional[str] = None,
+    routed_department: Optional[str] = None,
     active_only: bool = True,
     limit: int = 50,
     offset: int = 0,
 ):
     """
-    List alerts, optionally filtered by severity and event type.
-    For hospital users, returns alerts relevant to their coverage area.
+    List alerts, optionally filtered by severity, event type, source, department.
+    Department admins automatically see alerts for their department.
+    Returns true total count and aggregate stats for the UI header.
     """
-    hospital_id = current_user.hospital_id if current_user.role in (
-        UserRole.HOSPITAL_ADMIN, UserRole.SUPER_ADMIN
-    ) else None
+    # Auto-filter by department for non-super-admin users
+    dept_filter = routed_department
+    if current_user.role != UserRole.SUPER_ADMIN and dept_filter is None:
+        dept_filter = current_user.department_type
 
     alerts = await alert_service.get_alerts(
         db,
         severity=severity,
         event_type=event_type,
+        source=source,
+        routed_department=dept_filter,
         active_only=active_only,
         limit=limit,
         offset=offset,
     )
 
-    await log_audit(
-        action="read",
-        resource="alert",
-        user_id=current_user.id,
-        details=f"Listed alerts (severity={severity}, type={event_type}, active={active_only})",
-        request=request,
-        db=db,
+    total = await alert_service.count_alerts(
+        db,
+        severity=severity,
+        event_type=event_type,
+        source=source,
+        routed_department=dept_filter,
+        active_only=active_only,
     )
+
+    stats_data = await alert_service.get_alert_stats(db, active_only=active_only)
 
     return AlertListResponse(
         alerts=[AlertResponse.model_validate(a) for a in alerts],
-        total=len(alerts),
+        total=total,
+        stats=AlertStatsResponse(**stats_data),
     )
 
 
@@ -161,25 +180,42 @@ async def list_alerts_prioritized(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    severity: Optional[AlertSeverity] = None,
+    event_type: Optional[EventType] = None,
+    source: Optional[str] = None,
     active_only: bool = True,
     limit: int = 50,
     offset: int = 0,
 ):
     """
     List alerts sorted by AI-computed priority score (highest first).
-    Priority factors include: patient vulnerability, alert density, Telegram intel,
-    and AI confidence. Returns priority_score in each alert's metadata.
+    Supports severity, event_type, and source filters.
+    Returns true total count and aggregate stats.
     """
     alerts = await alert_service.get_alerts_prioritized(
         db,
+        severity=severity,
+        event_type=event_type,
+        source=source,
         active_only=active_only,
         limit=limit,
         offset=offset,
     )
 
+    total = await alert_service.count_alerts(
+        db,
+        severity=severity,
+        event_type=event_type,
+        source=source,
+        active_only=active_only,
+    )
+
+    stats_data = await alert_service.get_alert_stats(db, active_only=active_only)
+
     return {
         "alerts": alerts,
-        "total": len(alerts),
+        "total": total,
+        "stats": stats_data,
         "sort": "priority_score_desc",
     }
 

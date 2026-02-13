@@ -28,6 +28,13 @@ class Gender(str, enum.Enum):
     OTHER = "other"
 
 
+class RiskLevel(str, enum.Enum):
+    LOW = "low"
+    MODERATE = "moderate"
+    HIGH = "high"
+    CRITICAL = "critical"
+
+
 class Patient(Base):
     __tablename__ = "patients"
 
@@ -71,6 +78,9 @@ class Patient(Base):
     false_alarm_count = Column(Integer, default=0)
     total_sos_count = Column(Integer, default=0)
     trust_score = Column(Float, default=1.0)  # 0.0–1.0 (1.0 = fully trusted)
+    risk_score = Column(Float, default=0.0)   # 0–100 persistent AI risk score
+    risk_level = Column(Enum(RiskLevel), default=RiskLevel.LOW)
+    risk_updated_at = Column(DateTime, nullable=True)
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

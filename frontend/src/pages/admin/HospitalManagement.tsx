@@ -6,6 +6,7 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 interface Hospital {
   id: string;
   name: string;
+  department_type: string;
   status: string;
   latitude: number;
   longitude: number;
@@ -16,10 +17,16 @@ interface Hospital {
   coverage_radius_km: number;
   phone: string;
   supply_levels: Record<string, number>;
+  patrol_units: number;
+  available_units: number;
+  rescue_teams: number;
+  available_teams: number;
+  shelter_capacity: number;
 }
 
 interface HospitalFormData {
   name: string;
+  department_type: string;
   latitude: string;
   longitude: string;
   bed_capacity: string;
@@ -31,10 +38,16 @@ interface HospitalFormData {
   supply_levels: string;
   admin_phone: string;
   admin_password: string;
+  patrol_units: string;
+  available_units: string;
+  rescue_teams: string;
+  available_teams: string;
+  shelter_capacity: string;
 }
 
 const emptyForm: HospitalFormData = {
   name: "",
+  department_type: "hospital",
   latitude: "",
   longitude: "",
   bed_capacity: "",
@@ -46,6 +59,11 @@ const emptyForm: HospitalFormData = {
   supply_levels: "",
   admin_phone: "",
   admin_password: "",
+  patrol_units: "0",
+  available_units: "0",
+  rescue_teams: "0",
+  available_teams: "0",
+  shelter_capacity: "0",
 };
 
 function getAuthHeaders(): Record<string, string> {
@@ -63,11 +81,24 @@ const statusColors: Record<string, string> = {
   destroyed: "bg-gray-100 text-gray-800",
 };
 
+const deptColors: Record<string, string> = {
+  hospital: "bg-blue-50 text-blue-700",
+  police: "bg-indigo-50 text-indigo-700",
+  civil_defense: "bg-orange-50 text-orange-700",
+};
+
+const deptLabels: Record<string, string> = {
+  hospital: "Hospital",
+  police: "Police",
+  civil_defense: "Civil Defense",
+};
+
 const HospitalManagement: React.FC = () => {
   const { t } = useTranslation();
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deptFilter, setDeptFilter] = useState("");
   const [notification, setNotification] = useState<{
     type: "success" | "error";
     message: string;
@@ -95,11 +126,14 @@ const HospitalManagement: React.FC = () => {
   const fetchHospitals = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/api/v1/hospitals`, {
+      const params = new URLSearchParams();
+      if (deptFilter) params.set("department_type", deptFilter);
+      const qs = params.toString() ? `?${params.toString()}` : "";
+      const res = await fetch(`${API_URL}/api/v1/hospitals${qs}`, {
         headers: getAuthHeaders(),
       });
 
-      if (!res.ok) throw new Error(`Failed to fetch hospitals: ${res.status}`);
+      if (!res.ok) throw new Error(`Failed to fetch facilities: ${res.status}`);
 
       const data = await res.json();
       setHospitals(data.hospitals ?? []);
@@ -108,7 +142,7 @@ const HospitalManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, deptFilter]);
 
   useEffect(() => {
     fetchHospitals();
@@ -122,12 +156,14 @@ const HospitalManagement: React.FC = () => {
       errors.latitude = t("admin.validation.invalidNumber");
     if (!formData.longitude.trim() || isNaN(Number(formData.longitude)))
       errors.longitude = t("admin.validation.invalidNumber");
-    if (!formData.bed_capacity.trim() || isNaN(Number(formData.bed_capacity)))
-      errors.bed_capacity = t("admin.validation.invalidNumber");
-    if (!formData.icu_beds.trim() || isNaN(Number(formData.icu_beds)))
-      errors.icu_beds = t("admin.validation.invalidNumber");
-    if (!formData.available_beds.trim() || isNaN(Number(formData.available_beds)))
-      errors.available_beds = t("admin.validation.invalidNumber");
+    if (formData.department_type === "hospital") {
+      if (!formData.bed_capacity.trim() || isNaN(Number(formData.bed_capacity)))
+        errors.bed_capacity = t("admin.validation.invalidNumber");
+      if (!formData.icu_beds.trim() || isNaN(Number(formData.icu_beds)))
+        errors.icu_beds = t("admin.validation.invalidNumber");
+      if (!formData.available_beds.trim() || isNaN(Number(formData.available_beds)))
+        errors.available_beds = t("admin.validation.invalidNumber");
+    }
 
     // Only require admin fields for new hospitals
     if (!editingHospital) {
@@ -152,6 +188,7 @@ const HospitalManagement: React.FC = () => {
     setEditingHospital(hospital);
     setFormData({
       name: hospital.name,
+      department_type: hospital.department_type ?? "hospital",
       latitude: String(hospital.latitude),
       longitude: String(hospital.longitude),
       bed_capacity: String(hospital.bed_capacity),
@@ -165,6 +202,11 @@ const HospitalManagement: React.FC = () => {
         : "",
       admin_phone: "",
       admin_password: "",
+      patrol_units: String(hospital.patrol_units ?? 0),
+      available_units: String(hospital.available_units ?? 0),
+      rescue_teams: String(hospital.rescue_teams ?? 0),
+      available_teams: String(hospital.available_teams ?? 0),
+      shelter_capacity: String(hospital.shelter_capacity ?? 0),
     });
     setFormErrors({});
     setModalOpen(true);
@@ -178,11 +220,12 @@ const HospitalManagement: React.FC = () => {
     try {
       const payload: Record<string, unknown> = {
         name: formData.name.trim(),
+        department_type: formData.department_type || "hospital",
         latitude: parseFloat(formData.latitude),
         longitude: parseFloat(formData.longitude),
-        bed_capacity: parseInt(formData.bed_capacity, 10),
-        icu_beds: parseInt(formData.icu_beds, 10),
-        available_beds: parseInt(formData.available_beds, 10),
+        bed_capacity: parseInt(formData.bed_capacity || "0", 10),
+        icu_beds: parseInt(formData.icu_beds || "0", 10),
+        available_beds: parseInt(formData.available_beds || "0", 10),
         specialties: formData.specialties
           ? formData.specialties.split(",").map((s) => s.trim()).filter(Boolean)
           : [],
@@ -190,6 +233,11 @@ const HospitalManagement: React.FC = () => {
           ? parseFloat(formData.coverage_radius_km)
           : 10,
         phone: formData.phone.trim(),
+        patrol_units: parseInt(formData.patrol_units || "0", 10),
+        available_units: parseInt(formData.available_units || "0", 10),
+        rescue_teams: parseInt(formData.rescue_teams || "0", 10),
+        available_teams: parseInt(formData.available_teams || "0", 10),
+        shelter_capacity: parseInt(formData.shelter_capacity || "0", 10),
       };
 
       if (formData.supply_levels.trim()) {
@@ -333,10 +381,10 @@ const HospitalManagement: React.FC = () => {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            {t("admin.hospitals.title")}
+            Facility Management
           </h1>
           <p className="mt-1 text-sm text-gray-500">
-            {t("admin.hospitals.subtitle")}
+            Manage hospitals, police stations, and civil defense centers
           </p>
         </div>
         <button
@@ -346,8 +394,25 @@ const HospitalManagement: React.FC = () => {
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          {t("admin.hospitals.create")}
+          Add Facility
         </button>
+      </div>
+
+      {/* Department filter */}
+      <div className="flex items-center gap-2">
+        {["", "hospital", "police", "civil_defense"].map((d) => (
+          <button
+            key={d}
+            onClick={() => setDeptFilter(d)}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+              deptFilter === d
+                ? "bg-purple-600 text-white"
+                : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+            }`}
+          >
+            {d === "" ? "All" : deptLabels[d] ?? d}
+          </button>
+        ))}
       </div>
 
       {/* Table */}
@@ -360,10 +425,13 @@ const HospitalManagement: React.FC = () => {
                   {t("admin.hospitals.name")}
                 </th>
                 <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wider text-gray-500">
+                  Type
+                </th>
+                <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wider text-gray-500">
                   {t("admin.hospitals.status")}
                 </th>
                 <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wider text-gray-500">
-                  {t("admin.hospitals.beds")}
+                  Capacity
                 </th>
                 <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wider text-gray-500">
                   {t("admin.hospitals.icu")}
@@ -383,7 +451,7 @@ const HospitalManagement: React.FC = () => {
               {hospitals.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={8}
                     className="px-4 py-8 text-center text-sm text-gray-400"
                   >
                     {t("admin.hospitals.noHospitals")}
@@ -399,6 +467,11 @@ const HospitalManagement: React.FC = () => {
                       {hospital.name}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${deptColors[hospital.department_type] ?? "bg-gray-100 text-gray-700"}`}>
+                        {deptLabels[hospital.department_type] ?? hospital.department_type ?? "Hospital"}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-sm">
                       <span
                         className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
                           statusColors[hospital.status] ?? "bg-gray-100 text-gray-800"
@@ -408,13 +481,17 @@ const HospitalManagement: React.FC = () => {
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                      {hospital.bed_capacity}
+                      {hospital.department_type === "police"
+                        ? `${hospital.available_units ?? 0}/${hospital.patrol_units ?? 0} units`
+                        : hospital.department_type === "civil_defense"
+                        ? `${hospital.available_teams ?? 0}/${hospital.rescue_teams ?? 0} teams`
+                        : `${hospital.available_beds}/${hospital.bed_capacity} beds`}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                      {hospital.icu_beds}
+                      {hospital.department_type === "hospital" ? hospital.icu_beds : hospital.department_type === "civil_defense" ? `${hospital.shelter_capacity} shelter` : "\u2014"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                      {hospital.available_beds}
+                      {hospital.department_type === "hospital" ? hospital.available_beds : "\u2014"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
                       {hospital.phone || "—"}
@@ -508,8 +585,8 @@ const HospitalManagement: React.FC = () => {
             {/* Modal body */}
             <form onSubmit={handleSubmit} className="p-6">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {/* Name - full width */}
-                <div className="sm:col-span-2">
+                {/* Name */}
+                <div>
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     {t("admin.hospitals.name")} *
                   </label>
@@ -525,6 +602,22 @@ const HospitalManagement: React.FC = () => {
                   {formErrors.name && (
                     <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>
                   )}
+                </div>
+
+                {/* Department Type */}
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">
+                    Department Type *
+                  </label>
+                  <select
+                    value={formData.department_type}
+                    onChange={(e) => updateField("department_type", e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="hospital">Hospital</option>
+                    <option value="police">Police Station</option>
+                    <option value="civil_defense">Civil Defense Center</option>
+                  </select>
                 </div>
 
                 {/* Latitude */}
@@ -565,62 +658,134 @@ const HospitalManagement: React.FC = () => {
                   )}
                 </div>
 
-                {/* Bed Capacity */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    {t("admin.hospitals.bedCapacity")} *
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.bed_capacity}
-                    onChange={(e) => updateField("bed_capacity", e.target.value)}
-                    className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                      formErrors.bed_capacity ? "border-red-300" : "border-gray-300"
-                    }`}
-                    min="0"
-                  />
-                  {formErrors.bed_capacity && (
-                    <p className="mt-1 text-xs text-red-600">{formErrors.bed_capacity}</p>
-                  )}
-                </div>
+                {/* Hospital-specific: Bed Capacity, ICU Beds, Available Beds */}
+                {formData.department_type === "hospital" && (
+                  <>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">
+                        {t("admin.hospitals.bedCapacity")} *
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.bed_capacity}
+                        onChange={(e) => updateField("bed_capacity", e.target.value)}
+                        className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                          formErrors.bed_capacity ? "border-red-300" : "border-gray-300"
+                        }`}
+                        min="0"
+                      />
+                      {formErrors.bed_capacity && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.bed_capacity}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">
+                        {t("admin.hospitals.icuBeds")} *
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.icu_beds}
+                        onChange={(e) => updateField("icu_beds", e.target.value)}
+                        className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                          formErrors.icu_beds ? "border-red-300" : "border-gray-300"
+                        }`}
+                        min="0"
+                      />
+                      {formErrors.icu_beds && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.icu_beds}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">
+                        {t("admin.hospitals.availableBeds")} *
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.available_beds}
+                        onChange={(e) => updateField("available_beds", e.target.value)}
+                        className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
+                          formErrors.available_beds ? "border-red-300" : "border-gray-300"
+                        }`}
+                        min="0"
+                      />
+                      {formErrors.available_beds && (
+                        <p className="mt-1 text-xs text-red-600">{formErrors.available_beds}</p>
+                      )}
+                    </div>
+                  </>
+                )}
 
-                {/* ICU Beds */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    {t("admin.hospitals.icuBeds")} *
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.icu_beds}
-                    onChange={(e) => updateField("icu_beds", e.target.value)}
-                    className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                      formErrors.icu_beds ? "border-red-300" : "border-gray-300"
-                    }`}
-                    min="0"
-                  />
-                  {formErrors.icu_beds && (
-                    <p className="mt-1 text-xs text-red-600">{formErrors.icu_beds}</p>
-                  )}
-                </div>
+                {/* Police-specific: Patrol Units, Available Units */}
+                {formData.department_type === "police" && (
+                  <>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">
+                        Total Patrol Units *
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.patrol_units}
+                        onChange={(e) => updateField("patrol_units", e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        min="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">
+                        Available Units *
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.available_units}
+                        onChange={(e) => updateField("available_units", e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        min="0"
+                      />
+                    </div>
+                  </>
+                )}
 
-                {/* Available Beds */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    {t("admin.hospitals.availableBeds")} *
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.available_beds}
-                    onChange={(e) => updateField("available_beds", e.target.value)}
-                    className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                      formErrors.available_beds ? "border-red-300" : "border-gray-300"
-                    }`}
-                    min="0"
-                  />
-                  {formErrors.available_beds && (
-                    <p className="mt-1 text-xs text-red-600">{formErrors.available_beds}</p>
-                  )}
-                </div>
+                {/* Civil Defense-specific: Rescue Teams, Available Teams, Shelter Capacity */}
+                {formData.department_type === "civil_defense" && (
+                  <>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">
+                        Total Rescue Teams *
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.rescue_teams}
+                        onChange={(e) => updateField("rescue_teams", e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        min="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">
+                        Available Teams *
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.available_teams}
+                        onChange={(e) => updateField("available_teams", e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        min="0"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">
+                        Shelter Capacity
+                      </label>
+                      <input
+                        type="number"
+                        value={formData.shelter_capacity}
+                        onChange={(e) => updateField("shelter_capacity", e.target.value)}
+                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        min="0"
+                      />
+                    </div>
+                  </>
+                )}
 
                 {/* Coverage Radius */}
                 <div>

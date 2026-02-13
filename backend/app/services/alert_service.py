@@ -85,6 +85,8 @@ def _alert_to_dict(alert: Alert) -> dict[str, Any]:
         "affected_patients_count": alert.affected_patients_count,
         "created_at": alert.created_at.isoformat() if alert.created_at else None,
         "expires_at": alert.expires_at.isoformat() if alert.expires_at else None,
+        "routed_department": getattr(alert, "routed_department", None),
+        "target_facility_id": str(alert.target_facility_id) if getattr(alert, "target_facility_id", None) else None,
     }
 
 
@@ -108,6 +110,8 @@ async def create_alert(
     expires_hours: int | None = 24,
     broadcast: bool = True,
     notify_patients: bool = True,
+    routed_department: str | None = None,
+    target_facility_id: str | None = None,
 ) -> dict[str, Any]:
     """Create an alert, compute affected patients, and broadcast.
 
@@ -137,6 +141,8 @@ async def create_alert(
         metadata_=metadata or {},
         affected_patients_count=0,
         expires_at=datetime.utcnow() + timedelta(hours=expires_hours) if expires_hours else None,
+        routed_department=routed_department,
+        target_facility_id=target_facility_id,
     )
     db.add(alert)
     await db.flush()
@@ -201,12 +207,116 @@ async def get_alert(db: AsyncSession, alert_id: uuid.UUID) -> dict[str, Any] | N
     return _alert_to_dict(alert) if alert else None
 
 
+def _build_alert_filters(
+    *,
+    severity: str | AlertSeverity | None = None,
+    event_type: str | EventType | None = None,
+    active_only: bool = True,
+    source: str | None = None,
+    routed_department: str | None = None,
+):
+    """Build reusable WHERE conditions for alert queries."""
+    conditions = []
+    if active_only:
+        conditions.append(
+            (Alert.expires_at.is_(None)) | (Alert.expires_at > datetime.utcnow())
+        )
+    if severity is not None:
+        if isinstance(severity, str):
+            severity = AlertSeverity(severity)
+        conditions.append(Alert.severity == severity)
+    if event_type is not None:
+        if isinstance(event_type, str):
+            event_type = EventType(event_type)
+        conditions.append(Alert.event_type == event_type)
+    if source is not None:
+        conditions.append(Alert.source == source)
+    if routed_department is not None:
+        conditions.append(
+            (Alert.routed_department == routed_department)
+            | (Alert.routed_department.is_(None))
+        )
+    return conditions
+
+
+async def count_alerts(
+    db: AsyncSession,
+    *,
+    severity: str | AlertSeverity | None = None,
+    event_type: str | EventType | None = None,
+    active_only: bool = True,
+    source: str | None = None,
+    routed_department: str | None = None,
+) -> int:
+    """Return the total count of alerts matching the given filters."""
+    conditions = _build_alert_filters(
+        severity=severity, event_type=event_type,
+        active_only=active_only, source=source,
+        routed_department=routed_department,
+    )
+    query = select(func.count(Alert.id))
+    for c in conditions:
+        query = query.where(c)
+    result = await db.execute(query)
+    return result.scalar() or 0
+
+
+async def get_alert_stats(
+    db: AsyncSession,
+    *,
+    active_only: bool = True,
+) -> dict[str, Any]:
+    """Return aggregate stats for the alert list header."""
+    base_conditions = _build_alert_filters(active_only=active_only)
+
+    # Total count
+    q_total = select(func.count(Alert.id))
+    for c in base_conditions:
+        q_total = q_total.where(c)
+
+    # Count by severity
+    q_by_severity = (
+        select(Alert.severity, func.count(Alert.id))
+        .group_by(Alert.severity)
+    )
+    for c in base_conditions:
+        q_by_severity = q_by_severity.where(c)
+
+    # SOS count
+    q_sos = select(func.count(Alert.id)).where(Alert.source == "sos")
+    for c in base_conditions:
+        q_sos = q_sos.where(c)
+
+    # Unacknowledged count
+    q_unack = select(func.count(Alert.id)).where(Alert.acknowledged.is_(None))
+    for c in base_conditions:
+        q_unack = q_unack.where(c)
+
+    total = (await db.execute(q_total)).scalar() or 0
+    sev_rows = (await db.execute(q_by_severity)).all()
+    sos_count = (await db.execute(q_sos)).scalar() or 0
+    unack_count = (await db.execute(q_unack)).scalar() or 0
+
+    severity_counts = {}
+    for sev, cnt in sev_rows:
+        severity_counts[sev.value if hasattr(sev, "value") else str(sev)] = cnt
+
+    return {
+        "total": total,
+        "sos_count": sos_count,
+        "unacknowledged": unack_count,
+        "by_severity": severity_counts,
+    }
+
+
 async def get_alerts(
     db: AsyncSession,
     *,
     severity: str | AlertSeverity | None = None,
     event_type: str | EventType | None = None,
     active_only: bool = True,
+    source: str | None = None,
+    routed_department: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
@@ -214,22 +324,14 @@ async def get_alerts(
 
     *active_only* filters out alerts whose ``expires_at`` is in the past.
     """
+    conditions = _build_alert_filters(
+        severity=severity, event_type=event_type,
+        active_only=active_only, source=source,
+        routed_department=routed_department,
+    )
     query = select(Alert).order_by(Alert.created_at.desc()).limit(limit).offset(offset)
-
-    if active_only:
-        query = query.where(
-            (Alert.expires_at.is_(None)) | (Alert.expires_at > datetime.utcnow())
-        )
-
-    if severity is not None:
-        if isinstance(severity, str):
-            severity = AlertSeverity(severity)
-        query = query.where(Alert.severity == severity)
-
-    if event_type is not None:
-        if isinstance(event_type, str):
-            event_type = EventType(event_type)
-        query = query.where(Alert.event_type == event_type)
+    for c in conditions:
+        query = query.where(c)
 
     result = await db.execute(query)
     return [_alert_to_dict(a) for a in result.scalars().all()]
@@ -299,6 +401,9 @@ async def acknowledge_alert(
 async def get_alerts_prioritized(
     db: AsyncSession,
     *,
+    severity: str | AlertSeverity | None = None,
+    event_type: str | EventType | None = None,
+    source: str | None = None,
     active_only: bool = True,
     limit: int = 100,
     offset: int = 0,
@@ -308,7 +413,8 @@ async def get_alerts_prioritized(
     Alerts without a priority_score default to a score derived from severity.
     """
     alerts = await get_alerts(
-        db, active_only=active_only, limit=limit, offset=offset,
+        db, severity=severity, event_type=event_type, source=source,
+        active_only=active_only, limit=limit, offset=offset,
     )
 
     severity_scores = {"critical": 80, "high": 60, "medium": 40, "low": 20}

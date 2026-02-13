@@ -24,6 +24,7 @@ import PatientDetail from "./pages/hospital/PatientDetail";
 import LiveMap from "./pages/hospital/LiveMap";
 import StatusUpdate from "./pages/hospital/StatusUpdate";
 import AidRequests from "./pages/hospital/AidRequests";
+import CaseTransfers from "./pages/hospital/CaseTransfers";
 
 // Pages - Patient
 import SOSPage from "./pages/patient/SOS";
@@ -55,9 +56,9 @@ function App() {
           </Route>
         </Route>
 
-        {/* Hospital dashboard routes - require hospital_admin or super_admin role */}
+        {/* Department dashboard routes - all department admins + super_admin */}
         <Route
-          element={<AuthGuard roles={["hospital_admin", "super_admin"]} />}
+          element={<AuthGuard roles={["hospital_admin", "police_admin", "civil_defense_admin", "super_admin"]} />}
         >
           <Route element={<DashboardLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
@@ -70,6 +71,7 @@ function App() {
             />
             <Route path="/dashboard/map" element={<LiveMap />} />
             <Route path="/dashboard/aid-requests" element={<AidRequests />} />
+            <Route path="/dashboard/transfers" element={<CaseTransfers />} />
             <Route path="/dashboard/status" element={<StatusUpdate />} />
           </Route>
         </Route>

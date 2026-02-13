@@ -18,11 +18,16 @@ async def disconnect(sid):
 
 @sio.event
 async def join_hospital(sid, data):
-    """Hospital joins its room for targeted alerts."""
+    """Hospital/facility joins its room for targeted alerts."""
     hospital_id = data.get("hospital_id")
     if hospital_id:
         await sio.enter_room(sid, f"hospital_{hospital_id}")
         await sio.emit("joined", {"room": f"hospital_{hospital_id}"}, to=sid)
+    # Also join department-specific room
+    department = data.get("department_type") or data.get("facility_type")
+    if department:
+        await sio.enter_room(sid, f"dept_{department}")
+        await sio.emit("joined", {"room": f"dept_{department}"}, to=sid)
 
 
 @sio.event
@@ -147,6 +152,18 @@ async def broadcast_patient_location(location_data: dict):
             "created_at": datetime.now(timezone.utc).isoformat(),
             "expires_at": None,
         }, room="livemap")
+
+
+async def broadcast_transfer(transfer_data: dict):
+    """Broadcast transfer notifications to source and target facilities/departments."""
+    from_fid = transfer_data.get("from_facility_id")
+    to_fid = transfer_data.get("to_facility_id")
+    if from_fid:
+        await sio.emit("transfer_outgoing", transfer_data, room=f"hospital_{from_fid}")
+    if to_fid:
+        await sio.emit("transfer_incoming", transfer_data, room=f"hospital_{to_fid}")
+    # Also broadcast to alerts room for super admin
+    await sio.emit("new_transfer", transfer_data, room="alerts")
 
 
 async def broadcast_sos_resolved(resolution_data: dict):

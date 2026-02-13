@@ -515,6 +515,8 @@ def _sos_to_dict(sos: SosRequest) -> dict[str, Any]:
         "details": sos.details,
         "created_at": sos.created_at,
         "resolved_at": sos.resolved_at,
+        "routed_department": getattr(sos, "routed_department", None),
+        "facility_notified_id": getattr(sos, "facility_notified_id", None),
     }
 
 
@@ -580,10 +582,15 @@ async def list_sos_requests(
     hospital_id: uuid.UUID | None = None,
     status_filter: SOSStatus | None = None,
     severity_min: int | None = None,
+    routed_department: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Paginated SOS request list. Returns (items, total_count)."""
+    """Paginated SOS request list. Returns (items, total_count).
+
+    When routed_department is specified, filters to SOS routed to that department
+    OR SOS that haven't been routed yet (routed_department IS NULL).
+    """
     query = select(SosRequest).order_by(SosRequest.created_at.desc())
 
     if status_filter is not None:
@@ -594,6 +601,11 @@ async def list_sos_requests(
         query = query.where(
             (SosRequest.hospital_notified_id == hospital_id)
             | (SosRequest.hospital_notified_id.is_(None))
+        )
+    if routed_department is not None:
+        query = query.where(
+            (SosRequest.routed_department == routed_department)
+            | (SosRequest.routed_department.is_(None))
         )
 
     # Count before pagination
