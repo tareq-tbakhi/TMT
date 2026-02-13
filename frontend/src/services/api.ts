@@ -194,7 +194,9 @@ export interface Hospital {
 }
 
 export function getHospitals(): Promise<Hospital[]> {
-  return request<Hospital[]>("/hospitals");
+  return request<{ hospitals: Hospital[]; total: number }>("/hospitals").then(
+    (res) => res.hospitals
+  );
 }
 
 export function updateHospitalStatus(
