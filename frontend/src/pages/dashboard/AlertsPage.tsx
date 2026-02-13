@@ -106,7 +106,7 @@ export default function AlertsPage() {
                         e.stopPropagation();
                         acknowledgeAlert(alert.id);
                       }}
-                      className="ml-4 px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors shrink-0"
+                      className="ms-4 px-3 py-1 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors shrink-0"
                     >
                       {t("alerts.acknowledge")}
                     </button>

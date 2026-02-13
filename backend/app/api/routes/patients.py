@@ -2,6 +2,7 @@
 Patient API routes.
 
 Endpoints:
+    GET  /patients         — List patients with optional search/filter (doctor / hospital_admin)
     POST /patients         — Register a new patient (public)
     POST /patients/login   — Patient login (returns JWT)
     GET  /patients/{id}    — Get patient by ID (doctor / hospital_admin)
@@ -12,7 +13,7 @@ from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -95,6 +96,30 @@ class LoginResponse(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 
+@router.get("/patients", response_model=list[PatientResponse])
+async def list_patients(
+    request: Request,
+    search: Optional[str] = Query(None, description="Search by name or phone"),
+    mobility: Optional[MobilityStatus] = Query(None, description="Filter by mobility status"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
+):
+    """List patients with optional search and mobility filter.
+
+    Requires hospital_admin role.
+    """
+    patients = await patient_service.list_patients(
+        db,
+        search=search,
+        mobility=mobility,
+        limit=limit,
+        offset=offset,
+    )
+    return patients
+
+
 @router.post("/patients", response_model=PatientResponse, status_code=status.HTTP_201_CREATED)
 async def register_patient(
     payload: PatientRegisterRequest,
@@ -131,7 +156,7 @@ async def register_patient(
         email=payload.email,
         hashed_password=hash_password(payload.password),
         role=UserRole.PATIENT,
-        patient_id=patient.id,
+        patient_id=patient["id"],
     )
     db.add(user)
     await db.flush()
@@ -139,7 +164,7 @@ async def register_patient(
     await log_audit(
         action="create",
         resource="patient",
-        resource_id=str(patient.id),
+        resource_id=str(patient["id"]),
         user_id=user.id,
         details="Patient registered",
         request=request,
@@ -193,9 +218,9 @@ async def get_patient(
     patient_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.DOCTOR, UserRole.HOSPITAL_ADMIN)),
+    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
 ):
-    """Get patient details. Requires doctor or hospital_admin role."""
+    """Get patient details. Requires hospital_admin role."""
     patient = await patient_service.get_patient(db, patient_id)
     if patient is None:
         raise HTTPException(
@@ -232,7 +257,7 @@ async def update_patient(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only update your own profile",
             )
-    elif current_user.role not in (UserRole.DOCTOR, UserRole.HOSPITAL_ADMIN):
+    elif current_user.role not in (UserRole.HOSPITAL_ADMIN, UserRole.SUPER_ADMIN):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions",

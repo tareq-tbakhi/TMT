@@ -1,3 +1,5 @@
+from typing import Optional
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from functools import lru_cache
 
@@ -32,13 +34,20 @@ class Settings(BaseSettings):
     TWILIO_AUTH_TOKEN: str = ""
     TWILIO_PHONE_NUMBER: str = ""
 
-    # Claude API
-    CLAUDE_API_KEY: str = ""
+    # GLM-5 (Zhipu AI)
+    GLM_API_KEY: str = ""
 
     # Telegram
-    TELEGRAM_API_ID: int = 0
+    TELEGRAM_API_ID: Optional[int] = None
     TELEGRAM_API_HASH: str = ""
     TELEGRAM_PHONE: str = ""
+
+    @field_validator("TELEGRAM_API_ID", mode="before")
+    @classmethod
+    def parse_telegram_api_id(cls, v):
+        if v is None or v == "" or v == 0:
+            return None
+        return int(v)
 
     # CORS
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]

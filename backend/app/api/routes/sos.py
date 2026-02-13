@@ -140,7 +140,7 @@ async def send_sos(
 async def list_sos_requests(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN, UserRole.DOCTOR)),
+    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
     status_filter: Optional[SOSStatus] = None,
     severity_min: Optional[int] = None,
     limit: int = 50,
@@ -181,7 +181,7 @@ async def update_sos_status(
     payload: SOSStatusUpdateRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN, UserRole.DOCTOR)),
+    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
 ):
     """Update the status of an SOS request (e.g., acknowledge, dispatch, resolve)."""
     update_data: dict = {"status": payload.status}

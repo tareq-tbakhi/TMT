@@ -13,6 +13,7 @@ interface UseAuthReturn {
   user: AuthUser | null;
   isAuthenticated: boolean;
   isHospitalStaff: boolean;
+  isSuperAdmin: boolean;
   isPatient: boolean;
   login: (credentials: LoginRequest) => Promise<void>;
   logout: () => void;
@@ -30,25 +31,16 @@ export function useAuth(): UseAuthReturn {
       const authUser: AuthUser = {
         id: response.user_id,
         role: response.role as AuthUser["role"],
+        hospitalId: response.hospital_id,
+        patientId: response.patient_id,
       };
-
-      // The JWT payload includes hospital_id and patient_id
-      // We parse them from the JWT token
-      try {
-        const payload = JSON.parse(atob(response.access_token.split(".")[1]));
-        if (payload.hospital_id) authUser.hospitalId = payload.hospital_id;
-        if (payload.patient_id) authUser.patientId = payload.patient_id;
-      } catch {
-        // Token parse failed, continue with basic user info
-      }
 
       storeLogin(response.access_token, authUser);
 
       // Redirect based on role
-      if (
-        authUser.role === "hospital_admin" ||
-        authUser.role === "doctor"
-      ) {
+      if (authUser.role === "super_admin") {
+        navigate("/admin");
+      } else if (authUser.role === "hospital_admin") {
         navigate("/dashboard");
       } else {
         navigate("/sos");
@@ -62,8 +54,8 @@ export function useAuth(): UseAuthReturn {
     navigate("/login");
   }, [storeLogout, navigate]);
 
-  const isHospitalStaff =
-    user?.role === "hospital_admin" || user?.role === "doctor";
+  const isHospitalStaff = user?.role === "hospital_admin";
+  const isSuperAdmin = user?.role === "super_admin";
   const isPatient = user?.role === "patient";
 
   return {
@@ -71,6 +63,7 @@ export function useAuth(): UseAuthReturn {
     user,
     isAuthenticated,
     isHospitalStaff,
+    isSuperAdmin,
     isPatient,
     login,
     logout,

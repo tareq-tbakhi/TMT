@@ -1,5 +1,5 @@
 """
-AI Agent — Core decision-making engine using Claude API.
+AI Agent — Core decision-making engine using GLM-5 API (Zhipu AI).
 Classifies messages, extracts crisis info, detects knowledge gaps,
 decides which Telegram channels to join.
 """
@@ -14,33 +14,35 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-CLAUDE_API_URL = "https://api.anthropic.com/v1/messages"
+GLM_API_URL = "https://api.z.ai/api/paas/v4/chat/completions"
+GLM_MODEL = "glm-5"
 
 
-async def _call_claude(system_prompt: str, user_message: str, max_tokens: int = 1024) -> str:
-    """Make a call to Claude API."""
-    if not settings.CLAUDE_API_KEY:
-        logger.warning("Claude API key not configured, using fallback")
+async def _call_glm(system_prompt: str, user_message: str, max_tokens: int = 1024) -> str:
+    """Make a call to GLM-5 API (OpenAI-compatible)."""
+    if not settings.GLM_API_KEY:
+        logger.warning("GLM API key not configured, using fallback")
         return "{}"
 
     async with httpx.AsyncClient(timeout=30) as client:
         response = await client.post(
-            CLAUDE_API_URL,
+            GLM_API_URL,
             headers={
-                "x-api-key": settings.CLAUDE_API_KEY,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
+                "Authorization": f"Bearer {settings.GLM_API_KEY}",
+                "Content-Type": "application/json",
             },
             json={
-                "model": "claude-sonnet-4-5-20250929",
+                "model": GLM_MODEL,
                 "max_tokens": max_tokens,
-                "system": system_prompt,
-                "messages": [{"role": "user", "content": user_message}],
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_message},
+                ],
             },
         )
         response.raise_for_status()
         data = response.json()
-        return data["content"][0]["text"]
+        return data["choices"][0]["message"]["content"]
 
 
 async def classify_message(text: str) -> dict:
@@ -56,7 +58,7 @@ Respond ONLY with valid JSON:
 {"is_crisis": true/false, "confidence": 0.0-1.0, "category": "crisis_type_or_none"}"""
 
     try:
-        result = await _call_claude(system, f"Message: {text}")
+        result = await _call_glm(system, f"Message: {text}")
         return json.loads(result)
     except Exception as e:
         logger.error(f"Classification failed: {e}")
@@ -97,7 +99,7 @@ Respond ONLY with valid JSON:
 }"""
 
     try:
-        result = await _call_claude(system, f"Message: {text}")
+        result = await _call_glm(system, f"Message: {text}")
         return json.loads(result)
     except Exception as e:
         logger.error(f"Extraction failed: {e}")
@@ -128,7 +130,7 @@ Respond ONLY with valid JSON array:
     message = f"Region: {region}\nExisting topics covered: {topics_str}\nWhat critical information are we missing?"
 
     try:
-        result = await _call_claude(system, message)
+        result = await _call_glm(system, message)
         return json.loads(result)
     except Exception as e:
         logger.error(f"Gap detection failed: {e}")
@@ -151,7 +153,7 @@ Respond ONLY with valid JSON:
     message = f"Channel: {json.dumps(channel_info)}\nRecent messages sample: {json.dumps(recent_messages[:5])}"
 
     try:
-        result = await _call_claude(system, message)
+        result = await _call_glm(system, message)
         return json.loads(result)
     except Exception as e:
         logger.error(f"Channel decision failed: {e}")

@@ -64,7 +64,7 @@ export function useWebSocket(): WebSocketHookReturn {
       setIsConnected(true);
 
       // Auto-join rooms based on role
-      if (user?.role === "hospital_admin" || user?.role === "doctor") {
+      if (user?.role === "hospital_admin" || user?.role === "super_admin") {
         socket.emit("join_alerts");
         socket.emit("join_map");
         if (user.hospitalId) {

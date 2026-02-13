@@ -82,7 +82,7 @@ async def create_alert(
     payload: AlertCreateRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN, UserRole.DOCTOR)),
+    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
 ):
     """Create a new alert. Typically called by system internals or hospital admins."""
     alert = await alert_service.create_alert(
@@ -129,7 +129,7 @@ async def list_alerts(
     For hospital users, returns alerts relevant to their coverage area.
     """
     hospital_id = current_user.hospital_id if current_user.role in (
-        UserRole.HOSPITAL_ADMIN, UserRole.DOCTOR
+        UserRole.HOSPITAL_ADMIN, UserRole.SUPER_ADMIN
     ) else None
 
     alerts = await alert_service.get_alerts(

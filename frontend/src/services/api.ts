@@ -90,23 +90,16 @@ export interface LoginResponse {
   token_type: string;
   role: string;
   user_id: string;
+  hospital_id?: string;
+  patient_id?: string;
 }
 
 export async function login(data: LoginRequest): Promise<LoginResponse> {
-  // Try patient login first, then hospital login
-  try {
-    return await request<LoginResponse>("/patients/login", {
-      method: "POST",
-      body: data,
-      noAuth: true,
-    });
-  } catch {
-    return request<LoginResponse>("/hospitals/login", {
-      method: "POST",
-      body: data,
-      noAuth: true,
-    });
-  }
+  return request<LoginResponse>("/auth/login", {
+    method: "POST",
+    body: data,
+    noAuth: true,
+  });
 }
 
 // ─── Patient endpoints ──────────────────────────────────────────
@@ -237,7 +230,7 @@ export interface Alert {
   expires_at: string | null;
 }
 
-export function getAlerts(params?: {
+export async function getAlerts(params?: {
   severity?: string;
   event_type?: string;
   limit?: number;
@@ -249,7 +242,8 @@ export function getAlerts(params?: {
   if (params?.limit) searchParams.set("limit", String(params.limit));
   if (params?.offset) searchParams.set("offset", String(params.offset));
   const qs = searchParams.toString();
-  return request<Alert[]>(`/alerts${qs ? `?${qs}` : ""}`);
+  const data = await request<{ alerts: Alert[]; total: number }>(`/alerts${qs ? `?${qs}` : ""}`);
+  return data.alerts;
 }
 
 // ─── SOS endpoints ──────────────────────────────────────────────

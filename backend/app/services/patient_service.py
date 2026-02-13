@@ -359,13 +359,27 @@ async def list_patients(
     db: AsyncSession,
     *,
     active_only: bool = True,
+    search: str | None = None,
+    mobility: MobilityStatus | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
-    """Paginated patient list, ordered by creation date descending."""
-    query = select(Patient).order_by(Patient.created_at.desc()).limit(limit).offset(offset)
+    """Paginated patient list, ordered by creation date descending.
+
+    Supports optional *search* (matched against name or phone) and
+    *mobility* filtering.
+    """
+    query = select(Patient).order_by(Patient.created_at.desc())
     if active_only:
         query = query.where(Patient.is_active.is_(True))
+    if search:
+        pattern = f"%{search}%"
+        query = query.where(
+            Patient.name.ilike(pattern) | Patient.phone.ilike(pattern)
+        )
+    if mobility is not None:
+        query = query.where(Patient.mobility == mobility)
+    query = query.limit(limit).offset(offset)
     result = await db.execute(query)
     return [_patient_to_dict(p) for p in result.scalars().all()]
 

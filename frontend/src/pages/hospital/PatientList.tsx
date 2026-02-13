@@ -15,7 +15,7 @@ interface PatientRow {
   mobility: string;
   living_situation: string;
   blood_type: string | null;
-  conditions?: string[];
+  emergency_contacts?: Record<string, unknown>[];
   is_active: boolean;
   created_at: string;
   updated_at: string;
@@ -24,10 +24,10 @@ interface PatientRow {
 type ViewMode = "table" | "card";
 
 const mobilityConfig: Record<string, { label: string; border: string; bg: string }> = {
-  ambulatory: { label: "Ambulatory", border: "border-green-300", bg: "bg-green-50" },
+  can_walk: { label: "Can Walk", border: "border-green-300", bg: "bg-green-50" },
   wheelchair: { label: "Wheelchair", border: "border-orange-400", bg: "bg-orange-50" },
   bedridden: { label: "Bedridden", border: "border-red-500", bg: "bg-red-50" },
-  crutches: { label: "Crutches", border: "border-yellow-400", bg: "bg-yellow-50" },
+  other: { label: "Other", border: "border-yellow-400", bg: "bg-yellow-50" },
 };
 
 const PatientList: React.FC = () => {
@@ -79,7 +79,7 @@ const PatientList: React.FC = () => {
   }, [fetchPatients]);
 
   const isVulnerable = (mobility: string) =>
-    mobility === "bedridden" || mobility === "wheelchair";
+    mobility === "bedridden" || mobility === "wheelchair" || mobility === "other";
 
   const getMobilityInfo = (mobility: string) =>
     mobilityConfig[mobility] ?? { label: mobility, border: "border-gray-200", bg: "" };
@@ -161,10 +161,10 @@ const PatientList: React.FC = () => {
           className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
         >
           <option value="">All Mobility</option>
-          <option value="ambulatory">Ambulatory</option>
+          <option value="can_walk">Can Walk</option>
           <option value="wheelchair">Wheelchair</option>
           <option value="bedridden">Bedridden</option>
-          <option value="crutches">Crutches</option>
+          <option value="other">Other</option>
         </select>
       </div>
 
@@ -198,7 +198,7 @@ const PatientList: React.FC = () => {
                   {t("patients.mobility")}
                 </th>
                 <th className="px-4 py-3 text-start text-xs font-semibold uppercase text-gray-500">
-                  Conditions
+                  Blood Type
                 </th>
                 <th className="px-4 py-3 text-start text-xs font-semibold uppercase text-gray-500">
                   Last Updated
@@ -257,7 +257,7 @@ const PatientList: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-gray-600">
-                        {patient.conditions?.join(", ") || "--"}
+                        {patient.blood_type || "--"}
                       </td>
                       <td className="px-4 py-3 text-gray-500">
                         {timeAgo(patient.updated_at)}
@@ -342,13 +342,13 @@ const PatientList: React.FC = () => {
                         {mobility.label}
                       </span>
                     </div>
-                    {patient.conditions && patient.conditions.length > 0 && (
+                    {patient.blood_type && (
                       <div className="flex items-start gap-2 text-gray-600">
                         <span className="text-xs font-medium text-gray-400 w-16">
-                          Cond.
+                          Blood
                         </span>
                         <span className="text-xs">
-                          {patient.conditions.join(", ")}
+                          {patient.blood_type}
                         </span>
                       </div>
                     )}

@@ -10,8 +10,8 @@ from app.db.postgres import Base
 
 class UserRole(str, enum.Enum):
     PATIENT = "patient"
-    DOCTOR = "doctor"
     HOSPITAL_ADMIN = "hospital_admin"
+    SUPER_ADMIN = "super_admin"
 
 
 class User(Base):

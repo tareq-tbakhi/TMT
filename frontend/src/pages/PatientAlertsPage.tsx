@@ -66,7 +66,7 @@ export default function PatientAlertsPage() {
                       {severity.label}
                     </span>
                     <span className="text-xs text-gray-500">{eventLabel}</span>
-                    <span className="ml-auto text-xs text-gray-400">
+                    <span className="ms-auto text-xs text-gray-400">
                       {timeAgo(alert.created_at)}
                     </span>
                   </div>

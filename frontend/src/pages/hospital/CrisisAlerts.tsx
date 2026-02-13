@@ -50,8 +50,8 @@ const CrisisAlerts: React.FC = () => {
         { headers }
       );
       if (res.ok) {
-        const data = (await res.json()) as Alert[];
-        setAlerts(data);
+        const data = (await res.json()) as { alerts: Alert[]; total: number };
+        setAlerts(data.alerts);
       } else {
         setError("Failed to load alerts");
       }

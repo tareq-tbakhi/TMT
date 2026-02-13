@@ -53,9 +53,9 @@ const Dashboard: React.FC = () => {
         }
 
         if (alertsRes.ok) {
-          const alertsData = (await alertsRes.json()) as Alert[];
-          setRecentAlerts(alertsData);
-          setAlerts(alertsData);
+          const wrapper = (await alertsRes.json()) as { alerts: Alert[]; total: number };
+          setRecentAlerts(wrapper.alerts);
+          setAlerts(wrapper.alerts);
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load data");

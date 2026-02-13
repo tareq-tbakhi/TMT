@@ -20,10 +20,16 @@ export default function AuthGuard({ roles }: AuthGuardProps) {
 
   if (roles && roles.length > 0 && user && !roles.includes(user.role)) {
     // User doesn't have the required role - redirect to appropriate page
+    if (user.role === "super_admin") {
+      return <Navigate to="/admin" replace />;
+    }
+    if (user.role === "hospital_admin") {
+      return <Navigate to="/dashboard" replace />;
+    }
     if (user.role === "patient") {
       return <Navigate to="/sos" replace />;
     }
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/login" replace />;
   }
 
   return <Outlet />;

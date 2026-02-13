@@ -70,7 +70,7 @@ export default function DashboardLayout() {
               </span>
               <span>{t(item.label)}</span>
               {item.icon === "bell" && unreadCount > 0 && (
-                <span className="ml-auto bg-red-500 text-white text-xs rounded-full px-2 py-0.5">
+                <span className="ms-auto bg-red-500 text-white text-xs rounded-full px-2 py-0.5">
                   {unreadCount}
                 </span>
               )}

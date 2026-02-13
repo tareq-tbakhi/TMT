@@ -169,7 +169,7 @@ async def login_hospital(
     result = await db.execute(
         select(User).where(
             User.phone == payload.phone,
-            User.role.in_([UserRole.HOSPITAL_ADMIN, UserRole.DOCTOR]),
+            User.role.in_([UserRole.HOSPITAL_ADMIN, UserRole.SUPER_ADMIN]),
         )
     )
     user = result.scalar_one_or_none()

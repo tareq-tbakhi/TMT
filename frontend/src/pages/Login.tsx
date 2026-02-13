@@ -1,11 +1,9 @@
 import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "../store/authStore";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
-
-type Role = "patient" | "hospital";
 
 const Login: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -14,7 +12,6 @@ const Login: React.FC = () => {
 
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<Role>("hospital");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -28,13 +25,8 @@ const Login: React.FC = () => {
     setError(null);
     setLoading(true);
 
-    const endpoint =
-      role === "patient"
-        ? "/api/v1/patients/login"
-        : "/api/v1/hospitals/login";
-
     try {
-      const res = await fetch(`${API_URL}${endpoint}`, {
+      const res = await fetch(`${API_URL}/api/v1/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ phone, password }),
@@ -49,16 +41,20 @@ const Login: React.FC = () => {
 
       const data = await res.json();
       const token = data.access_token as string;
+      const role = data.role as string;
       const userId = data.user_id as string;
 
       login(token, {
         id: userId,
-        role: role === "hospital" ? "hospital_admin" : "patient",
-        hospitalId: role === "hospital" ? userId : undefined,
-        patientId: role === "patient" ? userId : undefined,
+        role: role as "patient" | "hospital_admin" | "super_admin",
+        hospitalId: data.hospital_id ?? undefined,
+        patientId: data.patient_id ?? undefined,
       });
 
-      if (role === "hospital") {
+      // Redirect based on role from server response
+      if (role === "super_admin") {
+        navigate("/admin");
+      } else if (role === "hospital_admin") {
         navigate("/dashboard");
       } else {
         navigate("/sos");
@@ -89,32 +85,6 @@ const Login: React.FC = () => {
           <h2 className="mb-6 text-xl font-semibold text-gray-900">
             {t("auth.login")}
           </h2>
-
-          {/* Role Selector */}
-          <div className="mb-6 flex rounded-lg bg-gray-100 p-1">
-            <button
-              type="button"
-              onClick={() => setRole("hospital")}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-                role === "hospital"
-                  ? "bg-white text-blue-700 shadow-sm"
-                  : "text-gray-600 hover:text-gray-800"
-              }`}
-            >
-              Hospital Staff
-            </button>
-            <button
-              type="button"
-              onClick={() => setRole("patient")}
-              className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-                role === "patient"
-                  ? "bg-white text-blue-700 shadow-sm"
-                  : "text-gray-600 hover:text-gray-800"
-              }`}
-            >
-              Patient
-            </button>
-          </div>
 
           {error && (
             <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
@@ -172,8 +142,18 @@ const Login: React.FC = () => {
             </button>
           </form>
 
+          {/* Register link */}
+          <div className="mt-4 text-center">
+            <Link
+              to="/register"
+              className="text-sm text-blue-600 hover:text-blue-800"
+            >
+              {t("auth.register", "Create an account")}
+            </Link>
+          </div>
+
           {/* Language toggle */}
-          <div className="mt-6 text-center">
+          <div className="mt-4 text-center">
             <button
               onClick={toggleLanguage}
               className="text-sm text-gray-500 hover:text-gray-700"

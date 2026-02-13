@@ -6,7 +6,7 @@ import { create } from "zustand";
 
 export interface AuthUser {
   id: string;
-  role: "patient" | "doctor" | "hospital_admin";
+  role: "patient" | "hospital_admin" | "super_admin";
   hospitalId?: string;
   patientId?: string;
 }

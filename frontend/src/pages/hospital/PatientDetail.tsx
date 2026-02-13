@@ -162,18 +162,16 @@ const PatientDetail: React.FC = () => {
     : [31.5, 34.47];
 
   const mobilityLabel: Record<string, string> = {
-    ambulatory: "Ambulatory",
+    can_walk: "Can Walk",
     wheelchair: "Wheelchair",
     bedridden: "Bedridden",
-    crutches: "Crutches",
+    other: "Other",
   };
 
   const livingLabel: Record<string, string> = {
-    home: "Home",
-    shelter: "Shelter",
-    hospital: "Hospital",
-    displaced: "Displaced",
-    tent: "Tent",
+    alone: "Alone",
+    with_family: "With Family",
+    care_facility: "Care Facility",
   };
 
   return (

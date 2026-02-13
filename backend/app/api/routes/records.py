@@ -73,9 +73,14 @@ async def get_patient_records(
     patient_id: UUID,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.DOCTOR, UserRole.HOSPITAL_ADMIN)),
+    current_user: User = Depends(get_current_user),
 ):
-    """Get all medical records for a patient. Requires doctor or hospital_admin role."""
+    """Get medical records for a patient. Patients can view their own records."""
+    if current_user.role == UserRole.PATIENT:
+        if current_user.patient_id != patient_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Can only view your own records")
+    elif current_user.role not in (UserRole.HOSPITAL_ADMIN, UserRole.SUPER_ADMIN):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     # Verify patient exists
     patient = await patient_service.get_patient(db, patient_id)
     if patient is None:
@@ -112,9 +117,14 @@ async def create_medical_record(
     payload: MedicalRecordCreateRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.DOCTOR, UserRole.HOSPITAL_ADMIN)),
+    current_user: User = Depends(get_current_user),
 ):
-    """Create a new medical record for a patient. Requires doctor or hospital_admin role."""
+    """Create a new medical record. Patients can create their own records."""
+    if current_user.role == UserRole.PATIENT:
+        if current_user.patient_id != patient_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Can only add your own records")
+    elif current_user.role not in (UserRole.HOSPITAL_ADMIN, UserRole.SUPER_ADMIN):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     # Verify patient exists
     patient = await patient_service.get_patient(db, patient_id)
     if patient is None:
@@ -152,9 +162,17 @@ async def update_medical_record(
     payload: MedicalRecordUpdateRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.DOCTOR, UserRole.HOSPITAL_ADMIN)),
+    current_user: User = Depends(get_current_user),
 ):
-    """Update an existing medical record. Requires doctor or hospital_admin role."""
+    """Update a medical record. Patients can update their own records."""
+    if current_user.role == UserRole.PATIENT:
+        from sqlalchemy import select as sa_select
+        rec = await db.execute(sa_select(MedicalRecord).where(MedicalRecord.id == record_id))
+        record_obj = rec.scalar_one_or_none()
+        if record_obj is None or record_obj.patient_id != current_user.patient_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Can only update your own records")
+    elif current_user.role not in (UserRole.HOSPITAL_ADMIN, UserRole.SUPER_ADMIN):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     update_data = payload.model_dump(exclude_unset=True)
     if not update_data:
         raise HTTPException(

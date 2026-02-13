@@ -8,6 +8,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 // Layouts
 import AuthGuard from "./components/layouts/AuthGuard";
 import DashboardLayout from "./components/common/DashboardLayout";
+import PatientLayout from "./components/common/PatientLayout";
+import AdminLayout from "./components/common/AdminLayout";
 
 // Pages - Auth
 import Login from "./pages/Login";
@@ -26,6 +28,12 @@ import StatusUpdate from "./pages/hospital/StatusUpdate";
 import SOSPage from "./pages/patient/SOS";
 import ProfilePage from "./pages/patient/Profile";
 import PatientAlertsPage from "./pages/patient/Alerts";
+import MedicalRecords from "./pages/patient/MedicalRecords";
+
+// Pages - Super Admin
+import AdminDashboard from "./pages/admin/AdminDashboard";
+import HospitalManagement from "./pages/admin/HospitalManagement";
+import UserManagement from "./pages/admin/UserManagement";
 
 function App() {
   return (
@@ -35,9 +43,20 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
 
-        {/* Hospital dashboard routes - require hospital_admin or doctor role */}
+        {/* Super Admin routes - require super_admin role */}
+        <Route element={<AuthGuard roles={["super_admin"]} />}>
+          <Route element={<AdminLayout />}>
+            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin/hospitals" element={<HospitalManagement />} />
+            <Route path="/admin/users" element={<UserManagement />} />
+            <Route path="/admin/analytics" element={<Analytics />} />
+            <Route path="/admin/alerts" element={<CrisisAlerts />} />
+          </Route>
+        </Route>
+
+        {/* Hospital dashboard routes - require hospital_admin or super_admin role */}
         <Route
-          element={<AuthGuard roles={["hospital_admin", "doctor"]} />}
+          element={<AuthGuard roles={["hospital_admin", "super_admin"]} />}
         >
           <Route element={<DashboardLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
@@ -53,11 +72,14 @@ function App() {
           </Route>
         </Route>
 
-        {/* Patient routes - require any authenticated user */}
+        {/* Patient routes - require any authenticated user, wrapped in PatientLayout */}
         <Route element={<AuthGuard />}>
-          <Route path="/sos" element={<SOSPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/patient-alerts" element={<PatientAlertsPage />} />
+          <Route element={<PatientLayout />}>
+            <Route path="/sos" element={<SOSPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/patient-alerts" element={<PatientAlertsPage />} />
+            <Route path="/health-records" element={<MedicalRecords />} />
+          </Route>
         </Route>
 
         {/* Default redirect */}

@@ -4,7 +4,8 @@ import socketio
 
 from app.config import get_settings
 from app.db.postgres import engine, Base
-from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap
+from sqlalchemy import text
+from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap, auth, admin
 from app.api.websocket.handler import sio
 
 settings = get_settings()
@@ -26,9 +27,11 @@ app.add_middleware(
 )
 
 # Socket.IO integration
-sio_app = socketio.ASGIApp(sio, other_app=app)
+sio_app = socketio.ASGIApp(sio, other_asgi_app=app)
 
 # API routes
+app.include_router(auth.router, prefix=settings.API_PREFIX, tags=["Auth"])
+app.include_router(admin.router, prefix=settings.API_PREFIX, tags=["Admin"])
 app.include_router(patients.router, prefix=settings.API_PREFIX, tags=["Patients"])
 app.include_router(hospitals.router, prefix=settings.API_PREFIX, tags=["Hospitals"])
 app.include_router(records.router, prefix=settings.API_PREFIX, tags=["Medical Records"])
@@ -43,6 +46,21 @@ app.include_router(livemap.router, prefix=settings.API_PREFIX, tags=["Live Map"]
 async def startup():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Add super_admin to the PostgreSQL enum if it doesn't exist
+        try:
+            await conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'super_admin'"))
+        except Exception:
+            pass  # Already exists or enum not yet created
+        # Migrate any remaining doctor users to hospital_admin
+        try:
+            await conn.execute(text("UPDATE users SET role = 'hospital_admin' WHERE role = 'doctor'"))
+        except Exception:
+            pass
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    await engine.dispose()
 
 
 @app.get("/health")
