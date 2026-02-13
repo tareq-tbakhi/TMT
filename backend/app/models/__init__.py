@@ -8,6 +8,7 @@ from app.models.geo_event import GeoEvent
 from app.models.sos_request import SosRequest
 from app.models.user import User
 from app.models.telegram_channel import TelegramChannel
+from app.models.aid_request import AidRequest, AidResponse
 
 __all__ = [
     "Patient",
@@ -20,4 +21,6 @@ __all__ = [
     "SosRequest",
     "User",
     "TelegramChannel",
+    "AidRequest",
+    "AidResponse",
 ]

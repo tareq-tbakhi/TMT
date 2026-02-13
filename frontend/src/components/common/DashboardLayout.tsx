@@ -10,6 +10,7 @@ const navItems = [
   { path: "/dashboard/analytics", label: "nav.analytics", icon: "\uD83D\uDCC8" },
   { path: "/dashboard/patients", label: "nav.patients", icon: "\uD83D\uDC65" },
   { path: "/dashboard/map", label: "nav.map", icon: "\uD83D\uDDFA\uFE0F" },
+  { path: "/dashboard/aid-requests", label: "nav.aidRequests", icon: "\uD83E\uDD1D" },
   { path: "/dashboard/status", label: "nav.status", icon: "\uD83C\uDFE5" },
 ];
 

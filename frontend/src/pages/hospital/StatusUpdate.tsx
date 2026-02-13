@@ -63,6 +63,19 @@ const StatusUpdate: React.FC = () => {
   const { user } = useAuthStore();
   const hospitalId = user?.hospitalId ?? "";
 
+  // Hospital profile state
+  const [hospitalName, setHospitalName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [website, setWebsite] = useState("");
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [coverageRadius, setCoverageRadius] = useState(15);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+
   // Form state
   const [status, setStatus] = useState<HospitalStatusValue>("operational");
   const [totalBeds, setTotalBeds] = useState(0);
@@ -119,6 +132,15 @@ const StatusUpdate: React.FC = () => {
           if (data.supply_levels) {
             setSupplies((prev) => ({ ...prev, ...data.supply_levels }));
           }
+          // Profile fields
+          setHospitalName(data.name ?? "");
+          setPhone(data.phone ?? "");
+          setEmail(data.email ?? "");
+          setAddress(data.address ?? "");
+          setWebsite(data.website ?? "");
+          setLatitude(data.latitude);
+          setLongitude(data.longitude);
+          setCoverageRadius(data.coverage_radius_km ?? 15);
         }
 
         if (historyRes?.ok) {
@@ -144,6 +166,54 @@ const StatusUpdate: React.FC = () => {
 
   const handleSupplyChange = (key: keyof SupplyLevels, value: string) => {
     setSupplies((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const handleSaveProfile = async () => {
+    if (!hospitalId) return;
+    setProfileSaving(true);
+    setProfileSuccess(false);
+    setProfileError(null);
+
+    const token = localStorage.getItem("tmt-token");
+    try {
+      const body: Record<string, unknown> = {};
+      if (hospitalName) body.name = hospitalName;
+      if (phone) body.phone = phone;
+      if (email) body.email = email;
+      if (address) body.address = address;
+      if (website) body.website = website;
+      if (latitude != null) body.latitude = latitude;
+      if (longitude != null) body.longitude = longitude;
+      body.coverage_radius_km = coverageRadius;
+
+      const res = await fetch(
+        `${API_URL}/api/v1/hospitals/${hospitalId}/profile`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(body),
+        }
+      );
+
+      if (res.ok) {
+        setProfileSuccess(true);
+        setTimeout(() => setProfileSuccess(false), 3000);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setProfileError(
+          (data as { detail?: string }).detail || "Failed to save profile"
+        );
+      }
+    } catch (err) {
+      setProfileError(
+        err instanceof Error ? err.message : "Failed to save profile"
+      );
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
   const handleSave = async () => {
@@ -179,7 +249,6 @@ const StatusUpdate: React.FC = () => {
 
       if (res.ok) {
         setSaveSuccess(true);
-        // Add to history
         setHistory((prev) => [
           {
             id: Date.now().toString(),
@@ -214,6 +283,9 @@ const StatusUpdate: React.FC = () => {
     );
   }
 
+  const inputCls =
+    "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20";
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -222,21 +294,143 @@ const StatusUpdate: React.FC = () => {
           {t("hospital.status")}
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          Update your hospital's operational status and capacity
+          Update your hospital's profile, operational status, and capacity
         </p>
       </div>
 
       {/* Success / Error messages */}
-      {saveSuccess && (
+      {(saveSuccess || profileSuccess) && (
         <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
-          Status updated successfully!
+          {profileSuccess ? "Profile saved successfully!" : "Status updated successfully!"}
         </div>
       )}
-      {saveError && (
+      {(saveError || profileError) && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {saveError}
+          {saveError || profileError}
         </div>
       )}
+
+      {/* Hospital Profile Information */}
+      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+        <h2 className="mb-4 text-lg font-semibold text-gray-900">
+          {t("hospital.profile")}
+        </h2>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Hospital Name
+            </label>
+            <input
+              type="text"
+              value={hospitalName}
+              onChange={(e) => setHospitalName(e.target.value)}
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Phone
+            </label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+970-XXX-XXXXXXX"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="hospital@example.com"
+              className={inputCls}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Address
+            </label>
+            <input
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Street address, city, area"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Website
+            </label>
+            <input
+              type="url"
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              placeholder="https://..."
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Latitude
+            </label>
+            <input
+              type="number"
+              step="0.0001"
+              value={latitude ?? ""}
+              onChange={(e) =>
+                setLatitude(e.target.value ? parseFloat(e.target.value) : null)
+              }
+              placeholder="31.5000"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Longitude
+            </label>
+            <input
+              type="number"
+              step="0.0001"
+              value={longitude ?? ""}
+              onChange={(e) =>
+                setLongitude(e.target.value ? parseFloat(e.target.value) : null)
+              }
+              placeholder="34.4700"
+              className={inputCls}
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-sm font-medium text-gray-700">
+              Coverage Radius (km)
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={coverageRadius}
+              onChange={(e) =>
+                setCoverageRadius(parseInt(e.target.value) || 15)
+              }
+              className={inputCls}
+            />
+          </div>
+        </div>
+        <div className="mt-4">
+          <button
+            onClick={handleSaveProfile}
+            disabled={profileSaving}
+            className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-50"
+          >
+            {profileSaving ? t("common.loading") : "Save Profile"}
+          </button>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Main Form */}
@@ -283,7 +477,7 @@ const StatusUpdate: React.FC = () => {
                   min={0}
                   value={totalBeds}
                   onChange={(e) => setTotalBeds(parseInt(e.target.value) || 0)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className={inputCls}
                 />
               </div>
               <div>
@@ -295,7 +489,7 @@ const StatusUpdate: React.FC = () => {
                   min={0}
                   value={icuBeds}
                   onChange={(e) => setIcuBeds(parseInt(e.target.value) || 0)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className={inputCls}
                 />
               </div>
               <div>
@@ -310,7 +504,7 @@ const StatusUpdate: React.FC = () => {
                   onChange={(e) =>
                     setAvailableBeds(parseInt(e.target.value) || 0)
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  className={inputCls}
                 />
               </div>
             </div>

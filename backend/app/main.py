@@ -5,7 +5,7 @@ import socketio
 from app.config import get_settings
 from app.db.postgres import engine, Base
 from sqlalchemy import text
-from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap, auth, admin
+from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap, auth, admin, aid_requests
 from app.api.websocket.handler import sio
 
 settings = get_settings()
@@ -40,34 +40,54 @@ app.include_router(analytics.router, prefix=settings.API_PREFIX, tags=["Analytic
 app.include_router(sos.router, prefix=settings.API_PREFIX, tags=["SOS"])
 app.include_router(sms.router, prefix=settings.API_PREFIX, tags=["SMS"])
 app.include_router(livemap.router, prefix=settings.API_PREFIX, tags=["Live Map"])
+app.include_router(aid_requests.router, prefix=settings.API_PREFIX, tags=["Aid Requests"])
 
 
 @app.on_event("startup")
 async def startup():
+    # Step 1: Create all tables (own transaction — must not be poisoned)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Add super_admin to the PostgreSQL enum if it doesn't exist
-        try:
+
+    # Step 2: Add enum value (own transaction — ALTER TYPE ADD VALUE can fail
+    # inside a transaction on some PG versions; isolate it so it can't
+    # rollback the table creation above)
+    try:
+        async with engine.begin() as conn:
             await conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'super_admin'"))
-        except Exception:
-            pass  # Already exists or enum not yet created
-        # Migrate any remaining doctor users to hospital_admin
-        try:
+    except Exception:
+        pass
+
+    # Step 3: Data migrations (own transaction)
+    try:
+        async with engine.begin() as conn:
             await conn.execute(text("UPDATE users SET role = 'hospital_admin' WHERE role = 'doctor'"))
-        except Exception:
-            pass
-        # Add trust tracking columns to patients table (idempotent)
-        for col, typ, default in [
-            ("false_alarm_count", "INTEGER", "0"),
-            ("total_sos_count", "INTEGER", "0"),
-            ("trust_score", "FLOAT", "1.0"),
-        ]:
-            try:
+    except Exception:
+        pass
+
+    # Step 4: Add contact fields to hospitals table (idempotent)
+    try:
+        async with engine.begin() as conn:
+            for col in ["email", "address", "website"]:
+                await conn.execute(text(
+                    f"ALTER TABLE hospitals ADD COLUMN IF NOT EXISTS {col} VARCHAR"
+                ))
+    except Exception:
+        pass
+
+    # Step 5: Add trust tracking columns to patients table (idempotent)
+    try:
+        async with engine.begin() as conn:
+            for col, typ, default in [
+                ("false_alarm_count", "INTEGER", "0"),
+                ("total_sos_count", "INTEGER", "0"),
+                ("trust_score", "FLOAT", "1.0"),
+            ]:
                 await conn.execute(text(
                     f"ALTER TABLE patients ADD COLUMN IF NOT EXISTS {col} {typ} DEFAULT {default}"
                 ))
-            except Exception:
-                pass
+    except Exception:
+        pass
 
 
 @app.on_event("shutdown")

@@ -32,6 +32,9 @@ class Hospital(Base):
     coverage_area = Column(Geometry("POLYGON", srid=4326), nullable=True)
     coverage_radius_km = Column(Float, default=15.0)
     phone = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    address = Column(String, nullable=True)
+    website = Column(String, nullable=True)
     supply_levels = Column(JSONB, default=dict)  # {"medicine": "high", "blood": "low", ...}
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

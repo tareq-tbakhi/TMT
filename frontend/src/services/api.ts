@@ -188,6 +188,9 @@ export interface Hospital {
   specialties: string[];
   coverage_radius_km: number;
   phone: string | null;
+  email: string | null;
+  address: string | null;
+  website: string | null;
   supply_levels: Record<string, string>;
   created_at: string;
   updated_at: string;
@@ -206,6 +209,25 @@ export function updateHospitalStatus(
   }
 ): Promise<Hospital> {
   return request<Hospital>(`/hospitals/${hospitalId}/status`, {
+    method: "PUT",
+    body: data,
+  });
+}
+
+export function updateHospitalProfile(
+  hospitalId: string,
+  data: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    website?: string;
+    latitude?: number;
+    longitude?: number;
+    coverage_radius_km?: number;
+  }
+): Promise<Hospital> {
+  return request<Hospital>(`/hospitals/${hospitalId}/profile`, {
     method: "PUT",
     body: data,
   });
@@ -275,11 +297,12 @@ export function createSOS(data: SOSRequest): Promise<SOSResponse> {
 
 export interface AnalyticsStats {
   total_patients: number;
+  total_hospitals: number;
+  operational_hospitals: number;
   active_alerts: number;
-  hospitals_operational: number;
-  hospitals_total: number;
-  sos_pending: number;
-  sos_today: number;
+  critical_alerts: number;
+  pending_sos: number;
+  resolved_sos_today: number;
   patients_at_risk: number;
 }
 
@@ -326,4 +349,96 @@ export function getMapEvents(params?: {
   return request<{ events: MapEvent[] }>(`/map/events${qs ? `?${qs}` : ""}`).then(
     (res) => res.events
   );
+}
+
+// ─── Aid Request endpoints ─────────────────────────────────────
+
+export interface AidRequest {
+  id: string;
+  requesting_hospital_id: string;
+  requesting_hospital_name?: string;
+  category: string;
+  title: string;
+  description: string | null;
+  urgency: string;
+  quantity: string | null;
+  unit: string | null;
+  status: string;
+  contact_phone: string | null;
+  contact_name: string | null;
+  response_count: number;
+  created_at: string;
+  updated_at: string;
+  fulfilled_at: string | null;
+  responses?: AidResponse[];
+}
+
+export interface AidResponse {
+  id: string;
+  aid_request_id: string;
+  responding_hospital_id: string;
+  responding_hospital_name?: string;
+  message: string | null;
+  eta_hours: number | null;
+  status: string;
+  created_at: string;
+}
+
+export function getAidRequests(params?: {
+  category?: string;
+  urgency?: string;
+  status_filter?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ aid_requests: AidRequest[]; total: number }> {
+  const searchParams = new URLSearchParams();
+  if (params?.category) searchParams.set("category", params.category);
+  if (params?.urgency) searchParams.set("urgency", params.urgency);
+  if (params?.status_filter) searchParams.set("status_filter", params.status_filter);
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.offset) searchParams.set("offset", String(params.offset));
+  const qs = searchParams.toString();
+  return request<{ aid_requests: AidRequest[]; total: number }>(
+    `/aid-requests${qs ? `?${qs}` : ""}`
+  );
+}
+
+export function getAidRequestDetail(id: string): Promise<AidRequest> {
+  return request<AidRequest>(`/aid-requests/${id}`);
+}
+
+export function createAidRequest(data: {
+  category: string;
+  title: string;
+  description?: string;
+  urgency?: string;
+  quantity?: string;
+  unit?: string;
+  contact_phone?: string;
+  contact_name?: string;
+}): Promise<AidRequest> {
+  return request<AidRequest>("/aid-requests", {
+    method: "POST",
+    body: data,
+  });
+}
+
+export function respondToAidRequest(
+  requestId: string,
+  data: { message?: string; eta_hours?: number }
+): Promise<AidResponse> {
+  return request<AidResponse>(`/aid-requests/${requestId}/respond`, {
+    method: "PUT",
+    body: data,
+  });
+}
+
+export function updateAidRequestStatus(
+  requestId: string,
+  status: string
+): Promise<AidRequest> {
+  return request<AidRequest>(`/aid-requests/${requestId}/status`, {
+    method: "PUT",
+    body: { status },
+  });
 }

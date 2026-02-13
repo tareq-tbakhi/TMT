@@ -191,7 +191,7 @@ const LiveMap: React.FC = () => {
   const filteredEvents = useMemo(() => {
     const now = new Date().getTime();
     const rangeMs = timeRange * 60 * 60 * 1000;
-    const cutoffMs = now - rangeMs * (timeSlider / 100);
+    const cutoffMs = now - rangeMs * (1 - timeSlider / 100);
 
     return events.filter((event) => {
       // Layer filter

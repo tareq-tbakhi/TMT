@@ -23,6 +23,7 @@ import PatientList from "./pages/hospital/PatientList";
 import PatientDetail from "./pages/hospital/PatientDetail";
 import LiveMap from "./pages/hospital/LiveMap";
 import StatusUpdate from "./pages/hospital/StatusUpdate";
+import AidRequests from "./pages/hospital/AidRequests";
 
 // Pages - Patient
 import SOSPage from "./pages/patient/SOS";
@@ -68,6 +69,7 @@ function App() {
               element={<PatientDetail />}
             />
             <Route path="/dashboard/map" element={<LiveMap />} />
+            <Route path="/dashboard/aid-requests" element={<AidRequests />} />
             <Route path="/dashboard/status" element={<StatusUpdate />} />
           </Route>
         </Route>

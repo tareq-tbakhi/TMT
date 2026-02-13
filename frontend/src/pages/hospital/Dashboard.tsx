@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -32,43 +32,61 @@ const Dashboard: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const { setAlerts } = useAlertStore();
 
-  useEffect(() => {
+  const getHeaders = useCallback(() => {
     const token = localStorage.getItem("tmt-token");
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json",
-    };
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (token) headers["Authorization"] = `Bearer ${token}`;
+    return headers;
+  }, []);
 
-    const fetchData = async () => {
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/v1/analytics/stats`, { headers: getHeaders() });
+      if (res.status === 401) {
+        localStorage.removeItem("tmt-token");
+        localStorage.removeItem("tmt-user");
+        window.location.href = "/login";
+        return;
+      }
+      if (res.ok) {
+        const data = (await res.json()) as AnalyticsStats;
+        setStats(data);
+      }
+    } catch {
+      // Silent fail for background refresh
+    }
+  }, [getHeaders]);
+
+  const fetchAlerts = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/api/v1/alerts?limit=5`, { headers: getHeaders() });
+      if (res.status === 401) return;
+      if (res.ok) {
+        const wrapper = (await res.json()) as { alerts: Alert[]; total: number };
+        setRecentAlerts(wrapper.alerts);
+        setAlerts(wrapper.alerts);
+      }
+    } catch {
+      // Silent fail
+    }
+  }, [getHeaders, setAlerts]);
+
+  // Initial data fetch
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true);
       try {
-        setLoading(true);
-
-        const [statsRes, alertsRes] = await Promise.all([
-          fetch(`${API_URL}/api/v1/analytics/stats`, { headers }),
-          fetch(`${API_URL}/api/v1/alerts?limit=5`, { headers }),
-        ]);
-
-        if (statsRes.ok) {
-          const statsData = (await statsRes.json()) as AnalyticsStats;
-          setStats(statsData);
-        }
-
-        if (alertsRes.ok) {
-          const wrapper = (await alertsRes.json()) as { alerts: Alert[]; total: number };
-          setRecentAlerts(wrapper.alerts);
-          setAlerts(wrapper.alerts);
-        }
+        await Promise.all([fetchStats(), fetchAlerts()]);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load data");
       } finally {
         setLoading(false);
       }
     };
+    load();
+  }, [fetchStats, fetchAlerts]);
 
-    fetchData();
-  }, [setAlerts]);
-
-  // Real-time alert updates
+  // Real-time updates via WebSocket
   useEffect(() => {
     const socket = io(API_URL, {
       path: "/socket.io",
@@ -81,12 +99,21 @@ const Dashboard: React.FC = () => {
 
     socket.on("new_alert", (alert: Alert) => {
       setRecentAlerts((prev) => [alert, ...prev].slice(0, 5));
+      fetchStats();
+    });
+
+    socket.on("new_sos", () => {
+      fetchStats();
+    });
+
+    socket.on("hospital_status", () => {
+      fetchStats();
     });
 
     return () => {
       socket.disconnect();
     };
-  }, []);
+  }, [fetchStats]);
 
   if (loading) {
     return (
@@ -153,7 +180,7 @@ const Dashboard: React.FC = () => {
         />
         <StatsCard
           title={t("dashboard.hospitals")}
-          value={`${stats?.hospitals_operational ?? 0}/${stats?.hospitals_total ?? 0}`}
+          value={`${stats?.operational_hospitals ?? 0}/${stats?.total_hospitals ?? 0}`}
           icon={
             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
@@ -163,15 +190,15 @@ const Dashboard: React.FC = () => {
         />
         <StatsCard
           title={t("dashboard.sosRequests")}
-          value={stats?.sos_pending ?? 0}
+          value={stats?.pending_sos ?? 0}
           icon={
             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
           }
           color="orange"
-          trend={stats?.sos_today ? "up" : "neutral"}
-          trendValue={`${stats?.sos_today ?? 0} today`}
+          trend={stats?.resolved_sos_today ? "up" : "neutral"}
+          trendValue={`${stats?.resolved_sos_today ?? 0} today`}
         />
       </div>
 
@@ -258,12 +285,12 @@ const Dashboard: React.FC = () => {
           <div className="flex items-center gap-2">
             <StatusBadge status="operational" size="sm" />
             <span className="text-sm text-gray-600">
-              {stats?.hospitals_operational ?? 0} hospitals
+              {stats?.operational_hospitals ?? 0} hospitals
             </span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-500">
-              SOS pending: {stats?.sos_pending ?? 0}
+              SOS pending: {stats?.pending_sos ?? 0}
             </span>
           </div>
           <div className="flex items-center gap-2">

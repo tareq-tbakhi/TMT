@@ -68,6 +68,17 @@ class HospitalStatusUpdateRequest(BaseModel):
     supply_levels: Optional[dict] = None
 
 
+class HospitalProfileUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    website: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    coverage_radius_km: Optional[float] = None
+
+
 class HospitalResponse(BaseModel):
     id: UUID
     name: str
@@ -80,6 +91,9 @@ class HospitalResponse(BaseModel):
     specialties: Optional[list[str]] = None
     coverage_radius_km: float
     phone: Optional[str] = None
+    email: Optional[str] = None
+    address: Optional[str] = None
+    website: Optional[str] = None
     supply_levels: Optional[dict] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -307,5 +321,47 @@ async def update_hospital_status(
         "longitude": hospital.get("longitude"),
         "updated_at": hospital.get("updated_at"),
     })
+
+    return hospital
+
+
+@router.put("/hospitals/{hospital_id}/profile", response_model=HospitalResponse)
+async def update_hospital_profile(
+    hospital_id: UUID,
+    payload: HospitalProfileUpdateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
+):
+    """Update hospital profile information. Hospital admins can update their own hospital."""
+    if current_user.role != UserRole.SUPER_ADMIN and current_user.hospital_id != hospital_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own hospital's profile",
+        )
+
+    update_data = payload.model_dump(exclude_unset=True)
+    if not update_data:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No fields to update",
+        )
+
+    hospital = await hospital_service.update_hospital(db, hospital_id, **update_data)
+    if hospital is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Hospital not found",
+        )
+
+    await log_audit(
+        action="update",
+        resource="hospital",
+        resource_id=str(hospital_id),
+        user_id=current_user.id,
+        details=f"Hospital profile updated: {', '.join(update_data.keys())}",
+        request=request,
+        db=db,
+    )
 
     return hospital
