@@ -34,6 +34,7 @@ import MedicalRecords from "./pages/patient/MedicalRecords";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import HospitalManagement from "./pages/admin/HospitalManagement";
 import UserManagement from "./pages/admin/UserManagement";
+import TelegramManagement from "./pages/admin/TelegramManagement";
 
 function App() {
   return (
@@ -51,6 +52,7 @@ function App() {
             <Route path="/admin/users" element={<UserManagement />} />
             <Route path="/admin/analytics" element={<Analytics />} />
             <Route path="/admin/alerts" element={<CrisisAlerts />} />
+            <Route path="/admin/social-media" element={<TelegramManagement />} />
           </Route>
         </Route>
 

@@ -18,21 +18,21 @@ async def join_hospital(sid, data):
     """Hospital joins its room for targeted alerts."""
     hospital_id = data.get("hospital_id")
     if hospital_id:
-        sio.enter_room(sid, f"hospital_{hospital_id}")
+        await sio.enter_room(sid, f"hospital_{hospital_id}")
         await sio.emit("joined", {"room": f"hospital_{hospital_id}"}, to=sid)
 
 
 @sio.event
 async def join_alerts(sid, data=None):
     """Join the global alerts room."""
-    sio.enter_room(sid, "alerts")
+    await sio.enter_room(sid, "alerts")
     await sio.emit("joined", {"room": "alerts"}, to=sid)
 
 
 @sio.event
 async def join_map(sid, data=None):
     """Join the live map room for real-time geo events."""
-    sio.enter_room(sid, "livemap")
+    await sio.enter_room(sid, "livemap")
     await sio.emit("joined", {"room": "livemap"}, to=sid)
 
 
@@ -41,8 +41,15 @@ async def join_patient(sid, data):
     """Patient joins their personal room for alerts."""
     patient_id = data.get("patient_id")
     if patient_id:
-        sio.enter_room(sid, f"patient_{patient_id}")
+        await sio.enter_room(sid, f"patient_{patient_id}")
         await sio.emit("joined", {"room": f"patient_{patient_id}"}, to=sid)
+
+
+@sio.event
+async def join_telegram(sid, data=None):
+    """Join the Telegram real-time feed room."""
+    await sio.enter_room(sid, "telegram")
+    await sio.emit("joined", {"room": "telegram"}, to=sid)
 
 
 # --- Broadcast functions (called from services) ---
@@ -78,3 +85,13 @@ async def broadcast_sos(sos_data: dict):
         "type": "sos",
         "data": sos_data,
     }, room="livemap")
+
+
+async def broadcast_telegram_message(msg_data: dict):
+    """Push a new Telegram message to all connected dashboards."""
+    await sio.emit("telegram_message", msg_data, room="telegram")
+
+
+async def broadcast_telegram_analysis(analysis_data: dict):
+    """Push AI analysis result for a Telegram message."""
+    await sio.emit("telegram_analysis", analysis_data, room="telegram")

@@ -48,6 +48,8 @@ async def store_embedding(
     metadata: dict = None,
 ) -> str:
     """Store an embedding in Qdrant with metadata."""
+    from app.db.qdrant import init_qdrant
+    init_qdrant()  # ensure collection exists (idempotent)
     qdrant = get_qdrant()
     point_id = str(uuid.uuid4())
 

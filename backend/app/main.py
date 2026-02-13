@@ -1,3 +1,6 @@
+import asyncio
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import socketio
@@ -5,7 +8,10 @@ import socketio
 from app.config import get_settings
 from app.db.postgres import engine, Base
 from sqlalchemy import text
-from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap, auth, admin
+import app.models  # noqa: F401 — register all ORM models with Base.metadata
+
+logger = logging.getLogger(__name__)
+from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap, auth, admin, telegram
 from app.api.websocket.handler import sio
 
 settings = get_settings()
@@ -40,23 +46,37 @@ app.include_router(analytics.router, prefix=settings.API_PREFIX, tags=["Analytic
 app.include_router(sos.router, prefix=settings.API_PREFIX, tags=["SOS"])
 app.include_router(sms.router, prefix=settings.API_PREFIX, tags=["SMS"])
 app.include_router(livemap.router, prefix=settings.API_PREFIX, tags=["Live Map"])
+app.include_router(telegram.router, prefix=settings.API_PREFIX, tags=["Telegram"])
 
 
 @app.on_event("startup")
 async def startup():
+    # Create tables in its own transaction
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Add super_admin to the PostgreSQL enum if it doesn't exist
+
+    # Initialize Qdrant collection
+    try:
+        from app.db.qdrant import init_qdrant
+        init_qdrant()
+        logger.info("Qdrant collection initialized")
+    except Exception as e:
+        logger.warning(f"Qdrant init failed (non-fatal): {e}")
+
+    # Run migrations in a separate transaction to avoid conflicts with
+    # ALTER TYPE ... ADD VALUE (which can abort the DDL transaction)
+    async with engine.begin() as conn:
         try:
             await conn.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'super_admin'"))
         except Exception:
             pass  # Already exists or enum not yet created
-        # Migrate any remaining doctor users to hospital_admin
+
+    async with engine.begin() as conn:
         try:
             await conn.execute(text("UPDATE users SET role = 'hospital_admin' WHERE role = 'doctor'"))
         except Exception:
             pass
-        # Add trust tracking columns to patients table (idempotent)
+
         for col, typ, default in [
             ("false_alarm_count", "INTEGER", "0"),
             ("total_sos_count", "INTEGER", "0"),
@@ -68,6 +88,35 @@ async def startup():
                 ))
             except Exception:
                 pass
+
+    # Telegram initialization (non-blocking, skip if not configured)
+    if settings.TELEGRAM_API_ID and settings.TELEGRAM_API_HASH and settings.TELEGRAM_PHONE:
+        from pathlib import Path
+        session_file = Path("tmt_session.session")
+        if not session_file.exists():
+            logger.info(
+                "Telegram credentials configured but session file not found. "
+                "Use the Connect button in the Social Media page to authenticate."
+            )
+        else:
+            async def _init_telegram():
+                try:
+                    from app.telegram.client import get_telegram_client, setup_message_handler
+                    from app.telegram.message_handler import on_telegram_message
+
+                    client = await get_telegram_client()
+                    if client.is_connected():
+                        handler_registrar = setup_message_handler(on_telegram_message)
+                        await handler_registrar()
+                        logger.info("Telegram initialized successfully")
+                    else:
+                        logger.warning("Telegram client created but not connected")
+                except Exception as e:
+                    logger.warning(f"Telegram init failed (non-fatal): {e}")
+
+            asyncio.create_task(_init_telegram())
+    else:
+        logger.info("Telegram credentials not configured, skipping initialization")
 
 
 @app.on_event("shutdown")
