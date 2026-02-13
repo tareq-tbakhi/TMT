@@ -2,8 +2,14 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { createSOS, getHospitals, type Hospital } from "../../services/api";
 import { buildSMSBody, sendViaSMS } from "../../services/smsService";
 import { useAuthStore } from "../../store/authStore";
+import { useAIAssistantStore } from "../../store/aiAssistantStore";
 import { getCurrentPosition } from "../../utils/locationCodec";
 import { patientStatusConfig } from "../../utils/formatting";
+import type { TriageData } from "../../types/sosTypes";
+
+// AI Assistant Components
+import { AIAssistantScreen } from "../../components/sos/AIAssistantScreen";
+import { CallingScreen } from "../../components/sos/CallingScreen";
 
 // ─── Heartbeat Animation CSS ─────────────────────────────────────
 
@@ -27,7 +33,7 @@ interface SOSFormData {
   details: string;
 }
 
-type SOSState = "idle" | "countdown" | "sending" | "sent" | "sms_ready" | "error" | "cancelled";
+type SOSState = "idle" | "countdown" | "ai_assistant" | "calling" | "sending" | "sent" | "sms_ready" | "error" | "cancelled";
 
 // ─── IndexedDB Helper ───────────────────────────────────────────
 
@@ -174,6 +180,9 @@ export default function SOS() {
     };
   }, []);
 
+  // AI Assistant store
+  const resetAIAssistant = useAIAssistantStore((s: { reset: () => void }) => s.reset);
+
   // ─── Countdown Timer (Cancellation Window) ─────────────────
 
   useEffect(() => {
@@ -184,13 +193,10 @@ export default function SOS() {
       countdownTimerRef.current = setInterval(() => {
         setCountdownSeconds((prev: number) => {
           if (prev <= 1) {
-            // Countdown finished - actually send the SOS
+            // Countdown finished - transition to AI Assistant
             clearInterval(countdownTimerRef.current);
-            if (isOnline) {
-              handleSOSOnline();
-            } else {
-              handleSOSOffline();
-            }
+            resetAIAssistant();
+            setSosState("ai_assistant");
             return 0;
           }
           return prev - 1;
@@ -203,7 +209,7 @@ export default function SOS() {
         }
       };
     }
-  }, [sosState, isOnline]);
+  }, [sosState, resetAIAssistant]);
 
   // ─── Auto-detect GPS on Load ──────────────────────────────
 
@@ -474,7 +480,109 @@ export default function SOS() {
     setSosResponse(null);
     setSmsBody(null);
     setSosError(null);
+    resetAIAssistant();
   };
+
+  // ─── Handle AI Assistant Send SOS ────────────────────────
+
+  const handleAISendSOS = async (triageData: TriageData) => {
+    if (latitude === null || longitude === null) {
+      setSosError("GPS location is required.");
+      setSosState("error");
+      return;
+    }
+
+    // Map triage data to patient status
+    const patientStatus = triageData.emergencyType || "injured";
+    const severity = triageData.injuryStatus === "serious" ? 5 : triageData.injuryStatus === "minor" ? 3 : 1;
+
+    // Build details string from triage data
+    const detailsParts: string[] = [];
+    if (triageData.emergencyType) detailsParts.push(`Type: ${triageData.emergencyType}`);
+    if (triageData.injuryStatus) detailsParts.push(`Injury: ${triageData.injuryStatus}`);
+    if (triageData.peopleCount) detailsParts.push(`People: ${triageData.peopleCount.replace(/_/g, " ")}`);
+    if (triageData.canMove) detailsParts.push(`Mobility: ${triageData.canMove.replace(/_/g, " ")}`);
+    if (triageData.additionalDetails) detailsParts.push(`Details: ${triageData.additionalDetails}`);
+
+    const details = detailsParts.join("; ");
+
+    // Update form state
+    setForm({
+      patientStatus: patientStatus as PatientStatus,
+      severity,
+      details,
+    });
+
+    setSosState("sending");
+    setSosError(null);
+
+    if (isOnline) {
+      try {
+        const response = await createSOS({
+          latitude,
+          longitude,
+          patient_status: patientStatus,
+          severity,
+          details: details || undefined,
+        });
+
+        setSosResponse({
+          id: response.id,
+          hospital_name: nearestHospitals[0]?.name,
+        });
+        setSosState("sent");
+      } catch (err) {
+        setSosError(
+          err instanceof Error
+            ? err.message
+            : "Failed to send SOS. Try SMS fallback."
+        );
+        setSosState("error");
+      }
+    } else {
+      // Offline - use SMS
+      await buildAndSendSMS(latitude, longitude);
+    }
+  };
+
+  // ─── Handle Urgent Call ──────────────────────────────────
+
+  const handleUrgentCall = () => {
+    setSosState("calling");
+  };
+
+  // ─── Handle End Call ─────────────────────────────────────
+
+  const handleEndCall = () => {
+    setSosState("ai_assistant");
+  };
+
+  // ─── Handle Cancel from AI Assistant ─────────────────────
+
+  const handleAICancel = () => {
+    resetAIAssistant();
+    handleCancel();
+  };
+
+  // ─── Render: AI Assistant Screen ─────────────────────────
+
+  if (sosState === "ai_assistant") {
+    return (
+      <AIAssistantScreen
+        onSendSOS={handleAISendSOS}
+        onUrgentCall={handleUrgentCall}
+        onCancel={handleAICancel}
+        latitude={latitude}
+        longitude={longitude}
+      />
+    );
+  }
+
+  // ─── Render: Calling Screen ──────────────────────────────
+
+  if (sosState === "calling") {
+    return <CallingScreen onEndCall={handleEndCall} />;
+  }
 
   // ─── Render: Countdown Screen (Cancellation Window) ────────
 
