@@ -396,6 +396,7 @@ export interface AnalyticsStats {
   critical_alerts: number;
   pending_sos: number;
   resolved_sos_today: number;
+  created_sos_today: number;
   patients_at_risk: number;
 }
 

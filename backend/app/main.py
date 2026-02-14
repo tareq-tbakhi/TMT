@@ -5,7 +5,7 @@ import socketio
 from app.config import get_settings
 from app.db.postgres import engine, Base
 from sqlalchemy import text
-from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap, auth, admin, aid_requests, transfers
+from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap, auth, admin, aid_requests, transfers, simulation
 from app.api.websocket.handler import sio
 
 settings = get_settings()
@@ -42,6 +42,7 @@ app.include_router(sms.router, prefix=settings.API_PREFIX, tags=["SMS"])
 app.include_router(livemap.router, prefix=settings.API_PREFIX, tags=["Live Map"])
 app.include_router(aid_requests.router, prefix=settings.API_PREFIX, tags=["Aid Requests"])
 app.include_router(transfers.router, prefix=settings.API_PREFIX, tags=["Transfers"])
+app.include_router(simulation.router, prefix=settings.API_PREFIX, tags=["Simulation"])
 
 
 @app.on_event("startup")

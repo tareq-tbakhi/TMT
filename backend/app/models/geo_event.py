@@ -7,6 +7,7 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 from geoalchemy2 import Geometry
 
 from app.db.postgres import Base
+from app.models.alert import EventType
 
 
 class GeoEventSource(str, enum.Enum):
@@ -21,7 +22,7 @@ class GeoEvent(Base):
     __tablename__ = "geo_events"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    event_type = Column(String, nullable=False)  # "crisis", "sos", "hospital_status", "sms_activity"
+    event_type = Column(Enum(EventType, create_type=False), nullable=False)
     location = Column(Geometry("POINT", srid=4326), nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)

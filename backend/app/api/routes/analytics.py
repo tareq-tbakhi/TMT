@@ -35,6 +35,7 @@ class DashboardStats(BaseModel):
     active_alerts: int = 0
     pending_sos: int = 0
     resolved_sos_today: int = 0
+    created_sos_today: int = 0
     critical_alerts: int = 0
     patients_at_risk: int = 0
 

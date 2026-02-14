@@ -42,6 +42,8 @@ class AlertCreateRequest(BaseModel):
     source: Optional[str] = None
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     metadata: Optional[dict] = None
+    routed_department: Optional[str] = None
+    target_facility_id: Optional[UUID] = None
 
 
 class AlertAcknowledgeRequest(BaseModel):
@@ -108,6 +110,8 @@ async def create_alert(
         source=payload.source,
         confidence=payload.confidence,
         metadata=payload.metadata or {},
+        routed_department=payload.routed_department,
+        target_facility_id=str(payload.target_facility_id) if payload.target_facility_id else None,
     )
 
     await log_audit(
