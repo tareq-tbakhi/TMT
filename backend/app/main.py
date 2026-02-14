@@ -100,19 +100,28 @@ async def startup():
             )
         else:
             async def _init_telegram():
-                try:
-                    from app.telegram.client import get_telegram_client, setup_message_handler
-                    from app.telegram.message_handler import on_telegram_message
+                from app.telegram.client import get_telegram_client, setup_message_handler
+                from app.telegram.message_handler import on_telegram_message
 
-                    client = await get_telegram_client()
-                    if client.is_connected():
-                        handler_registrar = setup_message_handler(on_telegram_message)
-                        await handler_registrar()
-                        logger.info("Telegram initialized successfully")
-                    else:
-                        logger.warning("Telegram client created but not connected")
-                except Exception as e:
-                    logger.warning(f"Telegram init failed (non-fatal): {e}")
+                # Retry a few times in case the session file is briefly
+                # locked by a Celery worker starting at the same time.
+                for attempt in range(5):
+                    try:
+                        client = await get_telegram_client()
+                        if client.is_connected():
+                            handler_registrar = setup_message_handler(on_telegram_message)
+                            await handler_registrar()
+                            logger.info("Telegram initialized successfully")
+                            return
+                        else:
+                            logger.warning("Telegram client created but not connected")
+                            return
+                    except Exception as e:
+                        if attempt < 4:
+                            logger.info(f"Telegram init attempt {attempt + 1} failed ({e}), retrying in 5s...")
+                            await asyncio.sleep(5)
+                        else:
+                            logger.warning(f"Telegram init failed after 5 attempts (non-fatal): {e}")
 
             asyncio.create_task(_init_telegram())
     else:

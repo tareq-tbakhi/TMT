@@ -138,9 +138,28 @@ const TelegramContent: React.FC = () => {
 
   // Live feed
   const [liveMessages, setLiveMessages] = useState<TelegramLiveMessage[]>([]);
-  const [liveAnalyses, setLiveAnalyses] = useState<Record<string, unknown>[]>([]);
   const socketRef = useRef<Socket | null>(null);
   const liveFeedRef = useRef<HTMLDivElement>(null);
+
+  // AI processing tracker — maps message_id → processing status
+  const [processingMessages, setProcessingMessages] = useState<
+    {
+      message_id: number;
+      chat_id: string;
+      channel: string;
+      channel_name: string;
+      text: string;
+      date: string;
+      status: "processing" | "completed";
+      is_crisis?: boolean;
+      event_type?: string;
+      severity?: string;
+      confidence?: number;
+      details?: string;
+      latitude?: number | null;
+      longitude?: number | null;
+    }[]
+  >([]);
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -185,12 +204,30 @@ const TelegramContent: React.FC = () => {
     }
   }, [notification]);
 
-  // Load stored messages so the feed survives reloads / re-logins
-  useEffect(() => {
+  // Load stored messages so the feed survives reloads / re-logins / tab switches
+  const loadStoredMessages = useCallback(() => {
     getStoredMessages(24, 200)
-      .then((msgs) => setLiveMessages(msgs))
+      .then((msgs) => {
+        setLiveMessages((prev) => {
+          // Merge: keep any real-time msgs not yet in the DB response
+          const dbIds = new Set(msgs.map((m) => m.id));
+          const extra = prev.filter((m) => !dbIds.has(m.id));
+          return [...extra, ...msgs].slice(0, 200);
+        });
+      })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    loadStoredMessages();
+  }, [loadStoredMessages]);
+
+  // Reload stored messages when switching to the live tab
+  useEffect(() => {
+    if (activeTab === "live") {
+      loadStoredMessages();
+    }
+  }, [activeTab, loadStoredMessages]);
 
   // Socket.IO for real-time messages
   useEffect(() => {
@@ -206,8 +243,62 @@ const TelegramContent: React.FC = () => {
     });
 
     socket.on("telegram_analysis", (analysis: Record<string, unknown>) => {
-      setLiveAnalyses((prev) => [analysis, ...prev].slice(0, 100));
+      // Refresh events list so stats update automatically
+      setTimeout(() => fetchEvents(), 1000);
+
+      // Update corresponding processing card → completed
+      const msgId = analysis.message_id as number | undefined;
+      if (msgId != null) {
+        setProcessingMessages((prev) =>
+          prev.map((p) =>
+            p.message_id === msgId
+              ? {
+                  ...p,
+                  status: "completed" as const,
+                  is_crisis: analysis.is_crisis as boolean | undefined,
+                  event_type: analysis.event_type as string | undefined,
+                  severity: analysis.severity as string | undefined,
+                  confidence: analysis.confidence as number | undefined,
+                  details: analysis.details as string | undefined,
+                  latitude: analysis.latitude as number | null | undefined,
+                  longitude: analysis.longitude as number | null | undefined,
+                }
+              : p
+          )
+        );
+      }
     });
+
+    // AI processing started for a message
+    socket.on(
+      "telegram_processing",
+      (data: {
+        message_id: number;
+        chat_id: string;
+        channel: string;
+        channel_name: string;
+        text: string;
+        date: string;
+        status: string;
+      }) => {
+        setProcessingMessages((prev) => {
+          // Avoid duplicates
+          if (prev.some((p) => p.message_id === data.message_id)) return prev;
+          return [
+            {
+              message_id: data.message_id,
+              chat_id: data.chat_id,
+              channel: data.channel,
+              channel_name: data.channel_name,
+              text: data.text,
+              date: data.date,
+              status: "processing",
+            },
+            ...prev,
+          ].slice(0, 50);
+        });
+      }
+    );
 
     return () => {
       socket.disconnect();
@@ -325,7 +416,6 @@ const TelegramContent: React.FC = () => {
       setChannels([]);
       setEvents([]);
       setLiveMessages([]);
-      setLiveAnalyses([]);
       setNotification({
         type: "success",
         message: t("admin.telegram.disconnectSuccess", {
@@ -642,6 +732,12 @@ const TelegramContent: React.FC = () => {
                 {liveMessages.length}
               </span>
             )}
+            {tab === "intel" &&
+              processingMessages.filter((p) => p.status === "processing").length > 0 && (
+                <span className="ms-1.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500 px-1.5 text-xs text-white animate-pulse">
+                  {processingMessages.filter((p) => p.status === "processing").length}
+                </span>
+              )}
           </button>
         ))}
       </div>
@@ -798,36 +894,6 @@ const TelegramContent: React.FC = () => {
             </button>
           </div>
 
-          {liveAnalyses.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="text-sm font-semibold text-red-700">
-                {t("admin.telegram.aiAlerts")} ({liveAnalyses.length})
-              </h3>
-              {liveAnalyses.slice(0, 5).map((a, i) => (
-                <div key={i} className="rounded-lg border border-red-200 bg-red-50 p-3">
-                  <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-800">
-                      {(a as Record<string, string>).event_type || "crisis"}
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      {(a as Record<string, string>).channel || ""}
-                    </span>
-                  </div>
-                  {(a as Record<string, string>).details && (
-                    <p className="mt-1 text-sm text-gray-700">
-                      {(a as Record<string, string>).details}
-                    </p>
-                  )}
-                  {(a as Record<string, string>).original_text && (
-                    <p className="mt-1 text-xs text-gray-500" dir="auto">
-                      {(a as Record<string, string>).original_text}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-
           <div
             ref={liveFeedRef}
             className="max-h-[60vh] space-y-2 overflow-y-auto rounded-lg border border-gray-200 bg-white p-4"
@@ -893,6 +959,139 @@ const TelegramContent: React.FC = () => {
               {t("admin.telegram.refresh")}
             </button>
           </div>
+
+          {/* --- Real-time AI analysis cards --- */}
+          {processingMessages.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex justify-end">
+                <button
+                  onClick={() => setProcessingMessages([])}
+                  className="rounded-lg border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
+                >
+                  {t("admin.telegram.clearFeed")}
+                </button>
+              </div>
+              {processingMessages.map((pm) => {
+                const sevMap: Record<string, { label: string; border: string; bg: string; text: string }> = {
+                  low:      { label: "Low",      border: "border-blue-200",   bg: "bg-blue-50",   text: "text-blue-700" },
+                  medium:   { label: "Medium",   border: "border-yellow-200", bg: "bg-yellow-50", text: "text-yellow-700" },
+                  high:     { label: "High",     border: "border-orange-200", bg: "bg-orange-50", text: "text-orange-700" },
+                  critical: { label: "Critical", border: "border-red-300",    bg: "bg-red-50",    text: "text-red-700" },
+                  extreme:  { label: "Extreme",  border: "border-red-400",    bg: "bg-red-100",   text: "text-red-900" },
+                };
+                const sevKey = (pm.severity || "").toLowerCase();
+                const sev = sevMap[sevKey];
+                const cardStyle = pm.status === "processing"
+                  ? "border-amber-300 bg-amber-50"
+                  : pm.is_crisis && sev
+                    ? `${sev.border} ${sev.bg}`
+                    : !pm.is_crisis
+                      ? "border-green-300 bg-green-50"
+                      : "border-gray-200 bg-white";
+
+                return (
+                  <div key={pm.message_id} className={`relative rounded-lg border p-4 transition-all ${cardStyle}`}>
+                    {pm.status !== "processing" && (
+                      <button
+                        onClick={() => setProcessingMessages((prev) => prev.filter((p) => p.message_id !== pm.message_id))}
+                        className="absolute end-2 top-2 rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+                      >
+                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    )}
+                    {pm.status === "processing" ? (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="relative flex h-2.5 w-2.5">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
+                              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+                            </span>
+                            <span className="text-xs font-semibold text-amber-700">Processing...</span>
+                          </div>
+                          <span className="text-xs text-gray-400">
+                            {pm.date ? new Date(pm.date).toLocaleTimeString() : ""}
+                          </span>
+                        </div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700">
+                            {pm.channel_name || pm.channel}
+                          </span>
+                        </div>
+                        <p className="mt-2 line-clamp-2 text-sm text-gray-700" dir="auto">
+                          {pm.text}
+                        </p>
+                        <div className="mt-2 flex items-center gap-1">
+                          <div className="h-1 flex-1 overflow-hidden rounded-full bg-amber-200">
+                            <div className="h-full w-2/3 animate-pulse rounded-full bg-amber-500"></div>
+                          </div>
+                          <span className="text-[10px] text-amber-600">Analyzing with AI</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {/* Classification badge */}
+                          {pm.is_crisis ? (
+                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${sev ? `${sev.text} bg-opacity-80` : "text-red-800"} ${sev ? sev.bg : "bg-red-100"}`}>
+                              {sev ? sev.label : "Threat"}
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-bold text-green-800">
+                              No Threat
+                            </span>
+                          )}
+                          {/* Event type */}
+                          {pm.event_type && (
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                              pm.is_crisis ? "bg-red-100 text-red-800" : "bg-gray-100 text-gray-700"
+                            }`}>
+                              {pm.event_type}
+                            </span>
+                          )}
+                          {/* Confidence */}
+                          {pm.confidence != null && (
+                            <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+                              {(pm.confidence * 100).toFixed(0)}%
+                            </span>
+                          )}
+                          <span className="ms-auto text-xs text-gray-400">
+                            {pm.date ? new Date(pm.date).toLocaleTimeString() : ""}
+                          </span>
+                        </div>
+                        {/* Channel */}
+                        <div className="mt-2">
+                          <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700">
+                            {pm.channel_name || pm.channel}
+                          </span>
+                        </div>
+                        {/* AI details / summary */}
+                        {pm.details && (
+                          <p className="mt-2 text-sm font-medium text-gray-800">{pm.details}</p>
+                        )}
+                        {/* Original text */}
+                        <div className="mt-2 rounded-md bg-gray-50 p-2">
+                          <p className="text-xs text-gray-500" dir="auto">{pm.text}</p>
+                        </div>
+                        {/* Location if available */}
+                        {pm.latitude != null && pm.longitude != null && (
+                          <div className="mt-2 flex items-center gap-1 text-xs text-gray-400">
+                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                            </svg>
+                            {pm.latitude.toFixed(4)}, {pm.longitude.toFixed(4)}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {eventsLoading ? (
             <div className="flex h-48 items-center justify-center">

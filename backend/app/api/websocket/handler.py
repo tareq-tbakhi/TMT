@@ -1,6 +1,16 @@
 import socketio
 
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+from app.config import get_settings
+
+_settings = get_settings()
+
+# Use Redis manager so Celery workers can emit events via the same bus
+_redis_mgr = socketio.AsyncRedisManager(_settings.REDIS_URL)
+sio = socketio.AsyncServer(
+    async_mode="asgi",
+    cors_allowed_origins="*",
+    client_manager=_redis_mgr,
+)
 
 
 @sio.event
@@ -95,3 +105,8 @@ async def broadcast_telegram_message(msg_data: dict):
 async def broadcast_telegram_analysis(analysis_data: dict):
     """Push AI analysis result for a Telegram message."""
     await sio.emit("telegram_analysis", analysis_data, room="telegram")
+
+
+async def broadcast_telegram_processing(processing_data: dict):
+    """Notify dashboards that a message is being processed by AI."""
+    await sio.emit("telegram_processing", processing_data, room="telegram")

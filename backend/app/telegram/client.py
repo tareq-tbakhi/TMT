@@ -23,13 +23,14 @@ _client: TelegramClient | None = None
 _auth_state: dict = {}
 
 
-async def get_telegram_client() -> TelegramClient:
+async def get_telegram_client(session_name: str = "tmt_session") -> TelegramClient:
     global _client
     if _client is None:
         _client = TelegramClient(
-            "tmt_session",
+            session_name,
             settings.TELEGRAM_API_ID,
             settings.TELEGRAM_API_HASH,
+            catch_up=True,  # Process messages received while offline
         )
         await _client.connect()
         if not await _client.is_user_authorized():
@@ -40,6 +41,10 @@ async def get_telegram_client() -> TelegramClient:
                 "Use the Connect button in the Social Media page to authenticate."
             )
         logger.info("Telegram client started successfully")
+    elif not _client.is_connected():
+        logger.warning("Telegram client was disconnected, reconnecting...")
+        await _client.connect()
+        logger.info("Telegram client reconnected")
     return _client
 
 
@@ -230,22 +235,47 @@ async def resolve_entity(identifier: str) -> dict | None:
 def setup_message_handler(callback):
     """Register a handler for incoming messages across all monitored channels."""
     async def _handler(event):
-        if event.message and event.message.text:
-            chat = event.chat
-            chat_name = getattr(chat, "title", None) or getattr(chat, "username", None) or str(event.chat_id)
-            msg_data = {
-                "id": event.message.id,
-                "text": event.message.text,
-                "date": event.message.date.isoformat(),
-                "chat_id": str(event.chat_id),
-                "channel": getattr(chat, "username", None) or str(event.chat_id),
-                "channel_name": chat_name,
-            }
+        # Use raw_text which includes captions from media messages
+        text = event.message.raw_text if event.message else None
+        if not text:
+            logger.debug(f"Skipping message {getattr(event.message, 'id', '?')} — no text content (media-only)")
+            return
+
+        chat = event.chat
+        chat_name = getattr(chat, "title", None) or getattr(chat, "username", None) or str(event.chat_id)
+        msg_data = {
+            "id": event.message.id,
+            "text": text,
+            "date": event.message.date.isoformat(),
+            "chat_id": str(event.chat_id),
+            "channel": getattr(chat, "username", None) or str(event.chat_id),
+            "channel_name": chat_name,
+        }
+        logger.info(f"Received message {event.message.id} from {chat_name}: {text[:80]}...")
+        try:
             await callback(msg_data)
+        except Exception as e:
+            logger.error(f"Message handler callback failed for msg {event.message.id}: {e}")
 
     async def register():
         client = await get_telegram_client()
         client.add_event_handler(_handler, events.NewMessage())
-        logger.info("Message handler registered")
+        logger.info("Message handler registered for all chats")
+
+        # Start connection monitor
+        asyncio.create_task(_connection_monitor(client))
 
     return register
+
+
+async def _connection_monitor(client: TelegramClient):
+    """Periodically check the Telegram connection and reconnect if needed."""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            if not client.is_connected():
+                logger.warning("Telegram client disconnected — reconnecting...")
+                await client.connect()
+                logger.info("Telegram client reconnected by monitor")
+        except Exception as e:
+            logger.error(f"Connection monitor reconnect failed: {e}")

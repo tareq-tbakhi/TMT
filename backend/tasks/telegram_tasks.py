@@ -1,10 +1,20 @@
 """Celery tasks for Telegram message processing."""
 import asyncio
 import logging
+import shutil
+from pathlib import Path
+
+import socketio
 
 from tasks.celery_app import celery_app
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Write-only Socket.IO Redis manager — lets Celery workers emit events
+# through the same Redis bus the ASGI server listens on.
+_sio_settings = get_settings()
+_external_sio = socketio.RedisManager(_sio_settings.REDIS_URL, write_only=True)
 
 
 def _run_async(coro):
@@ -33,6 +43,16 @@ def _make_session():
     return eng, factory
 
 
+def _worker_session_name() -> str:
+    """Copy the main session file to a worker-specific copy so the Celery
+    worker doesn't lock the backend's Telethon session file."""
+    src = Path("tmt_session.session")
+    dst = Path("tmt_session_worker.session")
+    if src.exists():
+        shutil.copy2(src, dst)
+    return "tmt_session_worker"
+
+
 def _severity_to_int(severity) -> int:
     """Convert severity string or int to integer 1-5."""
     if isinstance(severity, int):
@@ -48,14 +68,20 @@ def fetch_and_process_messages():
     Queries active channels from the database (not the in-memory registry,
     which is empty in the Celery worker process).
     """
-    from app.telegram.client import get_channel_messages
+    from app.telegram.client import get_telegram_client, get_channel_messages
     from app.telegram.message_processor import process_batch
     from app.models.telegram_channel import TelegramChannel
     from sqlalchemy import select
 
+    # Use a separate session file so we don't lock the backend's real-time listener
+    worker_session = _worker_session_name()
+
     async def _run():
         eng, Session = _make_session()
         try:
+            # Ensure the worker uses its own Telegram session
+            await get_telegram_client(session_name=worker_session)
+
             async with Session() as db:
                 result = await db.execute(
                     select(TelegramChannel.channel_id).where(
@@ -91,6 +117,11 @@ def process_single_message(message_data: dict):
     """Process a single incoming Telegram message through AI and store results."""
     from app.telegram.message_processor import process_message
 
+    msg_id = message_data.get("id")
+    chat_id = message_data.get("chat_id")
+    channel = message_data.get("channel")
+    channel_name = message_data.get("channel_name")
+
     async def _run():
         eng, Session = _make_session()
         try:
@@ -100,6 +131,35 @@ def process_single_message(message_data: dict):
                 sev = _severity_to_int(result.get("severity", "medium"))
                 if sev >= 3:
                     create_alert_from_crisis.delay(result)
+
+                # Broadcast the decision to connected dashboards
+                _external_sio.emit("telegram_analysis", {
+                    "message_id": msg_id,
+                    "chat_id": chat_id,
+                    "channel": channel,
+                    "channel_name": channel_name,
+                    "is_crisis": True,
+                    "event_type": result.get("event_type", "other"),
+                    "severity": result.get("severity", "medium"),
+                    "confidence": result.get("confidence", 0.5),
+                    "details": result.get("details"),
+                    "latitude": result.get("latitude"),
+                    "longitude": result.get("longitude"),
+                    "original_text": result.get("original_text", ""),
+                    "status": "completed",
+                }, room="telegram")
+            else:
+                # Not a crisis — still notify the dashboard
+                _external_sio.emit("telegram_analysis", {
+                    "message_id": msg_id,
+                    "chat_id": chat_id,
+                    "channel": channel,
+                    "channel_name": channel_name,
+                    "is_crisis": False,
+                    "original_text": (message_data.get("text") or "")[:200],
+                    "status": "completed",
+                }, room="telegram")
+
             return result
         finally:
             await eng.dispose()

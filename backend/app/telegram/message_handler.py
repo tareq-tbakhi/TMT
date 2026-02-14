@@ -8,7 +8,7 @@ from datetime import datetime
 
 from app.db.postgres import async_session
 from app.models.telegram_message import TelegramMessage
-from app.api.websocket.handler import broadcast_telegram_message
+from app.api.websocket.handler import broadcast_telegram_message, broadcast_telegram_processing
 
 logger = logging.getLogger(__name__)
 
@@ -48,5 +48,16 @@ async def on_telegram_message(msg_data: dict):
     try:
         from tasks.telegram_tasks import process_single_message
         process_single_message.delay(msg_data)
+
+        # Notify dashboards that AI processing has started for this message
+        await broadcast_telegram_processing({
+            "message_id": msg_data.get("id"),
+            "chat_id": msg_data.get("chat_id"),
+            "channel": msg_data.get("channel"),
+            "channel_name": msg_data.get("channel_name"),
+            "text": (msg_data.get("text") or "")[:200],
+            "date": msg_data.get("date"),
+            "status": "processing",
+        })
     except Exception as e:
         logger.warning(f"Failed to queue AI processing: {e}")
