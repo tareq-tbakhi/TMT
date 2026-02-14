@@ -23,7 +23,7 @@ interface MapActions {
 
 type MapStore = MapState & MapActions;
 
-const DEFAULT_LAYERS = new Set(["crisis", "sos", "hospital", "patient"]);
+const DEFAULT_LAYERS = new Set(["crisis", "sos", "hospital", "police_station", "civil_defense", "patient"]);
 
 export const useMapStore = create<MapStore>((set) => ({
   events: [],

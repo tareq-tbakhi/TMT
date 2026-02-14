@@ -267,6 +267,7 @@ export function registerHospital(data: RegisterHospitalRequest) {
 export interface Hospital {
   id: string;
   name: string;
+  department_type?: string;
   latitude: number | null;
   longitude: number | null;
   status: string;
@@ -340,6 +341,8 @@ export interface Alert {
   affected_patients_count: number;
   created_at: string;
   expires_at: string | null;
+  alert_type?: string;
+  parent_alert_id?: string | null;
 }
 
 export async function getAlerts(params?: {

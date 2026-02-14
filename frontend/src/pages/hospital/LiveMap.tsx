@@ -79,6 +79,8 @@ const layerIcons: Record<string, L.DivIcon> = {
   sos: createColoredIcon("#ef4444"),
   crisis: createColoredIcon("#f59e0b"),
   hospital: createColoredIcon("#22c55e"),
+  police_station: createColoredIcon("#2563eb"),
+  civil_defense: createColoredIcon("#ea580c"),
   sms_activity: createColoredIcon("#3b82f6"),
   patient_density: createColoredIcon("#8b5cf6"),
   telegram_intel: createColoredIcon("#06b6d4"),
@@ -92,10 +94,10 @@ const hospitalStatusColors: Record<string, string> = {
   destroyed: "#1f2937",
 };
 
-// Hospital marker icon — uses a cross symbol
-function createHospitalIcon(statusColor: string): L.DivIcon {
+// Facility marker icon — symbol + color per department type
+function createFacilityIcon(statusColor: string, symbol: string): L.DivIcon {
   return L.divIcon({
-    className: "hospital-marker",
+    className: "facility-marker",
     html: `<div style="
       background-color: white;
       width: 28px;
@@ -106,15 +108,28 @@ function createHospitalIcon(statusColor: string): L.DivIcon {
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 16px;
-      font-weight: bold;
-      color: ${statusColor};
+      font-size: 14px;
       line-height: 1;
-    ">+</div>`,
+    ">${symbol}</div>`,
     iconSize: [28, 28],
     iconAnchor: [14, 14],
     popupAnchor: [0, -16],
   });
+}
+
+// Hospital marker icon — red cross
+function createHospitalIcon(statusColor: string): L.DivIcon {
+  return createFacilityIcon(statusColor, '<span style="font-weight:bold;color:' + statusColor + '">+</span>');
+}
+
+// Police station marker icon — shield emoji
+function createPoliceIcon(statusColor: string): L.DivIcon {
+  return createFacilityIcon(statusColor, "\u{1F6E1}");
+}
+
+// Civil defense marker icon — fire truck emoji
+function createCivilDefenseIcon(statusColor: string): L.DivIcon {
+  return createFacilityIcon(statusColor, "\u{1F692}");
 }
 
 // Severity to color mapping for SOS/crisis circles
@@ -135,6 +150,8 @@ const LAYERS: {
   { key: "sos", label: "SOS Requests", i18nKey: "map.layer.sos", icon: "&#x1F198;" },
   { key: "crisis", label: "Crisis Events", i18nKey: "map.layer.crisis", icon: "&#x26A0;&#xFE0F;" },
   { key: "hospital", label: "Hospitals", i18nKey: "map.layer.hospital", icon: "&#x1F3E5;" },
+  { key: "police_station", label: "Police Stations", i18nKey: "map.layer.police_station", icon: "&#x1F6E1;&#xFE0F;" },
+  { key: "civil_defense", label: "Civil Defense", i18nKey: "map.layer.civil_defense", icon: "&#x1F692;" },
   {
     key: "sms_activity",
     label: "SMS Activity",
@@ -195,6 +212,7 @@ const LiveMap: React.FC = () => {
   const [severityFilter, setSeverityFilter] = useState("");
   const [sourceFilter, setSourceFilter] = useState("");
   const [hospitals, setHospitals] = useState<Hospital[]>([]);
+  const [withinRange, setWithinRange] = useState(false);
 
   // Fetch initial events
   const fetchEvents = useCallback(async () => {
@@ -206,8 +224,9 @@ const LiveMap: React.FC = () => {
 
     try {
       setLoading(true);
+      const rangeParam = withinRange ? "&within_range=true" : "";
       const res = await fetch(
-        `${API_URL}/api/v1/map/events?hours=${timeRange}`,
+        `${API_URL}/api/v1/map/events?hours=${timeRange}${rangeParam}`,
         { headers }
       );
       if (res.ok) {
@@ -221,7 +240,7 @@ const LiveMap: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [timeRange, setEvents]);
+  }, [timeRange, withinRange, setEvents]);
 
   useEffect(() => {
     fetchEvents();
@@ -274,8 +293,8 @@ const LiveMap: React.FC = () => {
     });
   }, [events, activeLayers, timeRange, timeSlider, severityFilter, sourceFilter]);
 
-  // Map center (Gaza strip)
-  const mapCenter: [number, number] = [31.5, 34.47];
+  // Map center (Palestine — fits Gaza + West Bank)
+  const mapCenter: [number, number] = [31.8, 34.9];
 
   return (
     <div className="relative flex h-[calc(100vh-8rem)] flex-col">
@@ -289,7 +308,7 @@ const LiveMap: React.FC = () => {
 
         <MapContainer
           center={mapCenter}
-          zoom={10}
+          zoom={8}
           style={{ height: "100%", width: "100%" }}
           scrollWheelZoom={true}
           zoomControl={true}
@@ -301,38 +320,47 @@ const LiveMap: React.FC = () => {
 
           <MapBoundsUpdater events={filteredEvents} />
 
-          {/* Render hospital markers with coverage circles */}
-          {activeLayers.has("hospital") &&
-            hospitals
-              .filter((h) => h.latitude != null && h.longitude != null)
-              .map((hospital) => {
-                const statusColor =
-                  hospitalStatusColors[hospital.status] ?? "#22c55e";
-                const radiusM = (hospital.coverage_radius_km || 5) * 1000;
-                return (
-                  <React.Fragment key={`hospital-${hospital.id}`}>
-                    <Circle
-                      center={[hospital.latitude!, hospital.longitude!]}
-                      radius={radiusM}
-                      pathOptions={{
-                        color: statusColor,
-                        fillColor: statusColor,
-                        fillOpacity: 0.07,
-                        weight: 2,
-                        dashArray: "6 4",
-                      }}
-                    />
-                    <Marker
-                      position={[hospital.latitude!, hospital.longitude!]}
-                      icon={createHospitalIcon(statusColor)}
-                    >
-                      <Popup>
-                        <HospitalPopup hospital={hospital} />
-                      </Popup>
-                    </Marker>
-                  </React.Fragment>
-                );
-              })}
+          {/* Render facility markers with coverage circles — split by department type */}
+          {hospitals
+            .filter((h) => h.latitude != null && h.longitude != null)
+            .map((facility) => {
+              const dept = facility.department_type || "hospital";
+              const layerKey = dept === "police" ? "police_station" : dept === "civil_defense" ? "civil_defense" : "hospital";
+              if (!activeLayers.has(layerKey)) return null;
+
+              const statusColor = hospitalStatusColors[facility.status] ?? "#22c55e";
+              const deptColor = dept === "police" ? "#2563eb" : dept === "civil_defense" ? "#ea580c" : statusColor;
+              const radiusM = (facility.coverage_radius_km || 5) * 1000;
+              const icon = dept === "police"
+                ? createPoliceIcon(deptColor)
+                : dept === "civil_defense"
+                ? createCivilDefenseIcon(deptColor)
+                : createHospitalIcon(statusColor);
+
+              return (
+                <React.Fragment key={`facility-${facility.id}`}>
+                  <Circle
+                    center={[facility.latitude!, facility.longitude!]}
+                    radius={radiusM}
+                    pathOptions={{
+                      color: deptColor,
+                      fillColor: deptColor,
+                      fillOpacity: 0.07,
+                      weight: 2,
+                      dashArray: "6 4",
+                    }}
+                  />
+                  <Marker
+                    position={[facility.latitude!, facility.longitude!]}
+                    icon={icon}
+                  >
+                    <Popup>
+                      <HospitalPopup hospital={facility} />
+                    </Popup>
+                  </Marker>
+                </React.Fragment>
+              );
+            })}
 
           {/* Render event markers */}
           {filteredEvents.map((event) => {
@@ -453,15 +481,14 @@ const LiveMap: React.FC = () => {
                     dangerouslySetInnerHTML={{ __html: layer.icon }}
                   />
                   <span className="text-xs text-gray-700">
-                    {t(layer.i18nKey)}
+                    {layer.label}
                   </span>
                 </label>
               ))}
             </div>
             <div className="border-t border-gray-100 px-4 py-2">
               <p className="text-xs text-gray-500">
-                {filteredEvents.length} events
-                {activeLayers.has("hospital") && `, ${hospitals.filter((h) => h.latitude != null).length} hospitals`}
+                {filteredEvents.length} events, {hospitals.filter((h) => h.latitude != null).length} facilities
               </p>
             </div>
           </div>
@@ -539,11 +566,27 @@ const LiveMap: React.FC = () => {
                 <option value={168}>Last 7 days</option>
               </select>
             </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-gray-500">
+                Range
+              </label>
+              <button
+                onClick={() => setWithinRange(!withinRange)}
+                className={`w-full rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+                  withinRange
+                    ? "bg-blue-600 text-white"
+                    : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                }`}
+              >
+                {withinRange ? "My Range" : "Show All"}
+              </button>
+            </div>
             <button
               onClick={() => {
                 setSeverityFilter("");
                 setSourceFilter("");
                 setTimeRange(24);
+                setWithinRange(false);
               }}
               className="w-full text-xs text-blue-600 hover:text-blue-800"
             >
@@ -579,8 +622,16 @@ const LiveMap: React.FC = () => {
   );
 };
 
-// Sub-component for hospital popups
+// Department type labels
+const deptTypeLabels: Record<string, string> = {
+  hospital: "Hospital",
+  police: "Police Station",
+  civil_defense: "Civil Defense",
+};
+
+// Sub-component for facility popups (hospitals, police, civil defense)
 const HospitalPopup: React.FC<{ hospital: Hospital }> = ({ hospital }) => {
+  const dept = hospital.department_type || "hospital";
   const statusColor = hospitalStatusColors[hospital.status] ?? "#22c55e";
   const statusLabel = hospital.status.charAt(0).toUpperCase() + hospital.status.slice(1);
 
@@ -593,22 +644,29 @@ const HospitalPopup: React.FC<{ hospital: Hospital }> = ({ hospital }) => {
         />
         <span className="font-semibold text-gray-900">{hospital.name}</span>
       </div>
-      <span
-        className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium mb-2"
-        style={{
-          backgroundColor: statusColor + "20",
-          color: statusColor,
-        }}
-      >
-        {statusLabel}
-      </span>
+      <div className="flex items-center gap-2 mb-2">
+        <span
+          className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium"
+          style={{ backgroundColor: statusColor + "20", color: statusColor }}
+        >
+          {statusLabel}
+        </span>
+        <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+          {deptTypeLabels[dept] || dept}
+        </span>
+      </div>
       <div className="space-y-0.5 text-xs text-gray-600">
-        <p>Beds: {hospital.available_beds}/{hospital.bed_capacity}</p>
-        <p>ICU: {hospital.icu_beds}</p>
+        {dept === "hospital" && (
+          <>
+            <p>Beds: {hospital.available_beds}/{hospital.bed_capacity}</p>
+            <p>ICU: {hospital.icu_beds}</p>
+          </>
+        )}
         {hospital.coverage_radius_km > 0 && (
           <p>Coverage: {hospital.coverage_radius_km} km</p>
         )}
         {hospital.phone && <p>Phone: {hospital.phone}</p>}
+        {hospital.address && <p>{hospital.address}</p>}
         {hospital.specialties?.length > 0 && (
           <p className="mt-1">
             {hospital.specialties.join(", ")}

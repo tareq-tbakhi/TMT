@@ -20,6 +20,24 @@ interface SupplyLevels {
   food: string;
 }
 
+interface PoliceSupplyLevels {
+  ammunition: string;
+  fuel: string;
+  communication_equipment: string;
+  protective_gear: string;
+  vehicles: string;
+}
+
+interface CivilDefenseSupplyLevels {
+  fuel: string;
+  rescue_equipment: string;
+  fire_suppression: string;
+  medical_kits: string;
+  protective_gear: string;
+  water: string;
+  food: string;
+}
+
 interface StatusChange {
   id: string;
   status: string;
@@ -319,6 +337,24 @@ const StatusUpdate: React.FC = () => {
     food: "medium",
   });
 
+  const [policeSupplies, setPoliceSupplies] = useState<PoliceSupplyLevels>({
+    ammunition: "medium",
+    fuel: "medium",
+    communication_equipment: "medium",
+    protective_gear: "medium",
+    vehicles: "medium",
+  });
+
+  const [cdSupplies, setCdSupplies] = useState<CivilDefenseSupplyLevels>({
+    fuel: "medium",
+    rescue_equipment: "medium",
+    fire_suppression: "medium",
+    medical_kits: "medium",
+    protective_gear: "medium",
+    water: "medium",
+    food: "medium",
+  });
+
   // UI state
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -471,16 +507,22 @@ const StatusUpdate: React.FC = () => {
           },
           body: JSON.stringify({
             status,
-            bed_capacity: totalBeds,
-            icu_beds: icuBeds,
-            available_beds: availableBeds,
-            specialties,
-            supply_levels: supplies,
-            patrol_units: patrolUnits,
-            available_units: availableUnits,
-            rescue_teams: rescueTeams,
-            available_teams: availableTeams,
-            shelter_capacity: shelterCapacity,
+            ...(dept === "hospital" ? {
+              bed_capacity: totalBeds,
+              icu_beds: icuBeds,
+              available_beds: availableBeds,
+              specialties,
+              supply_levels: supplies,
+            } : dept === "police" ? {
+              patrol_units: patrolUnits,
+              available_units: availableUnits,
+              supply_levels: policeSupplies,
+            } : {
+              rescue_teams: rescueTeams,
+              available_teams: availableTeams,
+              shelter_capacity: shelterCapacity,
+              supply_levels: cdSupplies,
+            }),
           }),
         }
       );
@@ -796,13 +838,13 @@ const StatusUpdate: React.FC = () => {
             </div>
           )}
 
-          {/* Supply Levels */}
+          {/* Supply Levels — department-specific */}
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
             <h2 className="mb-4 text-lg font-semibold text-gray-900">
-              {t("hospital.supplies")}
+              {dept === "hospital" ? t("hospital.supplies") : dept === "police" ? "Equipment & Supplies" : "Rescue Supplies"}
             </h2>
             <div className="space-y-4">
-              {(
+              {dept === "hospital" && (
                 Object.entries(supplies) as [keyof SupplyLevels, string][]
               ).map(([key, value]) => (
                 <div key={key}>
@@ -810,31 +852,72 @@ const StatusUpdate: React.FC = () => {
                     <label className="text-sm font-medium text-gray-700 capitalize">
                       {key.replace(/_/g, " ")}
                     </label>
-                    <span
-                      className={`inline-flex h-3 w-3 rounded-full ${
-                        supplyLevelColors[value] ?? "bg-gray-300"
-                      }`}
-                    />
+                    <span className={`inline-flex h-3 w-3 rounded-full ${supplyLevelColors[value] ?? "bg-gray-300"}`} />
                   </div>
                   <div className="flex gap-2">
                     {SUPPLY_LEVELS.map((level) => (
-                      <button
-                        key={level}
-                        onClick={() => handleSupplyChange(key, level)}
+                      <button key={level} onClick={() => handleSupplyChange(key, level)}
                         className={`flex-1 rounded-md border py-1.5 text-xs font-medium capitalize transition-colors ${
                           value === level
-                            ? level === "critical"
-                              ? "border-red-500 bg-red-50 text-red-700"
-                              : level === "low"
-                              ? "border-orange-500 bg-orange-50 text-orange-700"
-                              : level === "medium"
-                              ? "border-yellow-500 bg-yellow-50 text-yellow-700"
+                            ? level === "critical" ? "border-red-500 bg-red-50 text-red-700"
+                              : level === "low" ? "border-orange-500 bg-orange-50 text-orange-700"
+                              : level === "medium" ? "border-yellow-500 bg-yellow-50 text-yellow-700"
                               : "border-green-500 bg-green-50 text-green-700"
                             : "border-gray-200 text-gray-500 hover:border-gray-300"
                         }`}
-                      >
-                        {level}
-                      </button>
+                      >{level}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {dept === "police" && (
+                Object.entries(policeSupplies) as [keyof PoliceSupplyLevels, string][]
+              ).map(([key, value]) => (
+                <div key={key}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700 capitalize">
+                      {key.replace(/_/g, " ")}
+                    </label>
+                    <span className={`inline-flex h-3 w-3 rounded-full ${supplyLevelColors[value] ?? "bg-gray-300"}`} />
+                  </div>
+                  <div className="flex gap-2">
+                    {SUPPLY_LEVELS.map((level) => (
+                      <button key={level} onClick={() => setPoliceSupplies(prev => ({ ...prev, [key]: level }))}
+                        className={`flex-1 rounded-md border py-1.5 text-xs font-medium capitalize transition-colors ${
+                          value === level
+                            ? level === "critical" ? "border-red-500 bg-red-50 text-red-700"
+                              : level === "low" ? "border-orange-500 bg-orange-50 text-orange-700"
+                              : level === "medium" ? "border-yellow-500 bg-yellow-50 text-yellow-700"
+                              : "border-green-500 bg-green-50 text-green-700"
+                            : "border-gray-200 text-gray-500 hover:border-gray-300"
+                        }`}
+                      >{level}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {dept === "civil_defense" && (
+                Object.entries(cdSupplies) as [keyof CivilDefenseSupplyLevels, string][]
+              ).map(([key, value]) => (
+                <div key={key}>
+                  <div className="mb-2 flex items-center justify-between">
+                    <label className="text-sm font-medium text-gray-700 capitalize">
+                      {key.replace(/_/g, " ")}
+                    </label>
+                    <span className={`inline-flex h-3 w-3 rounded-full ${supplyLevelColors[value] ?? "bg-gray-300"}`} />
+                  </div>
+                  <div className="flex gap-2">
+                    {SUPPLY_LEVELS.map((level) => (
+                      <button key={level} onClick={() => setCdSupplies(prev => ({ ...prev, [key]: level }))}
+                        className={`flex-1 rounded-md border py-1.5 text-xs font-medium capitalize transition-colors ${
+                          value === level
+                            ? level === "critical" ? "border-red-500 bg-red-50 text-red-700"
+                              : level === "low" ? "border-orange-500 bg-orange-50 text-orange-700"
+                              : level === "medium" ? "border-yellow-500 bg-yellow-50 text-yellow-700"
+                              : "border-green-500 bg-green-50 text-green-700"
+                            : "border-gray-200 text-gray-500 hover:border-gray-300"
+                        }`}
+                      >{level}</button>
                     ))}
                   </div>
                 </div>
@@ -873,7 +956,9 @@ const StatusUpdate: React.FC = () => {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-gray-500">
-                    Beds available: {change.available_beds}
+                    {dept === "hospital" ? `Beds available: ${change.available_beds}` :
+                     dept === "police" ? "Status update" :
+                     "Status update"}
                   </p>
                 </div>
               ))}

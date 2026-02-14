@@ -119,6 +119,67 @@ def _classify_department_from_message(message: str, patient_status: str) -> str:
     return "hospital"
 
 
+# ── Multi-department classification ─────────────────────────────────────
+
+_MEDICAL_KEYWORDS = [
+    "injur", "hurt", "bleed", "wound", "broken", "fractur", "burn",
+    "unconscious", "breathing", "heart", "ambulanc", "medical", "sick",
+    "pain", "casualt", "dead", "dying", "pregnant",
+]
+
+_STRUCTURAL_KEYWORDS = [
+    "collaps", "rubble", "trapped", "debris", "structur", "building",
+    "sinkhole", "landslide", "cave", "buried",
+]
+
+_SECURITY_KEYWORDS = [
+    "shoot", "shot", "gun", "armed", "sniper", "hostage", "stab",
+    "knife", "weapon", "threaten", "attack", "assault", "violence",
+    "suspicious", "intruder",
+]
+
+
+def _classify_departments(message: str, patient_status: str) -> tuple[str, str | None]:
+    """Classify primary and optional secondary department for an SOS.
+
+    Returns (primary_department, secondary_department_or_None).
+    Secondary is created when the situation clearly needs more than one department.
+    """
+    primary = _classify_department_from_message(message, patient_status)
+    msg = (message or "").lower()
+
+    secondary = None
+
+    if primary == "civil_defense":
+        # Fire/collapse + injuries → hospital support
+        if _keyword_score(msg, _MEDICAL_KEYWORDS) >= 1:
+            secondary = "hospital"
+    elif primary == "police":
+        # Shooting/attack + structural damage → civil_defense support
+        if _keyword_score(msg, _STRUCTURAL_KEYWORDS) >= 1:
+            secondary = "civil_defense"
+        # Shooting/attack + injuries → hospital support
+        elif _keyword_score(msg, _MEDICAL_KEYWORDS) >= 1:
+            secondary = "hospital"
+    elif primary == "hospital":
+        # Medical emergency + security threat → police support
+        if _keyword_score(msg, _SECURITY_KEYWORDS) >= 1:
+            secondary = "police"
+        # Medical emergency + trapped/structural → civil_defense support
+        elif _keyword_score(msg, _STRUCTURAL_KEYWORDS) >= 1:
+            secondary = "civil_defense"
+
+    # Patient status overrides
+    if patient_status == "trapped" and primary == "hospital" and secondary is None:
+        secondary = "civil_defense"
+
+    # Never duplicate
+    if secondary == primary:
+        secondary = None
+
+    return primary, secondary
+
+
 @celery_app.task(name="tasks.sos_tasks.triage_sos_request", bind=True, max_retries=2,
                  time_limit=300, soft_time_limit=270)
 def triage_sos_request(self, sos_data: dict):
@@ -269,10 +330,35 @@ def _fallback_triage(sos_data: dict):
                 lat = lat or 31.5017
                 lon = lon or 34.4668
 
-            # Message-content-aware department routing
-            routed_department = _classify_department_from_message(message, patient_status)
+            # Message-content-aware department routing (primary + optional secondary)
+            primary_dept, secondary_dept = _classify_departments(message, patient_status)
+
+            base_metadata = {
+                "sos_id": sos_data.get("id"),
+                "patient_id": patient_id,
+                "patient_status": patient_status,
+                "sos_severity": severity_num,
+                "ai_classified": False,
+                "routed_department": primary_dept,
+                "priority_score": priority.get("priority_score", 50),
+                "priority_factors": priority.get("priority_factors", []),
+                "response_urgency": priority.get("estimated_response_urgency", "when_available"),
+                "recommendation": priority.get("recommendation", ""),
+                "nearby_alert_count": len(nearby_alerts),
+                "telegram_corroborated": len(nearby_telegram) > 0,
+                "patient_vulnerable": bool(
+                    patient_info and (
+                        patient_info.get("mobility") in ("bedridden", "wheelchair")
+                        or patient_info.get("living_situation") == "alone"
+                    )
+                ),
+                "patient_trust_score": patient_info.get("trust_score", 1.0) if patient_info else 1.0,
+                "patient_false_alarms": patient_info.get("false_alarm_count", 0) if patient_info else 0,
+                "patient_info": sos_data.get("patient_info"),
+            }
 
             try:
+                # Create primary alert
                 alert = await create_alert(
                     db,
                     event_type=event_type,
@@ -284,39 +370,52 @@ def _fallback_triage(sos_data: dict):
                     source="sos",
                     confidence=confidence,
                     severity_override=severity_str,
-                    routed_department=routed_department,
-                    metadata={
-                        "sos_id": sos_data.get("id"),
-                        "patient_id": patient_id,
-                        "patient_status": patient_status,
-                        "sos_severity": severity_num,
-                        "ai_classified": False,
-                        "routed_department": routed_department,
-                        "priority_score": priority.get("priority_score", 50),
-                        "priority_factors": priority.get("priority_factors", []),
-                        "response_urgency": priority.get("estimated_response_urgency", "when_available"),
-                        "recommendation": priority.get("recommendation", ""),
-                        "nearby_alert_count": len(nearby_alerts),
-                        "telegram_corroborated": len(nearby_telegram) > 0,
-                        "patient_vulnerable": bool(
-                            patient_info and (
-                                patient_info.get("mobility") in ("bedridden", "wheelchair")
-                                or patient_info.get("living_situation") == "alone"
-                            )
-                        ),
-                        "patient_trust_score": patient_info.get("trust_score", 1.0) if patient_info else 1.0,
-                        "patient_false_alarms": patient_info.get("false_alarm_count", 0) if patient_info else 0,
-                        "patient_info": sos_data.get("patient_info"),
-                    },
+                    routed_department=primary_dept,
+                    alert_type="primary",
+                    metadata=base_metadata,
                     broadcast=True,
                     notify_patients=True,
                 )
+
+                # Create secondary alert if needed
+                if secondary_dept:
+                    secondary_metadata = {
+                        **base_metadata,
+                        "is_secondary": True,
+                        "primary_department": primary_dept,
+                        "primary_alert_id": alert.get("id"),
+                        "routed_department": secondary_dept,
+                    }
+                    try:
+                        sec_alert = await create_alert(
+                            db,
+                            event_type=event_type,
+                            latitude=lat,
+                            longitude=lon,
+                            title=f"[Supporting] {title}",
+                            radius_m=500,
+                            details=alert_details,
+                            source="sos",
+                            confidence=confidence,
+                            severity_override=severity_str,
+                            routed_department=secondary_dept,
+                            alert_type="secondary",
+                            parent_alert_id=alert.get("id"),
+                            metadata=secondary_metadata,
+                            broadcast=True,
+                            notify_patients=False,  # avoid double-notify
+                        )
+                        logger.info("Secondary alert created: %s → dept=%s (supporting %s)",
+                                    sec_alert.get("id"), secondary_dept, alert.get("id"))
+                    except Exception as e:
+                        logger.warning("Failed to create secondary alert: %s", e)
+
                 await db.commit()
-                logger.info("Fallback alert created from SOS %s → Alert %s (dept=%s)",
-                            sos_data.get("id"), alert.get("id"), routed_department)
+                logger.info("Fallback alert created from SOS %s → Alert %s (dept=%s, secondary=%s)",
+                            sos_data.get("id"), alert.get("id"), primary_dept, secondary_dept)
 
                 # Update SOS record with routing
-                _update_sos_routing(sos_data.get("id"), json.dumps({"routed_department": routed_department}))
+                _update_sos_routing(sos_data.get("id"), json.dumps({"routed_department": primary_dept}))
 
                 return alert
             except Exception as e:
