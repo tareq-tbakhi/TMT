@@ -160,7 +160,7 @@ const resources = {
       "common.language": "Language",
 
       // Admin
-      "admin.title": "Super Admin",
+      "admin.title": "Command Center",
       "admin.superAdmin": "Super Admin",
       "admin.role": "System Administrator",
       "admin.retry": "Retry",
@@ -168,6 +168,7 @@ const resources = {
       // Admin Navigation
       "admin.nav.dashboard": "Dashboard",
       "admin.nav.hospitals": "Hospitals",
+      "admin.nav.facilities": "Facilities",
       "admin.nav.users": "Users",
       "admin.nav.analytics": "Analytics",
       "admin.nav.alerts": "Alerts",
@@ -409,7 +410,7 @@ const resources = {
       "common.language": "\u0627\u0644\u0644\u063a\u0629",
 
       // Admin
-      "admin.title": "\u0627\u0644\u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u0623\u0639\u0644\u0649",
+      "admin.title": "\u0645\u0631\u0643\u0632 \u0627\u0644\u0642\u064a\u0627\u062f\u0629",
       "admin.superAdmin": "\u0627\u0644\u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u0623\u0639\u0644\u0649",
       "admin.role": "\u0645\u0633\u0624\u0648\u0644 \u0627\u0644\u0646\u0638\u0627\u0645",
       "admin.retry": "\u0625\u0639\u0627\u062f\u0629 \u0627\u0644\u0645\u062d\u0627\u0648\u0644\u0629",
@@ -417,6 +418,7 @@ const resources = {
       // Admin Navigation
       "admin.nav.dashboard": "\u0644\u0648\u062d\u0629 \u0627\u0644\u0642\u064a\u0627\u062f\u0629",
       "admin.nav.hospitals": "\u0627\u0644\u0645\u0633\u062a\u0634\u0641\u064a\u0627\u062a",
+      "admin.nav.facilities": "\u0627\u0644\u0645\u0646\u0634\u0622\u062a",
       "admin.nav.users": "\u0627\u0644\u0645\u0633\u062a\u062e\u062f\u0645\u0648\u0646",
       "admin.nav.analytics": "\u0627\u0644\u062a\u062d\u0644\u064a\u0644\u0627\u062a",
       "admin.nav.alerts": "\u0627\u0644\u062a\u0646\u0628\u064a\u0647\u0627\u062a",

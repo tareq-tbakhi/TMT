@@ -40,6 +40,19 @@ const NAV_ITEMS_BY_DEPT: Record<DepartmentType, { path: string; label: string; i
   ],
 };
 
+const SUPER_ADMIN_NAV: { path: string; label: string; icon: string }[] = [
+  { path: "/dashboard", label: "nav.dashboard", icon: "\uD83D\uDCCA" },
+  { path: "/dashboard/alerts", label: "nav.alerts", icon: "\uD83D\uDD14" },
+  { path: "/dashboard/patients", label: "Patients", icon: "\uD83D\uDC65" },
+  { path: "/dashboard/analytics", label: "nav.analytics", icon: "\uD83D\uDCC8" },
+  { path: "/dashboard/map", label: "nav.map", icon: "\uD83D\uDDFA\uFE0F" },
+  { path: "/dashboard/aid-requests", label: "nav.aidRequests", icon: "\uD83E\uDD1D" },
+  { path: "/dashboard/transfers", label: "Transfers", icon: "\uD83D\uDD00" },
+  { path: "/dashboard/status", label: "nav.status", icon: "\u2699\uFE0F" },
+];
+
+const SUPER_ADMIN_COLORS = { bg: "bg-purple-50", text: "text-purple-700", accent: "bg-purple-600" };
+
 const DashboardInner: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -49,14 +62,16 @@ const DashboardInner: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
+  const isSuperAdmin = user?.role === "super_admin";
   const dept: DepartmentType = user?.facilityType ?? ROLE_TO_DEPARTMENT[user?.role ?? ""] ?? "hospital";
-  const deptLabel = DEPARTMENT_LABELS[dept] ?? "Hospital";
-  const deptColors = DEPARTMENT_COLORS[dept] ?? DEPARTMENT_COLORS.hospital;
-  const deptIcon = DEPT_ICONS[dept] ?? "\u{1F3E5}";
+  const deptLabel = isSuperAdmin ? "Command Center" : (DEPARTMENT_LABELS[dept] ?? "Hospital");
+  const deptColors = isSuperAdmin ? SUPER_ADMIN_COLORS : (DEPARTMENT_COLORS[dept] ?? DEPARTMENT_COLORS.hospital);
+  const deptIcon = isSuperAdmin ? "\u{1F30D}" : (DEPT_ICONS[dept] ?? "\u{1F3E5}");
 
   const navItems = useMemo(() => {
+    if (isSuperAdmin) return SUPER_ADMIN_NAV;
     return NAV_ITEMS_BY_DEPT[dept] ?? NAV_ITEMS_BY_DEPT.hospital;
-  }, [dept]);
+  }, [dept, isSuperAdmin]);
 
   const handleLogout = () => {
     logout();
@@ -75,9 +90,7 @@ const DashboardInner: React.FC = () => {
         : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
     }`;
 
-  const roleLabel = user?.role === "super_admin"
-    ? "Super Admin"
-    : `${deptLabel} Admin`;
+  const roleLabel = isSuperAdmin ? "Super Admin" : `${deptLabel} Admin`;
 
   return (
     <div className="flex h-screen bg-gray-50">
