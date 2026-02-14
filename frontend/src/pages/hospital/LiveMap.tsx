@@ -15,6 +15,7 @@ import { useSocketEvent } from "../../contexts/SocketContext";
 import { timeAgo, eventTypeLabels } from "../../utils/formatting";
 import type { MapEvent, Hospital, MapEventPatientInfo } from "../../services/api";
 import { getHospitals } from "../../services/api";
+import MapDetailPanel from "../../components/maps/MapDetailPanel";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -200,10 +201,12 @@ const LiveMap: React.FC = () => {
     events,
     activeLayers,
     timeRange,
+    selectedEvent,
     setEvents,
     addEvent,
     toggleLayer,
     setTimeRange,
+    setSelectedEvent,
   } = useMapStore();
 
   const [loading, setLoading] = useState(true);
@@ -383,6 +386,7 @@ const LiveMap: React.FC = () => {
                   <Marker
                     position={[event.latitude, event.longitude]}
                     icon={layerIcons.crisis}
+                    eventHandlers={{ click: () => setSelectedEvent(event) }}
                   >
                     <Popup>
                       <EventPopup event={event} />
@@ -418,6 +422,7 @@ const LiveMap: React.FC = () => {
                   key={event.id}
                   position={[event.latitude, event.longitude]}
                   icon={createPulsingSosIcon(event.severity)}
+                  eventHandlers={{ click: () => setSelectedEvent(event) }}
                 >
                   <Popup maxWidth={340}>
                     <SOSPopup event={event} />
@@ -433,6 +438,7 @@ const LiveMap: React.FC = () => {
                   key={event.id}
                   position={[event.latitude, event.longitude]}
                   icon={layerIcons.patient}
+                  eventHandlers={{ click: () => setSelectedEvent(event) }}
                 >
                   <Popup maxWidth={300}>
                     <PatientLocationPopup event={event} />
@@ -447,6 +453,7 @@ const LiveMap: React.FC = () => {
                 key={event.id}
                 position={[event.latitude, event.longitude]}
                 icon={layerIcons[event.layer] ?? defaultIcon}
+                eventHandlers={{ click: () => setSelectedEvent(event) }}
               >
                 <Popup>
                   <EventPopup event={event} />
@@ -618,6 +625,9 @@ const LiveMap: React.FC = () => {
           Scrub to filter events by time within the last {timeRange} hours
         </p>
       </div>
+
+      {/* Detail side panel */}
+      {selectedEvent && <MapDetailPanel />}
     </div>
   );
 };
