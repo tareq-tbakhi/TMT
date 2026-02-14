@@ -1129,8 +1129,8 @@ export default function Profile() {
           )}
         </Section>
 
-        {/* ─── Danger Zone ────────────────────────────────── */}
-        <div className="bg-white rounded-xl shadow-sm border border-red-200 p-6 mt-8">
+        {/* ─── Danger Zone (commented out) ────────────────────────────────── */}
+        {/* <div className="bg-white rounded-xl shadow-sm border border-red-200 p-6 mt-8">
           <h2 className="text-lg font-semibold text-red-700 mb-2">
             Danger Zone
           </h2>
@@ -1169,7 +1169,7 @@ export default function Profile() {
               Delete My Account
             </button>
           )}
-        </div>
+        </div> */}
       </div>
     </div>
   );

@@ -3,12 +3,7 @@ import { io, type Socket } from "socket.io-client";
 import { getAlerts, getHospitals, type Alert, type Hospital } from "../../services/api";
 import { useAuthStore } from "../../store/authStore";
 import { getCurrentPosition } from "../../utils/locationCodec";
-import {
-  getSeverityInfo,
-  eventTypeLabels,
-  timeAgo,
-  formatDate,
-} from "../../utils/formatting";
+import { eventTypeLabels, timeAgo } from "../../utils/formatting";
 
 // ─── Haversine Distance ─────────────────────────────────────────
 
@@ -31,114 +26,66 @@ function haversineKm(
   return R * c;
 }
 
+// ─── Severity Icon Component ────────────────────────────────────
+
+function SeverityIcon({ severity }: { severity: string }) {
+  const colors: Record<string, string> = {
+    critical: "bg-red-500",
+    high: "bg-orange-500",
+    medium: "bg-yellow-500",
+    low: "bg-blue-500",
+  };
+
+  return (
+    <div className={`w-3 h-3 rounded-full ${colors[severity] || "bg-gray-400"}`} />
+  );
+}
+
 // ─── Alert Card Component ───────────────────────────────────────
 
 function AlertCard({
   alert,
-  distance,
-  nearestHospital,
   expanded,
   onToggle,
 }: {
   alert: Alert;
-  distance: number | null;
-  nearestHospital: (Hospital & { distance: number }) | null;
   expanded: boolean;
   onToggle: () => void;
 }) {
-  const severityInfo = getSeverityInfo(alert.severity);
-  const eventLabel =
-    eventTypeLabels[alert.event_type]?.en || alert.event_type;
   const isExpired = alert.expires_at && new Date(alert.expires_at) < new Date();
 
   return (
     <div
-      className={`bg-white rounded-xl border shadow-sm overflow-hidden transition-all ${
-        isExpired
-          ? "border-gray-200 opacity-60"
-          : alert.severity === "critical"
-            ? "border-red-200"
-            : alert.severity === "high"
-              ? "border-orange-200"
-              : "border-gray-200"
+      className={`bg-white rounded-2xl overflow-hidden transition-all ${
+        isExpired ? "opacity-50" : ""
+      } ${
+        alert.severity === "critical"
+          ? "ring-2 ring-red-100"
+          : "ring-1 ring-gray-100"
       }`}
     >
       {/* Main row */}
       <button
         onClick={onToggle}
-        className="w-full px-5 py-4 flex items-start gap-4 text-start hover:bg-gray-50 transition"
+        className="w-full p-4 flex items-center gap-3 text-start active:bg-gray-50 transition"
       >
-        {/* Severity Badge */}
-        <div
-          className={`px-2.5 py-1 rounded-lg text-xs font-bold uppercase tracking-wider shrink-0 mt-0.5 ${severityInfo.bgColor} ${severityInfo.color}`}
-        >
-          {severityInfo.label}
-        </div>
+        {/* Severity indicator */}
+        <SeverityIcon severity={alert.severity} />
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-              {eventLabel}
-            </span>
-            {isExpired && (
-              <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded">
-                Expired
-              </span>
-            )}
-          </div>
-          <h3 className="font-semibold text-gray-900 text-sm leading-tight truncate">
+          <h3 className="font-medium text-gray-900 text-[15px] leading-snug line-clamp-2">
             {alert.title}
           </h3>
-          <div className="flex items-center gap-3 mt-1.5 text-xs text-gray-500">
-            {distance !== null && (
-              <span className="flex items-center gap-1">
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
-                    clipRule="evenodd"
-                  />
-                </svg>
-                {distance.toFixed(1)} km away
-              </span>
-            )}
-            <span className="flex items-center gap-1">
-              <svg
-                className="w-3.5 h-3.5"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              {timeAgo(alert.created_at)}
-            </span>
-            {alert.affected_patients_count > 0 && (
-              <span className="flex items-center gap-1">
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path d="M9 6a3 3 0 11-6 0 3 3 0 016 0zM17 6a3 3 0 11-6 0 3 3 0 016 0zM12.93 17c.046-.327.07-.66.07-1a6.97 6.97 0 00-1.5-4.33A5 5 0 0119 16v1h-6.07zM6 11a5 5 0 015 5v1H1v-1a5 5 0 015-5z" />
-                </svg>
-                {alert.affected_patients_count} affected
-              </span>
-            )}
-          </div>
+          <p className="text-xs text-gray-400 mt-1">
+            {timeAgo(alert.created_at)}
+            {alert.source && ` · ${alert.source}`}
+          </p>
         </div>
 
         {/* Expand chevron */}
         <svg
-          className={`w-5 h-5 text-gray-400 shrink-0 mt-1 transition-transform ${
+          className={`w-5 h-5 text-gray-300 shrink-0 transition-transform ${
             expanded ? "rotate-180" : ""
           }`}
           fill="none"
@@ -154,50 +101,30 @@ function AlertCard({
         </svg>
       </button>
 
-      {/* Expanded Details - Minimal Version */}
+      {/* Expanded Details */}
       {expanded && (
-        <div className="px-5 pb-5 border-t border-gray-100 pt-4 space-y-4">
+        <div className="px-4 pb-4 space-y-3">
           {/* Description */}
           {alert.details && (
-            <p className="text-sm text-gray-700 leading-relaxed">
+            <p className="text-sm text-gray-600 leading-relaxed">
               {alert.details}
             </p>
           )}
 
-          {/* Safety Instructions */}
-          <div className="bg-amber-50 rounded-lg p-4">
-            <h4 className="text-xs font-semibold text-amber-800 uppercase tracking-wide mb-2 flex items-center gap-1.5">
-              <svg
-                className="w-4 h-4"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              What to do
-            </h4>
-            <ul className="text-sm text-amber-900 space-y-2">
+          {/* Safety Instructions - Compact */}
+          <div className="bg-amber-50/80 rounded-xl p-3">
+            <p className="text-xs font-semibold text-amber-700 mb-2">What to do:</p>
+            <div className="space-y-1.5">
               {getSafetyInstructions(alert.event_type).map((instruction, i) => (
-                <li key={i} className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-xs font-bold shrink-0">
+                <div key={i} className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
                     {i + 1}
                   </span>
-                  {instruction}
-                </li>
+                  <span className="text-sm text-amber-800">{instruction}</span>
+                </div>
               ))}
-            </ul>
+            </div>
           </div>
-
-          {/* Source - Simple footer */}
-          {alert.source && (
-            <p className="text-xs text-gray-500">
-              Source: <span className="font-medium text-gray-700">{alert.source}</span>
-            </p>
-          )}
         </div>
       )}
     </div>
@@ -256,6 +183,12 @@ function getSafetyInstructions(eventType: string): string[] {
       "Apply first aid if trained to do so",
       "Do not move an injured person unless necessary",
     ],
+    disease_outbreak: [
+      "Stay home and avoid contact with others",
+      "Wash your hands frequently with soap for at least 20 seconds",
+      "Wear a mask if you must go outside",
+      "Monitor your symptoms and seek medical help if needed",
+    ],
   };
 
   return (
@@ -272,19 +205,15 @@ function getSafetyInstructions(eventType: string): string[] {
 
 type MainTab = "alerts" | "needs";
 
-// ─── Filter Tabs ────────────────────────────────────────────────
-
-type FilterTab = "all" | "critical" | "high" | "medium" | "low";
-
-// ─── Demo Crisis Alerts (earthquakes, floods, wars, etc.) ────────
+// ─── Demo Crisis Alerts ─────────────────────────────────────────
 
 const DEMO_CRISIS_ALERTS: Alert[] = [
   {
     id: "demo-critical-1",
-    title: "EARTHQUAKE ALERT: Magnitude 6.2 Detected",
-    details: "A significant earthquake has been detected in the northern region. The Ministry of Health has issued an emergency alert for all residents in affected areas. Please follow safety protocols immediately.",
+    title: "DISEASE OUTBREAK: Infectious Virus Spreading in Your Area",
+    details: "A contagious disease has been detected spreading in your area. The Ministry of Health urges all residents to take precautions immediately. Stay home and avoid contact with others.",
     severity: "critical",
-    event_type: "earthquake",
+    event_type: "disease_outbreak",
     latitude: 33.8869,
     longitude: 35.5131,
     radius_m: 50000,
@@ -350,7 +279,6 @@ export default function Alerts() {
 
   // UI
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [filter, setFilter] = useState<FilterTab>("all");
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [mainTab, setMainTab] = useState<MainTab>("alerts");
 
@@ -514,15 +442,7 @@ export default function Alerts() {
   };
 
   // Use demo alerts based on selected main tab
-  // "alerts" = crisis alerts (earthquakes, floods, wars)
-  // "needs" = hospital needs (blood donations, supplies, volunteers)
   const displayAlerts: Alert[] = mainTab === "alerts" ? DEMO_CRISIS_ALERTS : DEMO_HOSPITAL_NEEDS;
-
-  // Filter alerts
-  const filteredAlerts = displayAlerts.filter((a: Alert) => {
-    if (filter === "all") return true;
-    return a.severity === filter;
-  });
 
   // Sort: non-expired first, then by severity, then by recency
   const severityOrder: Record<string, number> = {
@@ -532,7 +452,7 @@ export default function Alerts() {
     low: 3,
   };
 
-  const sortedAlerts = [...filteredAlerts].sort((a, b) => {
+  const sortedAlerts = [...displayAlerts].sort((a, b) => {
     const aExpired = a.expires_at && new Date(a.expires_at) < new Date();
     const bExpired = b.expires_at && new Date(b.expires_at) < new Date();
     if (aExpired && !bExpired) return 1;
@@ -544,15 +464,6 @@ export default function Alerts() {
 
     return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
-
-  // Count by severity
-  const counts = {
-    all: displayAlerts.length,
-    critical: displayAlerts.filter((a) => a.severity === "critical").length,
-    high: displayAlerts.filter((a) => a.severity === "high").length,
-    medium: displayAlerts.filter((a) => a.severity === "medium").length,
-    low: displayAlerts.filter((a) => a.severity === "low").length,
-  };
 
   // Nearest hospital to patient
   const patientNearestHospital = (() => {
@@ -769,265 +680,110 @@ export default function Alerts() {
         </div>
       )}
 
-      <div className="max-w-2xl mx-auto px-4 py-6">
+      <div className="max-w-2xl mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">
-              {mainTab === "alerts" ? "Crisis Alerts" : "Hospital Needs"}
-            </h1>
-            <p className="text-gray-500 text-sm mt-1">
-              {mainTab === "alerts"
-                ? "Emergency alerts in your area"
-                : "Hospitals requesting donations & supplies"}
-            </p>
-          </div>
-          <button
-            onClick={fetchData}
-            disabled={!isOnline}
-            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition disabled:opacity-50"
-            title="Refresh alerts"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-              />
-            </svg>
-          </button>
-        </div>
-
-        {/* Main Tabs: Alerts vs Needs */}
-        <div className="flex bg-gray-100 rounded-xl p-1 mb-6">
-          <button
-            onClick={() => setMainTab("alerts")}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${
+        <div className="bg-white border-b border-gray-100 px-4 py-4">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${
               mainTab === "alerts"
-                ? "bg-white text-red-600 shadow-sm"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            Alerts
-            <span className={`px-1.5 py-0.5 rounded text-xs ${
-              mainTab === "alerts" ? "bg-red-100 text-red-600" : "bg-gray-200 text-gray-500"
+                ? "bg-gradient-to-br from-red-500 to-red-600 shadow-red-200"
+                : "bg-gradient-to-br from-pink-500 to-pink-600 shadow-pink-200"
             }`}>
-              {DEMO_CRISIS_ALERTS.length}
-            </span>
-          </button>
-          <button
-            onClick={() => setMainTab("needs")}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all ${
-              mainTab === "needs"
-                ? "bg-white text-blue-600 shadow-sm"
-                : "text-gray-600 hover:text-gray-900"
-            }`}
-          >
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-            </svg>
-            Needs
-            <span className={`px-1.5 py-0.5 rounded text-xs ${
-              mainTab === "needs" ? "bg-blue-100 text-blue-600" : "bg-gray-200 text-gray-500"
-            }`}>
-              {DEMO_HOSPITAL_NEEDS.length}
-            </span>
-          </button>
-        </div>
-
-        {/* Nearest Hospital Card (global) - Commented out */}
-        {/* {patientNearestHospital && (
-          <div className="bg-white rounded-xl border border-green-200 shadow-sm p-4 mb-6">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center shrink-0">
-                <svg
-                  className="w-5 h-5 text-green-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                  />
+              {mainTab === "alerts" ? (
+                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
                 </svg>
-              </div>
-              <div className="flex-1">
-                <p className="text-xs font-medium text-green-700 uppercase tracking-wide">
-                  Nearest Hospital
-                </p>
-                <p className="font-semibold text-gray-900">
-                  {patientNearestHospital.name}
-                </p>
-                <div className="flex items-center gap-3 mt-0.5">
-                  <span className="text-sm text-gray-500">
-                    {patientNearestHospital.distance.toFixed(1)} km
-                  </span>
-                  <span className="text-sm text-green-600 font-medium">
-                    {patientNearestHospital.status === "operational"
-                      ? "Operational"
-                      : patientNearestHospital.status}
-                  </span>
-                  {patientNearestHospital.phone && (
-                    <a
-                      href={`tel:${patientNearestHospital.phone}`}
-                      className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                    >
-                      Call
-                    </a>
-                  )}
-                </div>
-              </div>
+              ) : (
+                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
+                </svg>
+              )}
+            </div>
+            <div>
+              <h1 className="font-bold text-gray-900 text-lg">
+                {mainTab === "alerts" ? "Alerts" : "Hospital Needs"}
+              </h1>
             </div>
           </div>
-        )} */}
+        </div>
 
-        {/* Filter Pills */}
-        <div className="flex flex-wrap gap-2 mb-6">
-          {(["all", "critical", "high", "medium", "low"] as FilterTab[]).map(
-            (tab) => {
-              const tabColors: Record<FilterTab, string> = {
-                all: "bg-gray-100 text-gray-700",
-                critical: "bg-red-100 text-red-700",
-                high: "bg-orange-100 text-orange-700",
-                medium: "bg-yellow-100 text-yellow-700",
-                low: "bg-blue-100 text-blue-700",
-              };
-              const activeColors: Record<FilterTab, string> = {
-                all: "bg-gray-800 text-white",
-                critical: "bg-red-600 text-white",
-                high: "bg-orange-500 text-white",
-                medium: "bg-yellow-500 text-white",
-                low: "bg-blue-500 text-white",
-              };
-              return (
-                <button
-                  key={tab}
-                  onClick={() => setFilter(tab)}
-                  className={`px-4 py-2 rounded-full text-sm font-semibold capitalize transition ${
-                    filter === tab ? activeColors[tab] : tabColors[tab]
-                  }`}
-                >
-                  {tab} ({counts[tab]})
-                </button>
-              );
-            }
-          )}
+        {/* Simple Tab Switcher */}
+        <div className="bg-white border-b border-gray-100 px-4 py-2">
+          <div className="flex gap-1">
+            <button
+              onClick={() => setMainTab("alerts")}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                mainTab === "alerts"
+                  ? "bg-red-50 text-red-600"
+                  : "text-gray-500"
+              }`}
+            >
+              Alerts ({DEMO_CRISIS_ALERTS.length})
+            </button>
+            <button
+              onClick={() => setMainTab("needs")}
+              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                mainTab === "needs"
+                  ? "bg-pink-50 text-pink-600"
+                  : "text-gray-500"
+              }`}
+            >
+              Needs ({DEMO_HOSPITAL_NEEDS.length})
+            </button>
+          </div>
         </div>
 
         {/* Error */}
         {error && (
-          <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center gap-3">
-            <svg
-              className="w-5 h-5 text-red-500 shrink-0"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-            >
-              <path
-                fillRule="evenodd"
-                d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                clipRule="evenodd"
-              />
+          <div className="mx-4 mt-4 bg-red-50 rounded-xl p-3 flex items-center gap-3">
+            <svg className="w-5 h-5 text-red-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
             </svg>
-            <p className="text-red-700 text-sm">{error}</p>
-            <button
-              onClick={fetchData}
-              className="ms-auto text-sm text-red-600 font-medium hover:text-red-700"
-            >
-              Retry
-            </button>
+            <p className="text-red-700 text-sm flex-1">{error}</p>
+            <button onClick={fetchData} className="text-sm text-red-600 font-medium">Retry</button>
           </div>
         )}
 
         {/* Alerts List */}
-        {sortedAlerts.length === 0 ? (
-          <div className="text-center py-16">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg
-                className="w-8 h-8 text-green-500"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
+        <div className="px-4 py-4">
+          {sortedAlerts.length === 0 ? (
+            <div className="text-center py-12">
+              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                <svg className="w-7 h-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <h3 className="font-medium text-gray-900 mb-1">
+                {mainTab === "alerts" ? "All Clear" : "No Requests"}
+              </h3>
+              <p className="text-gray-400 text-sm">
+                {mainTab === "alerts"
+                  ? "No alerts in your area"
+                  : "No donation requests right now"}
+              </p>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">
-              {mainTab === "alerts" ? "No Active Alerts" : "No Current Needs"}
-            </h3>
-            <p className="text-gray-500 text-sm">
-              {filter === "all"
-                ? mainTab === "alerts"
-                  ? "There are no crisis alerts in your area at this time."
-                  : "No hospitals are requesting donations or supplies at this time."
-                : `No ${filter} severity ${mainTab === "alerts" ? "alerts" : "needs"} found.`}
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {sortedAlerts.map((alert) => (
-              <AlertCard
-                key={alert.id}
-                alert={alert}
-                distance={getDistanceToAlert(alert)}
-                nearestHospital={getNearestHospitalForAlert(alert)}
-                expanded={expandedId === alert.id}
-                onToggle={() =>
-                  setExpandedId(expandedId === alert.id ? null : alert.id)
-                }
-              />
-            ))}
-          </div>
-        )}
+          ) : (
+            <div className="space-y-3">
+              {sortedAlerts.map((alert) => (
+                <AlertCard
+                  key={alert.id}
+                  alert={alert}
+                  expanded={expandedId === alert.id}
+                  onToggle={() =>
+                    setExpandedId(expandedId === alert.id ? null : alert.id)
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </div>
 
-        {/* Demo Emergency Alert Button (for prototype demonstration) - Only on Alerts tab */}
-        {mainTab === "alerts" && (
-          <div className="mt-8 p-4 bg-gray-100 rounded-xl border border-dashed border-gray-300">
-            <p className="text-xs text-gray-500 uppercase tracking-wide font-semibold mb-2">
-              Prototype Demo
-            </p>
-            <p className="text-sm text-gray-600 mb-3">
-              Simulate receiving a government-level emergency broadcast alert:
-            </p>
-            <button
-              onClick={() => {
-                const criticalAlert = DEMO_CRISIS_ALERTS.find(a => a.severity === "critical");
-                if (criticalAlert) {
-                  triggerEmergencyAlert(criticalAlert);
-                }
-              }}
-              className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
-            >
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-              Trigger Emergency Alert Demo
-            </button>
-          </div>
-        )}
-
-        {/* Real-time indicator */}
+        {/* Connection status - subtle */}
         {isOnline && (
-          <div className="mt-8 text-center">
-            <span className="inline-flex items-center gap-2 text-xs text-gray-400">
-              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              Receiving real-time updates
+          <div className="pb-4 text-center">
+            <span className="inline-flex items-center gap-1.5 text-xs text-gray-300">
+              <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
+              Live
             </span>
           </div>
         )}

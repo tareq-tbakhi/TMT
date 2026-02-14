@@ -9,6 +9,7 @@ import { useAuth } from "../../hooks/useAuth";
 
 const tabs = [
   { to: "/sos", labelKey: "nav.sos", icon: "sos" },
+  { to: "/news", labelKey: "nav.news", icon: "news" },
   { to: "/patient-alerts", labelKey: "nav.alerts", icon: "bell" },
   { to: "/health-records", labelKey: "nav.healthRecords", icon: "clipboard" },
   { to: "/profile", labelKey: "nav.profile", icon: "user" },
@@ -21,21 +22,16 @@ function TabIcon({ icon, active }: { icon: string; active: boolean }) {
   switch (icon) {
     case "sos":
       return (
-        <svg
-          width="28"
-          height="28"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke={color}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+        <div
+          className={`w-7 h-7 rounded-full flex items-center justify-center text-[9px] font-black tracking-tight ${
+            active
+              ? "bg-red-600 text-white"
+              : "bg-red-100 text-red-600 border-2 border-red-300"
+          }`}
           aria-hidden="true"
         >
-          {/* Cross / plus emergency icon */}
-          <path d="M12 2v20M2 12h20" />
-          <circle cx="12" cy="12" r="10" />
-        </svg>
+          SOS
+        </div>
       );
 
     case "bell":
@@ -73,6 +69,25 @@ function TabIcon({ icon, active }: { icon: string; active: boolean }) {
           <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
           {/* Medical cross on clipboard */}
           <path d="M12 11v6M9 14h6" />
+        </svg>
+      );
+
+    case "news":
+      return (
+        <svg
+          width="26"
+          height="26"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={color}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M19 20H5a2 2 0 01-2-2V6a2 2 0 012-2h10a2 2 0 012 2v1" />
+          <path d="M21 12a2 2 0 00-2-2h-2v8a2 2 0 002 2 2 2 0 002-2v-6z" />
+          <path d="M7 8h6M7 12h6M7 16h4" />
         </svg>
       );
 
