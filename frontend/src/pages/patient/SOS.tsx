@@ -898,14 +898,6 @@ export default function SOS() {
                 )}
               </div>
             </div>
-            {!gpsLoading && (
-              <button
-                onClick={detectGPS}
-                className="px-3 py-1.5 text-xs font-medium bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition"
-              >
-                Refresh
-              </button>
-            )}
           </div>
         </div>
       </div>

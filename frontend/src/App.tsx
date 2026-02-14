@@ -27,6 +27,7 @@ import AidRequests from "./pages/hospital/AidRequests";
 
 // Pages - Patient
 import SOSPage from "./pages/patient/SOS";
+import NewsPage from "./pages/patient/News";
 import ProfilePage from "./pages/patient/Profile";
 import PatientAlertsPage from "./pages/patient/Alerts";
 import MedicalRecords from "./pages/patient/MedicalRecords";
@@ -78,6 +79,7 @@ function App() {
         <Route element={<AuthGuard />}>
           <Route element={<PatientLayout />}>
             <Route path="/sos" element={<SOSPage />} />
+            <Route path="/news" element={<NewsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/patient-alerts" element={<PatientAlertsPage />} />
             <Route path="/health-records" element={<MedicalRecords />} />

@@ -28,10 +28,10 @@ export function ConversationArea({ messages, isTyping }: ConversationAreaProps) 
 
   return (
     <div
-      className="flex-1 overflow-y-auto px-4 py-4 space-y-1"
+      className="overflow-y-auto px-4 py-4 space-y-1"
       style={{
-        minHeight: "200px",
-        maxHeight: "50vh",
+        minHeight: "80px",
+        maxHeight: "40vh",
         scrollbarWidth: "thin",
         scrollbarColor: "#d1d5db transparent"
       }}
