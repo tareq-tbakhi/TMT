@@ -26,6 +26,19 @@ export default function AuthGuard({ roles }: AuthGuardProps) {
     if (user.role === "hospital_admin" || user.role === "police_admin" || user.role === "civil_defense_admin") {
       return <Navigate to="/dashboard" replace />;
     }
+    // Field responder redirects
+    if (user.role === "ambulance_driver") {
+      return <Navigate to="/ambulance" replace />;
+    }
+    if (user.role === "police_officer") {
+      return <Navigate to="/police" replace />;
+    }
+    if (user.role === "civil_defense_responder") {
+      return <Navigate to="/civil_defense" replace />;
+    }
+    if (user.role === "firefighter") {
+      return <Navigate to="/firefighter" replace />;
+    }
     if (user.role === "patient") {
       return <Navigate to="/sos" replace />;
     }

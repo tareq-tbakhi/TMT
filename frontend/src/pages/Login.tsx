@@ -5,6 +5,20 @@ import { useAuthStore, type UserRole, type DepartmentType } from "../store/authS
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
+// Demo responder accounts for frontend testing
+const DEMO_RESPONDERS: Array<{
+  role: UserRole;
+  label: string;
+  icon: string;
+  color: string;
+  route: string;
+}> = [
+  { role: "ambulance_driver", label: "Ambulance", icon: "🚑", color: "from-red-500 to-red-600", route: "/ambulance" },
+  { role: "police_officer", label: "Police", icon: "🚔", color: "from-indigo-500 to-indigo-600", route: "/police" },
+  { role: "civil_defense_responder", label: "Civil Defense", icon: "🦺", color: "from-orange-500 to-orange-600", route: "/civil_defense" },
+  { role: "firefighter", label: "Firefighter", icon: "🚒", color: "from-red-600 to-red-700", route: "/firefighter" },
+];
+
 const Login: React.FC = () => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
@@ -14,6 +28,7 @@ const Login: React.FC = () => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showDemoResponders, setShowDemoResponders] = useState(false);
 
   const toggleLanguage = () => {
     const newLang = i18n.language === "ar" ? "en" : "ar";
@@ -61,6 +76,14 @@ const Login: React.FC = () => {
         role === "civil_defense_admin"
       ) {
         navigate("/dashboard");
+      } else if (role === "ambulance_driver") {
+        navigate("/ambulance");
+      } else if (role === "police_officer") {
+        navigate("/police");
+      } else if (role === "civil_defense_responder") {
+        navigate("/civil_defense");
+      } else if (role === "firefighter") {
+        navigate("/firefighter");
       } else {
         navigate("/sos");
       }
@@ -165,6 +188,48 @@ const Login: React.FC = () => {
             >
               {i18n.language === "ar" ? "English" : "\u0627\u0644\u0639\u0631\u0628\u064a\u0629"}
             </button>
+          </div>
+
+          {/* Demo Field Responder Login */}
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <button
+              type="button"
+              onClick={() => setShowDemoResponders(!showDemoResponders)}
+              className="w-full text-center text-sm text-gray-500 hover:text-gray-700 flex items-center justify-center gap-2"
+            >
+              <span>Demo: Field Responder Login</span>
+              <svg
+                className={`w-4 h-4 transition-transform ${showDemoResponders ? "rotate-180" : ""}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+
+            {showDemoResponders && (
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                {DEMO_RESPONDERS.map((demo) => (
+                  <button
+                    key={demo.role}
+                    type="button"
+                    onClick={() => {
+                      // Demo login - bypass API for frontend testing
+                      login("demo-token-" + demo.role, {
+                        id: "demo-" + demo.role,
+                        role: demo.role,
+                      });
+                      navigate(demo.route);
+                    }}
+                    className={`bg-gradient-to-r ${demo.color} text-white rounded-xl p-3 flex flex-col items-center gap-1 active:scale-95 transition-transform shadow-lg`}
+                  >
+                    <span className="text-2xl">{demo.icon}</span>
+                    <span className="text-xs font-medium">{demo.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
