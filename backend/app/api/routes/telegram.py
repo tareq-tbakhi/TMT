@@ -529,6 +529,17 @@ async def connect_telegram(
         from app.telegram.channel_manager import initialize_channels
         from app.telegram.message_handler import on_telegram_message
 
+        # If client already exists but may have stale state, force a fresh
+        # connection so Telethon re-initialises its update handling.
+        import app.telegram.client as _tc
+        if _tc._client is not None:
+            try:
+                await _tc._client.disconnect()
+            except Exception:
+                pass
+            _tc._client = None
+            _tc._handlers_registered = False
+
         client = await get_telegram_client()
         if client.is_connected():
             handler_registrar = setup_message_handler(on_telegram_message)

@@ -41,8 +41,9 @@ async def on_telegram_message(msg_data: dict):
     # 2) Broadcast raw message to live feed via Socket.IO
     try:
         await broadcast_telegram_message(msg_data)
+        logger.info("Broadcast telegram_message to Socket.IO room")
     except Exception as e:
-        logger.debug(f"Socket.IO broadcast failed: {e}")
+        logger.warning(f"Socket.IO broadcast failed: {e}")
 
     # 3) Queue AI classification via Celery
     try:
