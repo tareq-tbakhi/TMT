@@ -13,7 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
-from app.models.user import User
+from app.models.user import User, ROLE_TO_DEPARTMENT
+from app.models.hospital import Hospital
 from app.api.middleware.auth import verify_password, create_access_token
 
 router = APIRouter()
@@ -31,6 +32,7 @@ class UnifiedLoginResponse(BaseModel):
     user_id: str
     hospital_id: Optional[str] = None
     patient_id: Optional[str] = None
+    facility_type: Optional[str] = None  # "hospital", "police", "civil_defense"
 
 
 @router.post("/auth/login", response_model=UnifiedLoginResponse)
@@ -56,6 +58,19 @@ async def unified_login(
             detail="Account is deactivated",
         )
 
+    # Resolve facility_type from the user's linked facility
+    facility_type = None
+    if user.hospital_id:
+        fac_result = await db.execute(
+            select(Hospital.department_type).where(Hospital.id == user.hospital_id)
+        )
+        dept = fac_result.scalar_one_or_none()
+        if dept:
+            facility_type = dept.value if hasattr(dept, "value") else str(dept)
+        else:
+            # Fallback: infer from role
+            facility_type = ROLE_TO_DEPARTMENT.get(user.role)
+
     token_data = {
         "sub": str(user.id),
         "role": user.role.value,
@@ -64,6 +79,8 @@ async def unified_login(
         token_data["hospital_id"] = str(user.hospital_id)
     if user.patient_id:
         token_data["patient_id"] = str(user.patient_id)
+    if facility_type:
+        token_data["facility_type"] = facility_type
 
     token = create_access_token(data=token_data)
 
@@ -73,4 +90,5 @@ async def unified_login(
         user_id=str(user.id),
         hospital_id=str(user.hospital_id) if user.hospital_id else None,
         patient_id=str(user.patient_id) if user.patient_id else None,
+        facility_type=facility_type,
     )

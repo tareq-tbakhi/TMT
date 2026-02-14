@@ -19,11 +19,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, DEPARTMENT_ADMIN_ROLES
 from app.models.hospital import Hospital, HospitalStatus
 from app.api.middleware.auth import (
     get_current_user,
     require_role,
+    require_any_department_admin,
     hash_password,
     verify_password,
     create_access_token,
@@ -41,6 +42,7 @@ router = APIRouter()
 
 class HospitalCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=300)
+    department_type: str = "hospital"  # "hospital", "police", "civil_defense"
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     bed_capacity: int = Field(default=0, ge=0)
@@ -50,7 +52,16 @@ class HospitalCreateRequest(BaseModel):
     coverage_radius_km: float = Field(default=15.0, ge=0)
     phone: Optional[str] = None
     supply_levels: Optional[dict] = None
-    # Admin user credentials for this hospital
+    # Police-specific
+    patrol_units: int = 0
+    available_units: int = 0
+    jurisdiction_area: Optional[str] = None
+    # Civil Defense-specific
+    rescue_teams: int = 0
+    available_teams: int = 0
+    equipment_types: Optional[list[str]] = None
+    shelter_capacity: int = 0
+    # Admin user credentials
     admin_phone: str = Field(..., min_length=6, max_length=20)
     admin_password: str = Field(..., min_length=8)
     admin_email: Optional[str] = None
@@ -82,19 +93,29 @@ class HospitalProfileUpdateRequest(BaseModel):
 class HospitalResponse(BaseModel):
     id: UUID
     name: str
+    department_type: Optional[str] = "hospital"
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     status: HospitalStatus
-    bed_capacity: int
-    icu_beds: int
-    available_beds: int
+    bed_capacity: int = 0
+    icu_beds: int = 0
+    available_beds: int = 0
     specialties: Optional[list[str]] = None
-    coverage_radius_km: float
+    coverage_radius_km: float = 15.0
     phone: Optional[str] = None
     email: Optional[str] = None
     address: Optional[str] = None
     website: Optional[str] = None
     supply_levels: Optional[dict] = None
+    # Police
+    patrol_units: int = 0
+    available_units: int = 0
+    jurisdiction_area: Optional[str] = None
+    # Civil Defense
+    rescue_teams: int = 0
+    available_teams: int = 0
+    equipment_types: Optional[list[str]] = None
+    shelter_capacity: int = 0
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -134,10 +155,19 @@ async def register_hospital(
             detail="A user with this phone number already exists",
         )
 
-    # Create Hospital record
+    # Determine admin role based on department type
+    dept_role_map = {
+        "hospital": UserRole.HOSPITAL_ADMIN,
+        "police": UserRole.POLICE_ADMIN,
+        "civil_defense": UserRole.CIVIL_DEFENSE_ADMIN,
+    }
+    admin_role = dept_role_map.get(payload.department_type, UserRole.HOSPITAL_ADMIN)
+
+    # Create facility record
     hospital = await hospital_service.create_hospital(
         db,
         name=payload.name,
+        department_type=payload.department_type,
         latitude=payload.latitude,
         longitude=payload.longitude,
         bed_capacity=payload.bed_capacity,
@@ -147,16 +177,23 @@ async def register_hospital(
         coverage_radius_km=payload.coverage_radius_km,
         phone=payload.phone,
         supply_levels=payload.supply_levels or {},
+        patrol_units=payload.patrol_units,
+        available_units=payload.available_units,
+        jurisdiction_area=payload.jurisdiction_area,
+        rescue_teams=payload.rescue_teams,
+        available_teams=payload.available_teams,
+        equipment_types=payload.equipment_types or [],
+        shelter_capacity=payload.shelter_capacity,
     )
     await db.flush()
 
-    # Create User record with HOSPITAL_ADMIN role
+    # Create admin user with department-appropriate role
     admin_user = User(
         phone=payload.admin_phone,
         email=payload.admin_email,
         hashed_password=hash_password(payload.admin_password),
-        role=UserRole.HOSPITAL_ADMIN,
-        hospital_id=hospital.id,
+        role=admin_role,
+        hospital_id=hospital["id"],
     )
     db.add(admin_user)
     await db.flush()
@@ -222,13 +259,15 @@ async def list_hospitals(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     status_filter: Optional[HospitalStatus] = None,
+    department_type: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ):
-    """List all hospitals with their current status. Requires authentication."""
+    """List all facilities with their current status. Supports department_type filter."""
     hospitals = await hospital_service.list_hospitals(
         db,
         status=status_filter,
+        department_type=department_type,
         limit=limit,
         offset=offset,
     )
@@ -282,9 +321,9 @@ async def update_hospital_status(
     payload: HospitalStatusUpdateRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
+    current_user: User = Depends(require_any_department_admin()),
 ):
-    """Update hospital operational status. Requires hospital_admin role for that hospital."""
+    """Update facility operational status. Requires department admin role for that facility."""
     # Hospital admins can only update their own hospital
     if current_user.hospital_id != hospital_id:
         raise HTTPException(
@@ -331,9 +370,9 @@ async def update_hospital_profile(
     payload: HospitalProfileUpdateRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
+    current_user: User = Depends(require_any_department_admin()),
 ):
-    """Update hospital profile information. Hospital admins can update their own hospital."""
+    """Update facility profile information. Department admins can update their own facility."""
     if current_user.role != UserRole.SUPER_ADMIN and current_user.hospital_id != hospital_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

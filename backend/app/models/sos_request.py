@@ -47,3 +47,9 @@ class SosRequest(Base):
     details = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     resolved_at = Column(DateTime, nullable=True)
+
+    # --- Multi-department routing ---
+    routed_department = Column(String, nullable=True)  # "hospital", "police", "civil_defense"
+    facility_notified_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), nullable=True)
+    transferred_from_id = Column(UUID(as_uuid=True), ForeignKey("sos_requests.id"), nullable=True)
+    transfer_reason = Column(String, nullable=True)

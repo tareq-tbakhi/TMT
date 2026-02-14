@@ -23,7 +23,7 @@ export default function AuthGuard({ roles }: AuthGuardProps) {
     if (user.role === "super_admin") {
       return <Navigate to="/admin" replace />;
     }
-    if (user.role === "hospital_admin") {
+    if (user.role === "hospital_admin" || user.role === "police_admin" || user.role === "civil_defense_admin") {
       return <Navigate to="/dashboard" replace />;
     }
     if (user.role === "patient") {

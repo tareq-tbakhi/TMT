@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import L from "leaflet";
-import { useAuthStore } from "../../store/authStore";
+import { useAuthStore, ROLE_TO_DEPARTMENT, DEPARTMENT_LABELS, type DepartmentType } from "../../store/authStore";
 import StatusBadge from "../../components/common/StatusBadge";
 import { timeAgo } from "../../utils/formatting";
 
@@ -278,6 +278,8 @@ const StatusUpdate: React.FC = () => {
   const { t } = useTranslation();
   const { user } = useAuthStore();
   const hospitalId = user?.hospitalId ?? "";
+  const dept: DepartmentType = user?.facilityType ?? ROLE_TO_DEPARTMENT[user?.role ?? ""] ?? "hospital";
+  const deptLabel = DEPARTMENT_LABELS[dept] ?? "Hospital";
 
   // Hospital profile state
   const [hospitalName, setHospitalName] = useState("");
@@ -298,6 +300,14 @@ const StatusUpdate: React.FC = () => {
   const [icuBeds, setIcuBeds] = useState(0);
   const [availableBeds, setAvailableBeds] = useState(0);
   const [specialties, setSpecialties] = useState<string[]>([]);
+  // Police-specific
+  const [patrolUnits, setPatrolUnits] = useState(0);
+  const [availableUnits, setAvailableUnits] = useState(0);
+  // Civil Defense-specific
+  const [rescueTeams, setRescueTeams] = useState(0);
+  const [availableTeams, setAvailableTeams] = useState(0);
+  const [shelterCapacity, setShelterCapacity] = useState(0);
+
   const [supplies, setSupplies] = useState<SupplyLevels>({
     medical_supplies: "medium",
     surgical_supplies: "medium",
@@ -348,6 +358,13 @@ const StatusUpdate: React.FC = () => {
           if (data.supply_levels) {
             setSupplies((prev) => ({ ...prev, ...data.supply_levels }));
           }
+          // Police fields
+          setPatrolUnits(data.patrol_units ?? 0);
+          setAvailableUnits(data.available_units ?? 0);
+          // Civil Defense fields
+          setRescueTeams(data.rescue_teams ?? 0);
+          setAvailableTeams(data.available_teams ?? 0);
+          setShelterCapacity(data.shelter_capacity ?? 0);
           // Profile fields
           setHospitalName(data.name ?? "");
           setPhone(data.phone ?? "");
@@ -459,6 +476,11 @@ const StatusUpdate: React.FC = () => {
             available_beds: availableBeds,
             specialties,
             supply_levels: supplies,
+            patrol_units: patrolUnits,
+            available_units: availableUnits,
+            rescue_teams: rescueTeams,
+            available_teams: availableTeams,
+            shelter_capacity: shelterCapacity,
           }),
         }
       );
@@ -507,10 +529,10 @@ const StatusUpdate: React.FC = () => {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">
-          {t("hospital.status")}
+          {deptLabel} Status
         </h1>
         <p className="mt-1 text-sm text-gray-500">
-          Update your hospital's profile, operational status, and capacity
+          Update your facility's profile, operational status, and capacity
         </p>
       </div>
 
@@ -534,7 +556,7 @@ const StatusUpdate: React.FC = () => {
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <label className="mb-1 block text-sm font-medium text-gray-700">
-              Hospital Name
+              Facility Name
             </label>
             <input
               type="text"
@@ -649,107 +671,130 @@ const StatusUpdate: React.FC = () => {
             </div>
           </div>
 
-          {/* Bed Capacity */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">
-              Bed Capacity
-            </h2>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Total Beds
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={totalBeds}
-                  onChange={(e) => setTotalBeds(parseInt(e.target.value) || 0)}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  ICU Beds
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  value={icuBeds}
-                  onChange={(e) => setIcuBeds(parseInt(e.target.value) || 0)}
-                  className={inputCls}
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">
-                  Available Beds
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  max={totalBeds}
-                  value={availableBeds}
-                  onChange={(e) =>
-                    setAvailableBeds(parseInt(e.target.value) || 0)
-                  }
-                  className={inputCls}
-                />
-              </div>
-            </div>
-
-            {/* Capacity bar */}
-            {totalBeds > 0 && (
-              <div className="mt-4">
-                <div className="mb-1 flex justify-between text-xs text-gray-500">
-                  <span>Occupancy</span>
-                  <span>
-                    {Math.round(
-                      ((totalBeds - availableBeds) / totalBeds) * 100
-                    )}
-                    %
-                  </span>
+          {/* Department-specific capacity */}
+          {dept === "hospital" && (
+            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">
+                Bed Capacity
+              </h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Total Beds</label>
+                  <input type="number" min={0} value={totalBeds} onChange={(e) => setTotalBeds(parseInt(e.target.value) || 0)} className={inputCls} />
                 </div>
-                <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">
-                  <div
-                    className={`h-full rounded-full transition-all ${
-                      availableBeds / totalBeds > 0.3
-                        ? "bg-green-500"
-                        : availableBeds / totalBeds > 0.1
-                        ? "bg-yellow-500"
-                        : "bg-red-500"
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">ICU Beds</label>
+                  <input type="number" min={0} value={icuBeds} onChange={(e) => setIcuBeds(parseInt(e.target.value) || 0)} className={inputCls} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Available Beds</label>
+                  <input type="number" min={0} max={totalBeds} value={availableBeds} onChange={(e) => setAvailableBeds(parseInt(e.target.value) || 0)} className={inputCls} />
+                </div>
+              </div>
+              {totalBeds > 0 && (
+                <div className="mt-4">
+                  <div className="mb-1 flex justify-between text-xs text-gray-500">
+                    <span>Occupancy</span>
+                    <span>{Math.round(((totalBeds - availableBeds) / totalBeds) * 100)}%</span>
+                  </div>
+                  <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className={`h-full rounded-full transition-all ${availableBeds / totalBeds > 0.3 ? "bg-green-500" : availableBeds / totalBeds > 0.1 ? "bg-yellow-500" : "bg-red-500"}`}
+                      style={{ width: `${Math.min(100, ((totalBeds - availableBeds) / totalBeds) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {dept === "police" && (
+            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">Patrol Units</h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Total Patrol Units</label>
+                  <input type="number" min={0} value={patrolUnits} onChange={(e) => setPatrolUnits(parseInt(e.target.value) || 0)} className={inputCls} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Available Units</label>
+                  <input type="number" min={0} max={patrolUnits} value={availableUnits} onChange={(e) => setAvailableUnits(parseInt(e.target.value) || 0)} className={inputCls} />
+                </div>
+              </div>
+              {patrolUnits > 0 && (
+                <div className="mt-4">
+                  <div className="mb-1 flex justify-between text-xs text-gray-500">
+                    <span>Deployment</span>
+                    <span>{Math.round(((patrolUnits - availableUnits) / patrolUnits) * 100)}%</span>
+                  </div>
+                  <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className={`h-full rounded-full transition-all ${availableUnits / patrolUnits > 0.3 ? "bg-green-500" : availableUnits / patrolUnits > 0.1 ? "bg-yellow-500" : "bg-red-500"}`}
+                      style={{ width: `${Math.min(100, ((patrolUnits - availableUnits) / patrolUnits) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {dept === "civil_defense" && (
+            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">Rescue Teams & Shelter</h2>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Total Rescue Teams</label>
+                  <input type="number" min={0} value={rescueTeams} onChange={(e) => setRescueTeams(parseInt(e.target.value) || 0)} className={inputCls} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Available Teams</label>
+                  <input type="number" min={0} max={rescueTeams} value={availableTeams} onChange={(e) => setAvailableTeams(parseInt(e.target.value) || 0)} className={inputCls} />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700">Shelter Capacity</label>
+                  <input type="number" min={0} value={shelterCapacity} onChange={(e) => setShelterCapacity(parseInt(e.target.value) || 0)} className={inputCls} />
+                </div>
+              </div>
+              {rescueTeams > 0 && (
+                <div className="mt-4">
+                  <div className="mb-1 flex justify-between text-xs text-gray-500">
+                    <span>Deployment</span>
+                    <span>{Math.round(((rescueTeams - availableTeams) / rescueTeams) * 100)}%</span>
+                  </div>
+                  <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">
+                    <div
+                      className={`h-full rounded-full transition-all ${availableTeams / rescueTeams > 0.3 ? "bg-green-500" : availableTeams / rescueTeams > 0.1 ? "bg-yellow-500" : "bg-red-500"}`}
+                      style={{ width: `${Math.min(100, ((rescueTeams - availableTeams) / rescueTeams) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Specialties - hospital only */}
+          {dept === "hospital" && (
+            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-4 text-lg font-semibold text-gray-900">
+                Specialties
+              </h2>
+              <div className="flex flex-wrap gap-2">
+                {SPECIALTIES.map((specialty) => (
+                  <button
+                    key={specialty}
+                    onClick={() => handleSpecialtyToggle(specialty)}
+                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                      specialties.includes(specialty)
+                        ? "border-blue-500 bg-blue-50 text-blue-700"
+                        : "border-gray-200 text-gray-600 hover:border-gray-300"
                     }`}
-                    style={{
-                      width: `${Math.min(
-                        100,
-                        ((totalBeds - availableBeds) / totalBeds) * 100
-                      )}%`,
-                    }}
-                  />
-                </div>
+                  >
+                    {specialty}
+                  </button>
+                ))}
               </div>
-            )}
-          </div>
-
-          {/* Specialties */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">
-              Specialties
-            </h2>
-            <div className="flex flex-wrap gap-2">
-              {SPECIALTIES.map((specialty) => (
-                <button
-                  key={specialty}
-                  onClick={() => handleSpecialtyToggle(specialty)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
-                    specialties.includes(specialty)
-                      ? "border-blue-500 bg-blue-50 text-blue-700"
-                      : "border-gray-200 text-gray-600 hover:border-gray-300"
-                  }`}
-                >
-                  {specialty}
-                </button>
-              ))}
             </div>
-          </div>
+          )}
 
           {/* Supply Levels */}
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">

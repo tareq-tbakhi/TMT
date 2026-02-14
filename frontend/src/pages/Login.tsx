@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAuthStore } from "../store/authStore";
+import { useAuthStore, type UserRole, type DepartmentType } from "../store/authStore";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -46,15 +46,20 @@ const Login: React.FC = () => {
 
       login(token, {
         id: userId,
-        role: role as "patient" | "hospital_admin" | "super_admin",
+        role: role as UserRole,
         hospitalId: data.hospital_id ?? undefined,
+        facilityType: (data.facility_type as DepartmentType) ?? undefined,
         patientId: data.patient_id ?? undefined,
       });
 
       // Redirect based on role from server response
       if (role === "super_admin") {
         navigate("/admin");
-      } else if (role === "hospital_admin") {
+      } else if (
+        role === "hospital_admin" ||
+        role === "police_admin" ||
+        role === "civil_defense_admin"
+      ) {
         navigate("/dashboard");
       } else {
         navigate("/sos");

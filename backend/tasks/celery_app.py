@@ -27,13 +27,13 @@ celery_app.conf.update(
     timezone="UTC",
     enable_utc=True,
     task_routes={
-        "tasks.telegram_tasks.*": {"queue": "telegram.messages"},
+        "tasks.sos_tasks.*": {"queue": "sos.triage"},               # HIGH priority
         "tasks.alert_tasks.*": {"queue": "alerts.new"},
-        "tasks.embedding_tasks.*": {"queue": "embeddings.generate"},
         "tasks.sms_tasks.*": {"queue": "sms.inbound"},
         "tasks.map_tasks.*": {"queue": "map.updates"},
-        "tasks.sos_tasks.*": {"queue": "sos.requests"},
-        "tasks.verification_tasks.*": {"queue": "verification"},
+        "tasks.telegram_tasks.*": {"queue": "intel.analysis"},       # LOW priority
+        "tasks.embedding_tasks.*": {"queue": "embeddings.generate"},
+        "tasks.verification_tasks.*": {"queue": "verification"},     # LOW priority
     },
     beat_schedule={
         "telegram-fetch-messages": {

@@ -40,6 +40,8 @@ function getAuthHeaders(): Record<string, string> {
 const roleColors: Record<string, string> = {
   super_admin: "bg-purple-100 text-purple-800",
   hospital_admin: "bg-blue-100 text-blue-800",
+  police_admin: "bg-indigo-100 text-indigo-800",
+  civil_defense_admin: "bg-orange-100 text-orange-800",
   patient: "bg-green-100 text-green-800",
 };
 
@@ -393,6 +395,8 @@ const UserManagement: React.FC = () => {
           <option value="">{t("admin.users.allRoles")}</option>
           <option value="super_admin">{t("admin.users.roleSuperAdmin")}</option>
           <option value="hospital_admin">{t("admin.users.roleHospitalAdmin")}</option>
+          <option value="police_admin">Police Admin</option>
+          <option value="civil_defense_admin">Civil Defense Admin</option>
           <option value="patient">{t("admin.users.rolePatient")}</option>
         </select>
       </div>
@@ -643,6 +647,8 @@ const UserManagement: React.FC = () => {
                   >
                     <option value="patient">{t("admin.users.rolePatient")}</option>
                     <option value="hospital_admin">{t("admin.users.roleHospitalAdmin")}</option>
+                    <option value="police_admin">Police Admin</option>
+                    <option value="civil_defense_admin">Civil Defense Admin</option>
                     <option value="super_admin">{t("admin.users.roleSuperAdmin")}</option>
                   </select>
                   {createErrors.role && (
@@ -747,6 +753,8 @@ const UserManagement: React.FC = () => {
                   >
                     <option value="patient">{t("admin.users.rolePatient")}</option>
                     <option value="hospital_admin">{t("admin.users.roleHospitalAdmin")}</option>
+                    <option value="police_admin">Police Admin</option>
+                    <option value="civil_defense_admin">Civil Defense Admin</option>
                     <option value="super_admin">{t("admin.users.roleSuperAdmin")}</option>
                   </select>
                 </div>

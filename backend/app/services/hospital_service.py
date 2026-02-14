@@ -13,7 +13,7 @@ from geoalchemy2 import Geography
 from sqlalchemy import select, func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.hospital import Hospital, HospitalStatus
+from app.models.hospital import Hospital, HospitalStatus, DepartmentType, FacilityStatus
 from app.api.websocket.handler import broadcast_hospital_status
 
 logger = logging.getLogger(__name__)
@@ -28,22 +28,36 @@ def _make_point(longitude: float, latitude: float):
 
 
 def _hospital_to_dict(hospital: Hospital) -> dict[str, Any]:
+    dept = getattr(hospital, "department_type", None)
+    dept_val = dept.value if hasattr(dept, "value") else (str(dept) if dept else "hospital")
     return {
         "id": str(hospital.id),
         "name": hospital.name,
+        "department_type": dept_val,
         "latitude": hospital.latitude,
         "longitude": hospital.longitude,
         "status": hospital.status.value if hospital.status else None,
-        "bed_capacity": hospital.bed_capacity,
-        "icu_beds": hospital.icu_beds,
-        "available_beds": hospital.available_beds,
-        "specialties": hospital.specialties,
         "coverage_radius_km": hospital.coverage_radius_km,
         "phone": hospital.phone,
         "email": hospital.email,
         "address": hospital.address,
         "website": hospital.website,
+        # Hospital-specific
+        "bed_capacity": hospital.bed_capacity,
+        "icu_beds": hospital.icu_beds,
+        "available_beds": hospital.available_beds,
+        "specialties": hospital.specialties,
         "supply_levels": hospital.supply_levels,
+        # Police-specific
+        "patrol_units": getattr(hospital, "patrol_units", 0),
+        "available_units": getattr(hospital, "available_units", 0),
+        "jurisdiction_area": getattr(hospital, "jurisdiction_area", None),
+        # Civil Defense-specific
+        "rescue_teams": getattr(hospital, "rescue_teams", 0),
+        "available_teams": getattr(hospital, "available_teams", 0),
+        "equipment_types": getattr(hospital, "equipment_types", []),
+        "shelter_capacity": getattr(hospital, "shelter_capacity", 0),
+        # Timestamps
         "created_at": hospital.created_at.isoformat() if hospital.created_at else None,
         "updated_at": hospital.updated_at.isoformat() if hospital.updated_at else None,
     }
@@ -57,6 +71,7 @@ async def create_hospital(
     db: AsyncSession,
     *,
     name: str,
+    department_type: str | DepartmentType = DepartmentType.HOSPITAL,
     latitude: float | None = None,
     longitude: float | None = None,
     status: str | HospitalStatus = HospitalStatus.OPERATIONAL,
@@ -67,14 +82,26 @@ async def create_hospital(
     coverage_radius_km: float = 15.0,
     phone: str | None = None,
     supply_levels: dict[str, str] | None = None,
+    # Police
+    patrol_units: int = 0,
+    available_units: int = 0,
+    jurisdiction_area: str | None = None,
+    # Civil Defense
+    rescue_teams: int = 0,
+    available_teams: int = 0,
+    equipment_types: list[str] | None = None,
+    shelter_capacity: int = 0,
 ) -> dict[str, Any]:
-    """Register a new hospital."""
+    """Register a new facility (hospital, police station, or civil defense center)."""
     if isinstance(status, str):
         status = HospitalStatus(status)
+    if isinstance(department_type, str):
+        department_type = DepartmentType(department_type)
 
     hospital = Hospital(
         id=uuid.uuid4(),
         name=name,
+        department_type=department_type,
         latitude=latitude,
         longitude=longitude,
         location=_make_point(longitude, latitude) if latitude is not None and longitude is not None else None,
@@ -86,11 +113,18 @@ async def create_hospital(
         coverage_radius_km=coverage_radius_km,
         phone=phone,
         supply_levels=supply_levels or {},
+        patrol_units=patrol_units,
+        available_units=available_units,
+        jurisdiction_area=jurisdiction_area,
+        rescue_teams=rescue_teams,
+        available_teams=available_teams,
+        equipment_types=equipment_types or [],
+        shelter_capacity=shelter_capacity,
     )
     db.add(hospital)
     await db.flush()
     await db.refresh(hospital)
-    logger.info("Created hospital %s (%s)", hospital.id, name)
+    logger.info("Created facility %s (%s, type=%s)", hospital.id, name, department_type.value)
     return _hospital_to_dict(hospital)
 
 
@@ -193,15 +227,20 @@ async def list_hospitals(
     db: AsyncSession,
     *,
     status: str | HospitalStatus | None = None,
+    department_type: str | DepartmentType | None = None,
     limit: int = 200,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
-    """Paginated hospital list, optionally filtered by status."""
+    """Paginated facility list, optionally filtered by status and department type."""
     query = select(Hospital).order_by(Hospital.name).limit(limit).offset(offset)
     if status is not None:
         if isinstance(status, str):
             status = HospitalStatus(status)
         query = query.where(Hospital.status == status)
+    if department_type is not None:
+        if isinstance(department_type, str):
+            department_type = DepartmentType(department_type)
+        query = query.where(Hospital.department_type == department_type)
     result = await db.execute(query)
     return [_hospital_to_dict(h) for h in result.scalars().all()]
 
@@ -223,12 +262,14 @@ async def find_nearest_hospitals(
     radius_m: float = 50_000,
     limit: int = 10,
     operational_only: bool = True,
+    department_type: str | DepartmentType | None = None,
 ) -> list[dict[str, Any]]:
-    """Find hospitals closest to a point within *radius_m* metres.
+    """Find facilities closest to a point within *radius_m* metres.
 
     Results include a ``distance_m`` field indicating distance from the query
-    point.  By default only **operational** or **limited** hospitals are
+    point.  By default only **operational** or **limited** facilities are
     returned; set *operational_only=False* to include all statuses.
+    Optionally filter by department_type.
     """
     centre = _make_point(longitude, latitude)
 
@@ -255,6 +296,11 @@ async def find_nearest_hospitals(
         query = query.where(
             Hospital.status.in_([HospitalStatus.OPERATIONAL, HospitalStatus.LIMITED])
         )
+
+    if department_type is not None:
+        if isinstance(department_type, str):
+            department_type = DepartmentType(department_type)
+        query = query.where(Hospital.department_type == department_type)
 
     result = await db.execute(query)
     rows = result.all()

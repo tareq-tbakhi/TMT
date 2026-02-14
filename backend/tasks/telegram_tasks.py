@@ -1,4 +1,7 @@
-"""Celery tasks for Telegram message processing."""
+"""Celery tasks for Telegram message processing.
+
+Uses CrewAI Intel Agent for monitoring, with fallback to direct pipeline.
+"""
 import asyncio
 import logging
 
@@ -16,9 +19,29 @@ def _run_async(coro):
         loop.close()
 
 
-@celery_app.task(name="tasks.telegram_tasks.fetch_and_process_messages")
+@celery_app.task(name="tasks.telegram_tasks.fetch_and_process_messages",
+                 time_limit=600, soft_time_limit=570)
 def fetch_and_process_messages():
-    """Fetch recent messages from all monitored channels and process them."""
+    """Fetch and process Telegram messages — CrewAI intel crew or direct pipeline."""
+
+    # Try CrewAI first
+    try:
+        from app.services.ai_agent.crews import build_intel_crew
+        from app.config import get_settings
+
+        settings = get_settings()
+        if not settings.GLM_API_KEY:
+            raise RuntimeError("No LLM API key")
+
+        crew = build_intel_crew()
+        result = crew.kickoff()
+        logger.info("CrewAI intel crew completed: %s", str(result.raw)[:200])
+        return result.raw
+
+    except Exception as e:
+        logger.warning("CrewAI intel crew failed, using direct pipeline: %s", e)
+
+    # Fallback: direct pipeline
     from app.telegram.channel_manager import fetch_recent_messages
     from app.telegram.message_processor import process_batch
 
@@ -40,7 +63,6 @@ def process_single_message(message_data: dict):
     async def _run():
         result = await process_message(message_data)
         if result:
-            # Trigger alert creation
             create_alert_from_crisis.delay(result)
         return result
 

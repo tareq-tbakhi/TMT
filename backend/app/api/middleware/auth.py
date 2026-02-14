@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.postgres import get_db
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, DEPARTMENT_ADMIN_ROLES
 
 settings = get_settings()
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -24,6 +24,7 @@ class TokenData(BaseModel):
     role: UserRole
     hospital_id: Optional[str] = None
     patient_id: Optional[str] = None
+    facility_type: Optional[str] = None  # "hospital", "police", "civil_defense"
 
 
 class TokenResponse(BaseModel):
@@ -31,6 +32,8 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     role: str
     user_id: str
+    hospital_id: Optional[str] = None
+    facility_type: Optional[str] = None
 
 
 def hash_password(password: str) -> str:
@@ -56,6 +59,7 @@ def decode_token(token: str) -> TokenData:
             role=payload["role"],
             hospital_id=payload.get("hospital_id"),
             patient_id=payload.get("patient_id"),
+            facility_type=payload.get("facility_type"),
         )
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
@@ -87,3 +91,17 @@ def require_role(*roles: UserRole):
             )
         return current_user
     return role_checker
+
+
+def require_any_department_admin():
+    """Allow any department admin (hospital, police, civil defense) or super admin."""
+    async def checker(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role == UserRole.SUPER_ADMIN:
+            return current_user
+        if current_user.role in DEPARTMENT_ADMIN_ROLES:
+            return current_user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Department admin role required",
+        )
+    return checker

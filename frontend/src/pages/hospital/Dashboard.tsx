@@ -5,6 +5,7 @@ import L from "leaflet";
 import StatsCard from "../../components/common/StatsCard";
 import StatusBadge from "../../components/common/StatusBadge";
 import { useAlertStore } from "../../store/alertStore";
+import { useAuthStore, ROLE_TO_DEPARTMENT, DEPARTMENT_LABELS, type DepartmentType } from "../../store/authStore";
 import { useSocketEvent } from "../../contexts/SocketContext";
 import { timeAgo } from "../../utils/formatting";
 import type { AnalyticsStats, Alert } from "../../services/api";
@@ -26,6 +27,9 @@ L.Marker.prototype.options.icon = defaultIcon;
 
 const Dashboard: React.FC = () => {
   const { t } = useTranslation();
+  const { user } = useAuthStore();
+  const dept: DepartmentType = user?.facilityType ?? ROLE_TO_DEPARTMENT[user?.role ?? ""] ?? "hospital";
+  const deptLabel = DEPARTMENT_LABELS[dept] ?? "Hospital";
   const [stats, setStats] = useState<AnalyticsStats | null>(null);
   const [recentAlerts, setRecentAlerts] = useState<Alert[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,9 +66,9 @@ const Dashboard: React.FC = () => {
       const res = await fetch(`${API_URL}/api/v1/alerts?limit=5`, { headers: getHeaders() });
       if (res.status === 401) return;
       if (res.ok) {
-        const wrapper = (await res.json()) as { alerts: Alert[]; total: number };
-        setRecentAlerts(wrapper.alerts);
-        setAlerts(wrapper.alerts);
+        const wrapper = await res.json();
+        setRecentAlerts(wrapper.alerts ?? []);
+        setAlerts(wrapper.alerts ?? [], wrapper.total, wrapper.stats);
       }
     } catch {
       // Silent fail
@@ -317,16 +321,16 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Hospital Status Indicator */}
+      {/* Department Status Indicator */}
       <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
         <h3 className="mb-3 text-sm font-semibold text-gray-900">
-          Hospital Status Overview
+          {deptLabel} Status Overview
         </h3>
         <div className="flex flex-wrap items-center gap-6">
           <div className="flex items-center gap-2">
             <StatusBadge status="operational" size="sm" />
             <span className="text-sm text-gray-600">
-              {stats?.operational_hospitals ?? 0} hospitals
+              {stats?.operational_hospitals ?? 0} operational facilities
             </span>
           </div>
           <div className="flex items-center gap-2">

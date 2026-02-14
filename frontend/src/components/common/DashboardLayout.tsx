@@ -1,17 +1,24 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAuthStore } from "../../store/authStore";
+import { useAuthStore, ROLE_TO_DEPARTMENT, DEPARTMENT_LABELS, DEPARTMENT_COLORS, type DepartmentType } from "../../store/authStore";
 import { useAlertStore } from "../../store/alertStore";
 import { SocketProvider, useSocket } from "../../contexts/SocketContext";
 
-const navItems = [
+const DEPT_ICONS: Record<DepartmentType, string> = {
+  hospital: "\u{1F3E5}",
+  police: "\u{1F6A8}",
+  civil_defense: "\u{1F6E1}\uFE0F",
+};
+
+const baseNavItems = [
   { path: "/dashboard", label: "nav.dashboard", icon: "\uD83D\uDCCA" },
   { path: "/dashboard/alerts", label: "nav.alerts", icon: "\uD83D\uDD14" },
   { path: "/dashboard/analytics", label: "nav.analytics", icon: "\uD83D\uDCC8" },
   { path: "/dashboard/patients", label: "nav.patients", icon: "\uD83D\uDC65" },
   { path: "/dashboard/map", label: "nav.map", icon: "\uD83D\uDDFA\uFE0F" },
   { path: "/dashboard/aid-requests", label: "nav.aidRequests", icon: "\uD83E\uDD1D" },
+  { path: "/dashboard/transfers", label: "Transfers", icon: "\uD83D\uDD00" },
   { path: "/dashboard/status", label: "nav.status", icon: "\uD83C\uDFE5" },
 ];
 
@@ -23,6 +30,17 @@ const DashboardInner: React.FC = () => {
   const { isConnected } = useSocket();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  const dept: DepartmentType = user?.facilityType ?? ROLE_TO_DEPARTMENT[user?.role ?? ""] ?? "hospital";
+  const deptLabel = DEPARTMENT_LABELS[dept] ?? "Hospital";
+  const deptColors = DEPARTMENT_COLORS[dept] ?? DEPARTMENT_COLORS.hospital;
+  const deptIcon = DEPT_ICONS[dept] ?? "\u{1F3E5}";
+
+  const navItems = useMemo(() => {
+    // Police and civil defense may not need "patients" or "aid-requests"
+    // but we keep them available — the backend filters by department anyway
+    return baseNavItems;
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -37,9 +55,13 @@ const DashboardInner: React.FC = () => {
   const navLinkClasses = ({ isActive }: { isActive: boolean }) =>
     `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
       isActive
-        ? "bg-blue-50 text-blue-700"
+        ? `${deptColors.bg} ${deptColors.text}`
         : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
     }`;
+
+  const roleLabel = user?.role === "super_admin"
+    ? "Super Admin"
+    : `${deptLabel} Admin`;
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -61,10 +83,10 @@ const DashboardInner: React.FC = () => {
       >
         {/* Logo area */}
         <div className="flex h-16 items-center gap-2 border-b border-gray-200 px-5">
-          <span className="text-2xl">&#x1F3E5;</span>
+          <span className="text-2xl">{deptIcon}</span>
           <div>
             <h1 className="text-lg font-bold text-gray-900">TMT</h1>
-            <p className="text-xs text-gray-500">Hospital Dashboard</p>
+            <p className={`text-xs font-medium ${deptColors.text}`}>{deptLabel} Dashboard</p>
           </div>
         </div>
 
@@ -82,7 +104,7 @@ const DashboardInner: React.FC = () => {
               <span>{t(item.label)}</span>
               {item.path === "/dashboard/alerts" && unreadCount > 0 && (
                 <span className="ms-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-xs font-bold text-white">
-                  {unreadCount}
+                  {unreadCount > 999 ? "999+" : unreadCount}
                 </span>
               )}
             </NavLink>
@@ -91,6 +113,11 @@ const DashboardInner: React.FC = () => {
 
         {/* Sidebar footer */}
         <div className="border-t border-gray-200 p-3">
+          {/* Department badge */}
+          <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 mb-1 ${deptColors.bg}`}>
+            <span className={`h-2 w-2 rounded-full ${deptColors.accent}`} />
+            <span className={`text-xs font-medium ${deptColors.text}`}>{roleLabel}</span>
+          </div>
           {/* Connection status */}
           <div className="flex items-center gap-2 px-3 py-1.5 mb-1">
             <span
@@ -143,10 +170,10 @@ const DashboardInner: React.FC = () => {
             </svg>
           </button>
 
-          {/* Hospital name */}
+          {/* Dashboard title */}
           <div className="hidden lg:block">
             <h2 className="text-lg font-semibold text-gray-900">
-              Hospital Dashboard
+              {deptLabel} Dashboard
             </h2>
           </div>
 
@@ -172,7 +199,7 @@ const DashboardInner: React.FC = () => {
               </svg>
               {unreadCount > 0 && (
                 <span className="absolute -top-0.5 -end-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-xs font-bold text-white">
-                  {unreadCount}
+                  {unreadCount > 999 ? "999+" : unreadCount}
                 </span>
               )}
             </button>
@@ -183,11 +210,11 @@ const DashboardInner: React.FC = () => {
                 onClick={() => setUserMenuOpen(!userMenuOpen)}
                 className="flex items-center gap-2 rounded-lg p-2 text-gray-700 hover:bg-gray-100"
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-sm font-medium text-blue-700">
-                  {user?.role?.charAt(0)?.toUpperCase() ?? "H"}
+                <div className={`flex h-8 w-8 items-center justify-center rounded-full ${deptColors.bg} text-sm font-medium ${deptColors.text}`}>
+                  {deptLabel.charAt(0).toUpperCase()}
                 </div>
                 <span className="hidden text-sm font-medium sm:block">
-                  {user?.role === "hospital_admin" ? "Admin" : user?.role ?? "Staff"}
+                  {roleLabel}
                 </span>
               </button>
               {userMenuOpen && (

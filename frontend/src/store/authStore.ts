@@ -4,10 +4,44 @@
 
 import { create } from "zustand";
 
+export type UserRole =
+  | "patient"
+  | "hospital_admin"
+  | "police_admin"
+  | "civil_defense_admin"
+  | "super_admin";
+
+export type DepartmentType = "hospital" | "police" | "civil_defense";
+
+export const DEPARTMENT_ADMIN_ROLES: UserRole[] = [
+  "hospital_admin",
+  "police_admin",
+  "civil_defense_admin",
+];
+
+export const ROLE_TO_DEPARTMENT: Record<string, DepartmentType> = {
+  hospital_admin: "hospital",
+  police_admin: "police",
+  civil_defense_admin: "civil_defense",
+};
+
+export const DEPARTMENT_LABELS: Record<DepartmentType, string> = {
+  hospital: "Hospital",
+  police: "Police",
+  civil_defense: "Civil Defense",
+};
+
+export const DEPARTMENT_COLORS: Record<DepartmentType, { bg: string; text: string; accent: string }> = {
+  hospital: { bg: "bg-blue-50", text: "text-blue-700", accent: "bg-blue-600" },
+  police: { bg: "bg-indigo-50", text: "text-indigo-700", accent: "bg-indigo-600" },
+  civil_defense: { bg: "bg-orange-50", text: "text-orange-700", accent: "bg-orange-600" },
+};
+
 export interface AuthUser {
   id: string;
-  role: "patient" | "hospital_admin" | "super_admin";
+  role: UserRole;
   hospitalId?: string;
+  facilityType?: DepartmentType;
   patientId?: string;
 }
 
