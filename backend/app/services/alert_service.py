@@ -87,6 +87,8 @@ def _alert_to_dict(alert: Alert) -> dict[str, Any]:
         "expires_at": alert.expires_at.isoformat() if alert.expires_at else None,
         "routed_department": getattr(alert, "routed_department", None),
         "target_facility_id": str(alert.target_facility_id) if getattr(alert, "target_facility_id", None) else None,
+        "alert_type": getattr(alert, "alert_type", "primary"),
+        "parent_alert_id": str(alert.parent_alert_id) if getattr(alert, "parent_alert_id", None) else None,
     }
 
 
@@ -112,6 +114,8 @@ async def create_alert(
     notify_patients: bool = True,
     routed_department: str | None = None,
     target_facility_id: str | None = None,
+    alert_type: str = "primary",
+    parent_alert_id: str | None = None,
 ) -> dict[str, Any]:
     """Create an alert, compute affected patients, and broadcast.
 
@@ -143,6 +147,8 @@ async def create_alert(
         expires_at=datetime.utcnow() + timedelta(hours=expires_hours) if expires_hours else None,
         routed_department=routed_department,
         target_facility_id=target_facility_id,
+        alert_type=alert_type,
+        parent_alert_id=parent_alert_id,
     )
     db.add(alert)
     await db.flush()
@@ -232,10 +238,7 @@ def _build_alert_filters(
     if source is not None:
         conditions.append(Alert.source == source)
     if routed_department is not None:
-        conditions.append(
-            (Alert.routed_department == routed_department)
-            | (Alert.routed_department.is_(None))
-        )
+        conditions.append(Alert.routed_department == routed_department)
     return conditions
 
 
@@ -265,9 +268,10 @@ async def get_alert_stats(
     db: AsyncSession,
     *,
     active_only: bool = True,
+    routed_department: str | None = None,
 ) -> dict[str, Any]:
     """Return aggregate stats for the alert list header."""
-    base_conditions = _build_alert_filters(active_only=active_only)
+    base_conditions = _build_alert_filters(active_only=active_only, routed_department=routed_department)
 
     # Total count
     q_total = select(func.count(Alert.id))
@@ -376,21 +380,21 @@ async def get_alerts_near(
 async def acknowledge_alert(
     db: AsyncSession,
     alert_id: uuid.UUID,
-    hospital_id: uuid.UUID,
+    facility_id: uuid.UUID,
 ) -> dict[str, Any] | None:
-    """Mark an alert as acknowledged by a hospital.
+    """Mark an alert as acknowledged by a facility.
 
-    Stores the hospital ID in ``acknowledged`` and returns the updated alert.
+    Stores the facility ID in ``acknowledged`` and returns the updated alert.
     """
     result = await db.execute(select(Alert).where(Alert.id == alert_id))
     alert = result.scalar_one_or_none()
     if alert is None:
         return None
 
-    alert.acknowledged = str(hospital_id)
+    alert.acknowledged = str(facility_id)
     await db.flush()
     await db.refresh(alert)
-    logger.info("Alert %s acknowledged by hospital %s", alert_id, hospital_id)
+    logger.info("Alert %s acknowledged by facility %s", alert_id, facility_id)
     return _alert_to_dict(alert)
 
 
@@ -404,6 +408,7 @@ async def get_alerts_prioritized(
     severity: str | AlertSeverity | None = None,
     event_type: str | EventType | None = None,
     source: str | None = None,
+    routed_department: str | None = None,
     active_only: bool = True,
     limit: int = 100,
     offset: int = 0,
@@ -414,6 +419,7 @@ async def get_alerts_prioritized(
     """
     alerts = await get_alerts(
         db, severity=severity, event_type=event_type, source=source,
+        routed_department=routed_department,
         active_only=active_only, limit=limit, offset=offset,
     )
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import AlertCard from "../../components/common/AlertCard";
 import { useAlertStore, type AlertStats } from "../../store/alertStore";
@@ -455,6 +456,7 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge }) => {
   const meta = (alert as any).metadata_ ?? (alert as any).metadata ?? {};
   const priorityScore = (alert as any).priority_score ?? meta?.priority_score ?? 0;
   const isSOS = alert.source === "sos";
+  const isSecondary = meta?.is_secondary === true || (alert as any).alert_type === "secondary";
   const patientStatus = meta?.patient_status as string | undefined;
   const patientInfo = meta?.patient_info as Record<string, any> | undefined;
   const eventLabel = eventTypeLabels[alert.event_type]?.en ?? alert.event_type;
@@ -487,6 +489,11 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge }) => {
             {patientStatus && (
               <span className={`shrink-0 text-[10px] font-medium ${patientStatusColor[patientStatus] ?? "text-gray-500"}`}>
                 {patientStatus}
+              </span>
+            )}
+            {isSecondary && (
+              <span className="shrink-0 rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
+                Supporting
               </span>
             )}
           </div>
@@ -663,6 +670,21 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge }) => {
                       </span>
                     </div>
                   )}
+                </div>
+              )}
+              {/* View patient profile link */}
+              {meta?.patient_id && (
+                <div className="sm:col-span-2 lg:col-span-3">
+                  <Link
+                    to={`/dashboard/patients/${meta.patient_id}`}
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
+                  >
+                    View Full Patient Profile
+                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Link>
                 </div>
               )}
               {/* Nearby alert info */}

@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.postgres import get_db
 from app.models.user import User, UserRole, ROLE_TO_DEPARTMENT
 from app.models.alert import Alert, AlertSeverity, EventType
-from app.api.middleware.auth import get_current_user, require_role
+from app.api.middleware.auth import get_current_user, require_role, require_any_department_admin
 from app.api.middleware.audit import log_audit
 from app.services import alert_service
 from app.api.websocket.handler import broadcast_alert
@@ -45,7 +45,8 @@ class AlertCreateRequest(BaseModel):
 
 
 class AlertAcknowledgeRequest(BaseModel):
-    hospital_id: UUID
+    facility_id: Optional[UUID] = None
+    hospital_id: Optional[UUID] = None  # legacy alias
 
 
 class AlertResponse(BaseModel):
@@ -166,7 +167,7 @@ async def list_alerts(
         active_only=active_only,
     )
 
-    stats_data = await alert_service.get_alert_stats(db, active_only=active_only)
+    stats_data = await alert_service.get_alert_stats(db, active_only=active_only, routed_department=dept_filter)
 
     return AlertListResponse(
         alerts=[AlertResponse.model_validate(a) for a in alerts],
@@ -183,20 +184,27 @@ async def list_alerts_prioritized(
     severity: Optional[AlertSeverity] = None,
     event_type: Optional[EventType] = None,
     source: Optional[str] = None,
+    routed_department: Optional[str] = None,
     active_only: bool = True,
     limit: int = 50,
     offset: int = 0,
 ):
     """
     List alerts sorted by AI-computed priority score (highest first).
-    Supports severity, event_type, and source filters.
+    Supports severity, event_type, source, and department filters.
+    Department admins automatically see only their department's alerts.
     Returns true total count and aggregate stats.
     """
+    dept_filter = routed_department
+    if current_user.role != UserRole.SUPER_ADMIN and dept_filter is None:
+        dept_filter = current_user.department_type
+
     alerts = await alert_service.get_alerts_prioritized(
         db,
         severity=severity,
         event_type=event_type,
         source=source,
+        routed_department=dept_filter,
         active_only=active_only,
         limit=limit,
         offset=offset,
@@ -207,10 +215,11 @@ async def list_alerts_prioritized(
         severity=severity,
         event_type=event_type,
         source=source,
+        routed_department=dept_filter,
         active_only=active_only,
     )
 
-    stats_data = await alert_service.get_alert_stats(db, active_only=active_only)
+    stats_data = await alert_service.get_alert_stats(db, active_only=active_only, routed_department=dept_filter)
 
     return {
         "alerts": alerts,
@@ -254,20 +263,28 @@ async def acknowledge_alert(
     payload: AlertAcknowledgeRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
+    current_user: User = Depends(require_any_department_admin()),
 ):
-    """Acknowledge an alert as a hospital admin."""
-    # Hospital admins can only acknowledge for their own hospital
-    if current_user.hospital_id != payload.hospital_id:
+    """Acknowledge an alert as any department admin."""
+    # Resolve facility_id: explicit payload > current user's facility
+    fac_id = payload.facility_id or payload.hospital_id or current_user.hospital_id
+    if fac_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No facility associated with your account",
+        )
+
+    # Admins can only acknowledge for their own facility
+    if current_user.hospital_id and fac_id != current_user.hospital_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only acknowledge alerts for your own hospital",
+            detail="You can only acknowledge alerts for your own facility",
         )
 
     alert = await alert_service.acknowledge_alert(
         db,
         alert_id=alert_id,
-        hospital_id=str(payload.hospital_id),
+        facility_id=fac_id,
     )
     if alert is None:
         raise HTTPException(
@@ -280,7 +297,7 @@ async def acknowledge_alert(
         resource="alert",
         resource_id=str(alert_id),
         user_id=current_user.id,
-        details=f"Alert acknowledged by hospital {payload.hospital_id}",
+        details=f"Alert acknowledged by facility {fac_id}",
         request=request,
         db=db,
     )
@@ -302,7 +319,7 @@ async def report_false_alarm(
     payload: FalseAlarmReport,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
+    current_user: User = Depends(require_any_department_admin()),
 ):
     """Report an alert as a false alarm. Decreases the patient's trust score.
 

@@ -45,7 +45,7 @@ class Hospital(Base):
     location = Column(Geometry("POINT", srid=4326), nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
-    status = Column(Enum(FacilityStatus, name="facilitystatustype", create_type=False), default=FacilityStatus.OPERATIONAL)
+    status = Column(Enum(FacilityStatus, name="hospitalstatus", create_type=False), default=FacilityStatus.OPERATIONAL)
     coverage_area = Column(Geometry("POLYGON", srid=4326), nullable=True)
     coverage_radius_km = Column(Float, default=15.0)
     phone = Column(String, nullable=True)

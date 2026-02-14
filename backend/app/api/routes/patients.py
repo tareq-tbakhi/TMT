@@ -22,7 +22,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
-from app.models.user import User, UserRole
+from app.models.user import User, UserRole, DEPARTMENT_ADMIN_ROLES
 from app.models.patient import Patient, MobilityStatus, LivingSituation, Gender
 from app.api.middleware.auth import (
     get_current_user,
@@ -155,7 +155,9 @@ def _check_patient_access(current_user: User, patient_id: UUID):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="You can only access your own patient record",
             )
-    elif current_user.role not in (UserRole.HOSPITAL_ADMIN, UserRole.SUPER_ADMIN):
+    elif current_user.role == UserRole.SUPER_ADMIN:
+        pass  # super admin can access any patient
+    elif current_user.role not in DEPARTMENT_ADMIN_ROLES:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions",
@@ -174,9 +176,9 @@ async def list_patients(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.HOSPITAL_ADMIN)),
+    current_user: User = Depends(require_role(UserRole.SUPER_ADMIN)),
 ):
-    """List patients with optional search and mobility filter."""
+    """List patients with optional search and mobility filter. Super admin only."""
     patients = await patient_service.list_patients(
         db,
         search=search,

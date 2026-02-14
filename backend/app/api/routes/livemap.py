@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
 from app.models.user import User, UserRole
+from app.models.hospital import Hospital
 from app.models.geo_event import GeoEventSource
 from app.api.middleware.auth import get_current_user
 from app.api.middleware.audit import log_audit
@@ -99,6 +100,22 @@ AVAILABLE_LAYERS: list[dict] = [
         "default_enabled": True,
     },
     {
+        "id": "police_station",
+        "name": "Police Stations",
+        "description": "Police station locations and operational status",
+        "color": "#2563EB",
+        "icon": "local_police",
+        "default_enabled": True,
+    },
+    {
+        "id": "civil_defense",
+        "name": "Civil Defense Centers",
+        "description": "Civil defense center locations and operational status",
+        "color": "#EA580C",
+        "icon": "fire_department",
+        "default_enabled": True,
+    },
+    {
         "id": "sms_activity",
         "name": "SMS Activity",
         "description": "SMS-based SOS activity clusters",
@@ -137,11 +154,14 @@ async def get_map_events(
     hours: int = Query(default=24, ge=1, le=168, description="Lookback window in hours (1-168)"),
     layer: Optional[str] = Query(default=None, description="Filter by layer ID"),
     severity: Optional[int] = Query(default=None, ge=1, le=5, description="Minimum severity (1-5)"),
+    within_range: bool = Query(default=False, description="Only events within facility coverage radius"),
 ):
     """
     Get recent geo events for the Live Map.
-    Supports filtering by time window, map layer, and minimum severity.
+    Supports filtering by time window, map layer, minimum severity, and facility range.
     """
+    from sqlalchemy import select as sa_select
+
     # Validate layer if provided
     valid_layer_ids = {l["id"] for l in AVAILABLE_LAYERS}
     if layer and layer not in valid_layer_ids:
@@ -151,12 +171,30 @@ async def get_map_events(
             detail=f"Invalid layer. Must be one of: {valid_layer_ids}",
         )
 
-    events = await livemap_service.get_map_events(
-        db,
-        hours=hours,
-        layers=[layer] if layer else None,
-        min_severity=severity,
-    )
+    # Range filtering: if enabled and user has a facility, use spatial query
+    if within_range and current_user.hospital_id:
+        result = await db.execute(
+            sa_select(Hospital).where(Hospital.id == current_user.hospital_id)
+        )
+        facility = result.scalar_one_or_none()
+        if facility and facility.latitude and facility.longitude:
+            radius_m = (facility.coverage_radius_km or 15) * 1000
+            events = await livemap_service.get_events_in_area(
+                db,
+                latitude=facility.latitude,
+                longitude=facility.longitude,
+                radius_m=radius_m,
+                hours=hours,
+                layers=[layer] if layer else None,
+            )
+        else:
+            events = await livemap_service.get_map_events(
+                db, hours=hours, layers=[layer] if layer else None, min_severity=severity,
+            )
+    else:
+        events = await livemap_service.get_map_events(
+            db, hours=hours, layers=[layer] if layer else None, min_severity=severity,
+        )
 
     await log_audit(
         action="read",

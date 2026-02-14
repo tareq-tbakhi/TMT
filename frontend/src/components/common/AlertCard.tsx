@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import StatusBadge from "./StatusBadge";
 import { timeAgo, eventTypeLabels } from "../../utils/formatting";
 import type { MapEventPatientInfo } from "../../services/api";
@@ -117,6 +118,7 @@ const AlertCard: React.FC<AlertCardProps> = ({
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
           },
+          body: JSON.stringify({}),
         }
       );
       if (res.ok && onAcknowledge) {
@@ -370,6 +372,18 @@ const AlertCard: React.FC<AlertCardProps> = ({
                 <span className="ms-2 text-cyan-600 font-medium">Telegram confirmed</span>
               )}
             </p>
+          )}
+          {meta?.patient_id && (
+            <Link
+              to={`/dashboard/patients/${meta.patient_id}`}
+              onClick={(e) => e.stopPropagation()}
+              className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              View Full Patient Profile
+              <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
           )}
           <p className="text-xs text-gray-400">
             Created: {new Date(alert.created_at).toLocaleString()}

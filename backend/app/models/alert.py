@@ -52,3 +52,5 @@ class Alert(Base):
     # --- Multi-department routing ---
     routed_department = Column(String, nullable=True)  # "hospital", "police", "civil_defense"
     target_facility_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), nullable=True)
+    alert_type = Column(String, default="primary")  # "primary" or "secondary"
+    parent_alert_id = Column(UUID(as_uuid=True), nullable=True)  # links secondary to primary

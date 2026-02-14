@@ -156,7 +156,7 @@ const Dashboard: React.FC = () => {
       {/* Stats Cards Row */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatsCard
-          title={t("dashboard.totalPatients")}
+          title={dept === "hospital" ? t("dashboard.totalPatients") : dept === "police" ? "Active Cases" : "People Affected"}
           value={stats?.total_patients ?? 0}
           icon={
             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -178,7 +178,7 @@ const Dashboard: React.FC = () => {
           color="red"
         />
         <StatsCard
-          title={t("dashboard.hospitals")}
+          title={dept === "hospital" ? t("dashboard.hospitals") : dept === "police" ? "Stations" : "Centers"}
           value={`${stats?.operational_hospitals ?? 0}/${stats?.total_hospitals ?? 0}`}
           icon={
             <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
