@@ -196,8 +196,8 @@ const Dashboard: React.FC = () => {
             </svg>
           }
           color="orange"
-          trend={stats?.resolved_sos_today ? "up" : "neutral"}
-          trendValue={`${stats?.resolved_sos_today ?? 0} today`}
+          trend={stats?.created_sos_today ? "up" : "neutral"}
+          trendValue={`${stats?.created_sos_today ?? 0} today`}
         />
       </div>
 

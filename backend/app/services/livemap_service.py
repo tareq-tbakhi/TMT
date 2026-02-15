@@ -21,6 +21,7 @@ from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.geo_event import GeoEvent, GeoEventSource
+from app.models.alert import EventType
 from app.api.websocket.handler import broadcast_map_event
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ def _make_point(longitude: float, latitude: float):
 def _geo_event_to_dict(event: GeoEvent) -> dict[str, Any]:
     return {
         "id": str(event.id),
-        "event_type": event.event_type,
+        "event_type": event.event_type.value if hasattr(event.event_type, "value") else event.event_type,
         "latitude": event.latitude,
         "longitude": event.longitude,
         "source": event.source.value if event.source else None,
@@ -57,7 +58,7 @@ def _geo_event_to_dict(event: GeoEvent) -> dict[str, Any]:
 async def create_geo_event(
     db: AsyncSession,
     *,
-    event_type: str,
+    event_type: str | EventType,
     latitude: float,
     longitude: float,
     source: str | GeoEventSource,
@@ -74,14 +75,15 @@ async def create_geo_event(
     Parameters
     ----------
     event_type
-        Free-form type string (``"crisis"``, ``"sos"``, ``"hospital_status"``
-        etc.).
+        An ``EventType`` enum member or its string value.
     source
         One of ``GeoEventSource`` enum values.
     layer
         Map layer identifier (``"sos"``, ``"crisis"``, ``"hospital"``,
         ``"sms_activity"``, ``"patient_density"``, ``"telegram_intel"``).
     """
+    if isinstance(event_type, str):
+        event_type = EventType(event_type)
     if isinstance(source, str):
         source = GeoEventSource(source)
 

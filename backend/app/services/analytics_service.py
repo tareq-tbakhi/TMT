@@ -87,6 +87,10 @@ async def get_dashboard_stats(db: AsyncSession) -> dict[str, Any]:
             SosRequest.resolved_at >= now - timedelta(hours=24),
         )
     )
+    created_24h_q = (
+        select(func.count(SosRequest.id))
+        .where(SosRequest.created_at >= now - timedelta(hours=24))
+    )
 
     # Execute each count individually (clean async pattern)
     total_patients = (await db.execute(total_patients_q)).scalar_one()
@@ -100,6 +104,7 @@ async def get_dashboard_stats(db: AsyncSession) -> dict[str, Any]:
     critical_alerts = (await db.execute(critical_alerts_q)).scalar_one()
     open_sos = (await db.execute(open_sos_q)).scalar_one()
     resolved_24h = (await db.execute(resolved_24h_q)).scalar_one()
+    created_24h = (await db.execute(created_24h_q)).scalar_one()
 
     return {
         "total_patients": total_patients,
@@ -114,6 +119,7 @@ async def get_dashboard_stats(db: AsyncSession) -> dict[str, Any]:
         "critical_alerts": critical_alerts,
         "pending_sos": open_sos,
         "resolved_sos_today": resolved_24h,
+        "created_sos_today": created_24h,
     }
 
 

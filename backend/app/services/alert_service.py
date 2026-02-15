@@ -179,22 +179,23 @@ async def create_alert(
     # Also create a GeoEvent so the alert appears on the Live Map
     severity_int = {"low": 1, "medium": 2, "high": 3, "critical": 5}.get(severity.value, 2)
     try:
-        await create_geo_event(
-            db,
-            event_type=event_type.value,
-            latitude=latitude,
-            longitude=longitude,
-            source="system",
-            layer="crisis",
-            severity=severity_int,
-            title=title,
-            details=details,
-            metadata={"alert_id": str(alert.id), "radius_m": radius_m, **(metadata or {})},
-            expires_hours=expires_hours,
-            broadcast=broadcast,
-        )
+        async with db.begin_nested():
+            await create_geo_event(
+                db,
+                event_type=event_type,
+                latitude=latitude,
+                longitude=longitude,
+                source="system",
+                layer="crisis",
+                severity=severity_int,
+                title=title,
+                details=details,
+                metadata={"alert_id": str(alert.id), "radius_m": radius_m, **(metadata or {})},
+                expires_hours=expires_hours,
+                broadcast=broadcast,
+            )
     except Exception:
-        logger.debug("Could not create geo event for alert %s", alert.id)
+        logger.exception("Could not create geo event for alert %s", alert.id)
 
     logger.info(
         "Created alert %s [%s/%s] — %d affected patients",

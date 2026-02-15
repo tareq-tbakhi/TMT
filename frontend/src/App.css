@@ -168,3 +168,23 @@ body,
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* ─── Detail panel slide-in ─────────────────────────────── */
+
+.detail-panel-slide {
+  animation: slide-in-from-end 0.3s ease-out;
+}
+
+@keyframes slide-in-from-end {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+[dir="rtl"] .detail-panel-slide {
+  animation: slide-in-from-start 0.3s ease-out;
+}
+
+@keyframes slide-in-from-start {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
