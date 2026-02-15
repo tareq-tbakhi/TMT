@@ -46,6 +46,34 @@ const SEV = {
 
 type ViewMode = "cards" | "compact";
 
+/* ---- Haversine distance (km) ---- */
+function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/* ---- Google Maps directions URL ---- */
+function googleMapsDirectionsUrl(
+  destLat: number,
+  destLon: number,
+  originLat?: number,
+  originLon?: number,
+): string {
+  const dest = `${destLat},${destLon}`;
+  if (originLat != null && originLon != null) {
+    return `https://www.google.com/maps/dir/${originLat},${originLon}/${dest}`;
+  }
+  // No origin — Google will use the user's current location
+  return `https://www.google.com/maps/dir/?api=1&destination=${dest}`;
+}
+
 /* ------------------------------------------------------------------ */
 /* Component                                                          */
 /* ------------------------------------------------------------------ */
@@ -63,6 +91,16 @@ const CrisisAlerts: React.FC = () => {
   const [page, setPage] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>("compact");
   const refetchRef = useRef(0);
+  const [userLocation, setUserLocation] = useState<{ lat: number; lon: number } | null>(null);
+
+  // Get user location for distance sorting + navigation
+  useEffect(() => {
+    navigator.geolocation?.getCurrentPosition(
+      (pos) => setUserLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+      () => {},
+      { enableHighAccuracy: false, timeout: 5000 },
+    );
+  }, []);
 
   /* ---- fetch alerts with server-side pagination + filters ---- */
   const fetchAlerts = useCallback(async () => {
@@ -131,6 +169,26 @@ const CrisisAlerts: React.FC = () => {
   });
 
   const handleAcknowledge = (id: string) => acknowledgeAlert(id);
+
+  // Client-side re-sort: priority_score desc, then distance asc (closest first for ties)
+  const sortedAlerts = React.useMemo(() => {
+    if (!sortByPriority) return alerts;
+    const sevScores: Record<string, number> = { critical: 80, high: 60, medium: 40, low: 20 };
+    return [...alerts].sort((a, b) => {
+      const metaA = (a as any).metadata_ ?? (a as any).metadata ?? {};
+      const metaB = (b as any).metadata_ ?? (b as any).metadata ?? {};
+      const scoreA = (a as any).priority_score ?? metaA?.priority_score ?? sevScores[a.severity] ?? 30;
+      const scoreB = (b as any).priority_score ?? metaB?.priority_score ?? sevScores[b.severity] ?? 30;
+      if (scoreA !== scoreB) return scoreB - scoreA; // higher score first
+      // Tiebreaker: closer to user first
+      if (userLocation && a.latitude && a.longitude && b.latitude && b.longitude) {
+        const distA = haversineKm(userLocation.lat, userLocation.lon, a.latitude, a.longitude);
+        const distB = haversineKm(userLocation.lat, userLocation.lon, b.latitude, b.longitude);
+        return distA - distB; // closer first
+      }
+      return 0;
+    });
+  }, [alerts, sortByPriority, userLocation]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
   const showFrom = totalCount === 0 ? 0 : page * PAGE_SIZE + 1;
@@ -318,7 +376,7 @@ const CrisisAlerts: React.FC = () => {
           ) : viewMode === "cards" ? (
             /* ── Card view ── */
             <div className="space-y-3">
-              {alerts.map((alert) => (
+              {sortedAlerts.map((alert) => (
                 <AlertCard key={alert.id} alert={alert} onAcknowledge={handleAcknowledge} />
               ))}
             </div>
@@ -336,15 +394,16 @@ const CrisisAlerts: React.FC = () => {
                       <th className="px-4 py-2.5 w-[65px] text-center">Priority</th>
                       <th className="px-4 py-2.5 w-[70px] text-center">Patients</th>
                       <th className="px-4 py-2.5 w-[100px]">Time</th>
-                      <th className="px-4 py-2.5 w-[110px] text-right">Action</th>
+                      <th className="px-4 py-2.5 w-[140px] text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
-                    {alerts.map((alert) => (
+                    {sortedAlerts.map((alert) => (
                       <CompactRow
                         key={alert.id}
                         alert={alert}
                         onAcknowledge={handleAcknowledge}
+                        userLocation={userLocation}
                       />
                     ))}
                   </tbody>
@@ -449,9 +508,10 @@ const deptLabel: Record<string, string> = {
 interface CompactRowProps {
   alert: Alert;
   onAcknowledge: (id: string) => void;
+  userLocation?: { lat: number; lon: number } | null;
 }
 
-const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge }) => {
+const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge, userLocation }) => {
   const [expanded, setExpanded] = useState(false);
   const meta = (alert as any).metadata_ ?? (alert as any).metadata ?? {};
   const priorityScore = (alert as any).priority_score ?? meta?.priority_score ?? 0;
@@ -585,13 +645,30 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge }) => {
               </span>
             )}
             {alert.latitude && alert.longitude && (
-              <a
-                href={`/dashboard/map?lat=${alert.latitude}&lon=${alert.longitude}`}
-                onClick={(e) => e.stopPropagation()}
-                className="rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-50"
-              >
-                Map
-              </a>
+              <>
+                <a
+                  href={googleMapsDirectionsUrl(
+                    alert.latitude,
+                    alert.longitude,
+                    userLocation?.lat,
+                    userLocation?.lon,
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="rounded-md bg-green-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-green-700 transition-colors"
+                  title="Get directions in Google Maps"
+                >
+                  Navigate
+                </a>
+                <a
+                  href={`/dashboard/map?lat=${alert.latitude}&lon=${alert.longitude}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-50"
+                >
+                  Map
+                </a>
+              </>
             )}
           </div>
         </td>
@@ -609,13 +686,36 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge }) => {
                   <p className="text-gray-600">{alert.details}</p>
                 </div>
               )}
-              {/* Location */}
+              {/* Location + Navigate */}
               {alert.latitude && alert.longitude && (
                 <div>
                   <p className="font-medium text-gray-700 mb-0.5">Location</p>
                   <p className="text-gray-600">
                     {alert.latitude.toFixed(5)}, {alert.longitude.toFixed(5)}
+                    {userLocation && (
+                      <span className="ms-2 text-blue-600 font-medium">
+                        ({haversineKm(userLocation.lat, userLocation.lon, alert.latitude, alert.longitude).toFixed(1)} km away)
+                      </span>
+                    )}
                   </p>
+                  <a
+                    href={googleMapsDirectionsUrl(
+                      alert.latitude,
+                      alert.longitude,
+                      userLocation?.lat,
+                      userLocation?.lon,
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="mt-1 inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-green-700 transition-colors"
+                  >
+                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Get Directions
+                  </a>
                 </div>
               )}
               {/* Confidence */}
