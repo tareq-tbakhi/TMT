@@ -1,10 +1,12 @@
 /**
  * News Store - Zustand state management for News Tab
+ * Uses dummy data when VITE_USE_DUMMY_DATA=true, otherwise fetches from API
  */
 
 import { create } from 'zustand';
 import type { NewsArticle, NewsFilters, NewsState } from '../types/newsTypes';
 import { DUMMY_NEWS } from '../data/dummyNewsData';
+import { isDummyMode } from '../hooks/useDataMode';
 
 const initialFilters: NewsFilters = {
   category: 'all',
@@ -137,16 +139,37 @@ export const useNewsStore = create<NewsState>((set, get) => ({
 }));
 
 /**
- * Initialize store with dummy data (for development)
+ * Initialize news store based on data mode
+ * Uses dummy data when VITE_USE_DUMMY_DATA=true
  * Call this when the News page mounts
  */
-export function initializeNewsWithDummyData() {
+export function initializeNews() {
   const store = useNewsStore.getState();
   store.setLoading(true);
 
-  // Simulate API delay
-  setTimeout(() => {
-    store.setArticles(DUMMY_NEWS);
-    store.setLoading(false);
-  }, 500);
+  if (isDummyMode()) {
+    // Use dummy data with simulated delay
+    setTimeout(() => {
+      store.setArticles(DUMMY_NEWS);
+      store.setLoading(false);
+    }, 500);
+  } else {
+    // TODO: Fetch from backend API when available
+    // For now, show empty state in API mode (backend doesn't have news endpoint yet)
+    setTimeout(() => {
+      store.setArticles([]);
+      store.setLoading(false);
+      store.setError('News API not available. Backend endpoint not implemented.');
+    }, 100);
+  }
 }
+
+/**
+ * @deprecated Use initializeNews() instead
+ */
+export function initializeNewsWithDummyData() {
+  initializeNews();
+}
+
+// Export data mode helper
+export const isUsingDummyData = isDummyMode;
