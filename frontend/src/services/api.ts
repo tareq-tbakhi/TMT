@@ -398,6 +398,11 @@ export interface AnalyticsStats {
   resolved_sos_today: number;
   created_sos_today: number;
   patients_at_risk: number;
+  // Aliases for UI compatibility
+  sos_pending?: number;
+  sos_today?: number;
+  hospitals_operational?: number;
+  hospitals_total?: number;
 }
 
 export function getAnalyticsStats(): Promise<AnalyticsStats> {

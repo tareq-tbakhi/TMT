@@ -20,9 +20,7 @@ L.Marker.prototype.options.icon = defaultIcon;
 
 // Extended patient type for fields beyond the base API type
 interface ExtendedPatient extends Patient {
-  chronic_conditions?: string[];
   medications?: string[];
-  special_equipment?: string[];
 }
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";

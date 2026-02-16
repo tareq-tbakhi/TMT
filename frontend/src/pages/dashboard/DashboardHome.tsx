@@ -48,12 +48,12 @@ export default function DashboardHome() {
     },
     {
       label: t("dashboard.hospitals"),
-      value: `${stats?.hospitals_operational ?? 0}/${stats?.hospitals_total ?? 0}`,
+      value: `${stats?.hospitals_operational ?? stats?.operational_hospitals ?? 0}/${stats?.hospitals_total ?? stats?.total_hospitals ?? 0}`,
       color: "bg-green-500",
     },
     {
       label: t("dashboard.sosRequests"),
-      value: stats?.sos_pending ?? 0,
+      value: stats?.sos_pending ?? stats?.pending_sos ?? 0,
       color: "bg-orange-500",
     },
   ];

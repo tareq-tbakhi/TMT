@@ -5,10 +5,52 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { VoiceState } from "../types/sosTypes";
 
+// Web Speech API types for webkit (not available in all TypeScript libs)
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+interface SpeechRecognitionResult {
+  isFinal: boolean;
+  length: number;
+  item(index: number): SpeechRecognitionAlternative;
+  [index: number]: SpeechRecognitionAlternative;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  item(index: number): SpeechRecognitionResult;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface WebSpeechRecognitionEvent extends Event {
+  results: SpeechRecognitionResultList;
+  resultIndex: number;
+}
+
+interface WebSpeechRecognitionErrorEvent extends Event {
+  error: string;
+  message?: string;
+}
+
+interface WebSpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onstart: ((ev: Event) => void) | null;
+  onend: ((ev: Event) => void) | null;
+  onresult: ((ev: WebSpeechRecognitionEvent) => void) | null;
+  onerror: ((ev: WebSpeechRecognitionErrorEvent) => void) | null;
+  start(): void;
+  stop(): void;
+  abort(): void;
+}
+
 // Extend Window interface for webkit speech recognition
 declare global {
   interface Window {
-    webkitSpeechRecognition: new () => SpeechRecognition;
+    webkitSpeechRecognition: new () => WebSpeechRecognition;
   }
 }
 
@@ -35,7 +77,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
     confidence: 0,
   });
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionRef = useRef<WebSpeechRecognition | null>(null);
   const isSupported = typeof window !== "undefined" && "webkitSpeechRecognition" in window;
 
   const startListening = useCallback(() => {
@@ -60,7 +102,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
       setVoiceState((s) => ({ ...s, isListening: true, error: undefined }));
     };
 
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
+    recognition.onresult = (event: WebSpeechRecognitionEvent) => {
       const lastResult = event.results[event.results.length - 1];
       const transcript = lastResult[0].transcript;
       const confidence = lastResult[0].confidence;
@@ -75,7 +117,7 @@ export function useVoiceInput(options: UseVoiceInputOptions = {}) {
       onResult?.(transcript, isFinal);
     };
 
-    recognition.onerror = (event: SpeechRecognitionErrorEvent) => {
+    recognition.onerror = (event: WebSpeechRecognitionErrorEvent) => {
       const errorMsg = event.error;
       setVoiceState((s) => ({
         ...s,

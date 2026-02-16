@@ -37,12 +37,20 @@ Object.defineProperty(navigator, 'geolocation', {
         },
       })
     ),
-    watchPosition: vi.fn(),
+    watchPosition: vi.fn().mockReturnValue(1),
+    clearWatch: vi.fn(),
   },
 });
 
+// Mock navigator.vibrate
+Object.defineProperty(navigator, 'vibrate', {
+  value: vi.fn().mockReturnValue(true),
+  configurable: true,
+  writable: true,
+});
+
 // Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
+(globalThis as typeof globalThis & { ResizeObserver: unknown }).ResizeObserver = vi.fn().mockImplementation(() => ({
   observe: vi.fn(),
   unobserve: vi.fn(),
   disconnect: vi.fn(),

@@ -274,10 +274,11 @@ export default function SOS() {
     setHospitalLoading(true);
 
     // Always use dummy data for now (demo purposes)
+    const now = new Date().toISOString();
     setNearestHospitals([
-      { id: "dummy-1", name: "Al-Shifa Medical Complex", latitude: 31.5, longitude: 34.45, status: "operational" as const, available_beds: 120, total_beds: 200, distance: 2.3 },
-      { id: "dummy-2", name: "Al-Quds Hospital", latitude: 31.52, longitude: 34.47, status: "offline" as const, available_beds: 0, total_beds: 150, distance: 5.7 },
-      { id: "dummy-3", name: "European Gaza Hospital", latitude: 31.35, longitude: 34.32, status: "operational" as const, available_beds: 45, total_beds: 100, distance: 12.1 },
+      { id: "dummy-1", name: "Al-Shifa Medical Complex", latitude: 31.5, longitude: 34.45, status: "operational", available_beds: 120, bed_capacity: 200, icu_beds: 20, specialties: ["Emergency", "Trauma"], coverage_radius_km: 10, phone: null, email: null, address: null, website: null, supply_levels: {}, created_at: now, updated_at: now, distance: 2.3 },
+      { id: "dummy-2", name: "Al-Quds Hospital", latitude: 31.52, longitude: 34.47, status: "offline", available_beds: 0, bed_capacity: 150, icu_beds: 15, specialties: ["General"], coverage_radius_km: 8, phone: null, email: null, address: null, website: null, supply_levels: {}, created_at: now, updated_at: now, distance: 5.7 },
+      { id: "dummy-3", name: "European Gaza Hospital", latitude: 31.35, longitude: 34.32, status: "operational", available_beds: 45, bed_capacity: 100, icu_beds: 10, specialties: ["Emergency"], coverage_radius_km: 15, phone: null, email: null, address: null, website: null, supply_levels: {}, created_at: now, updated_at: now, distance: 12.1 },
     ]);
     setHospitalLoading(false);
   }, [latitude, longitude]);
