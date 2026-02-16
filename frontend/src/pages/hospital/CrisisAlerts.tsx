@@ -162,7 +162,7 @@ const CrisisAlerts: React.FC = () => {
   }, [severityFilter, eventTypeFilter, sourceFilter, sortByPriority]);
 
   // Real-time: just refetch current page (debounced)
-  const socketTimer = useRef<ReturnType<typeof setTimeout>>();
+  const socketTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useSocketEvent("new_alert", () => {
     clearTimeout(socketTimer.current);
     socketTimer.current = setTimeout(fetchAlerts, 1500);

@@ -77,6 +77,16 @@ const AlertCard: React.FC<AlertCardProps> = ({
   const patientStatus = meta?.patient_status as string | undefined;
   const psConfig = patientStatus ? patientStatusIcons[patientStatus] : null;
 
+  // Extract metadata fields with proper typing
+  const metaResponseUrgency = typeof meta?.response_urgency === "string" ? meta.response_urgency : null;
+  const metaReportedFalse = Boolean(meta?.reported_false);
+  const metaRecommendation = typeof meta?.recommendation === "string" ? meta.recommendation : null;
+  const metaPriorityFactors = Array.isArray(meta?.priority_factors) ? (meta.priority_factors as string[]) : [];
+  const metaNearbyAlertCount = typeof meta?.nearby_alert_count === "number" ? meta.nearby_alert_count : 0;
+  const metaTelegramCorroborated = Boolean(meta?.telegram_corroborated);
+  const metaPatientId = typeof meta?.patient_id === "string" ? meta.patient_id : null;
+  const metaLocationDescription = typeof meta?.location_description === "string" ? meta.location_description : null;
+
   const handleReportFalse = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (reportingFalse) return;
@@ -133,7 +143,7 @@ const AlertCard: React.FC<AlertCardProps> = ({
 
   // Build location display — descriptive text for Telegram, coordinates for SOS/system
   const hasCoords = alert.latitude != null && alert.longitude != null;
-  const locationDescription = (meta?.location_description as string) || null;
+  const locationDescription = metaLocationDescription;
   // Try to extract location from details if source is Telegram and no coordinates
   const detailsLocation =
     !hasCoords && alert.source === "telegram" && alert.details
@@ -187,16 +197,16 @@ const AlertCard: React.FC<AlertCardProps> = ({
                   {psConfig.icon} {psConfig.label}
                 </span>
               )}
-              {meta?.response_urgency && (
+              {metaResponseUrgency && (
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold ${
-                  meta.response_urgency === "immediate" ? "bg-red-100 text-red-700" :
-                  meta.response_urgency === "within_1h" ? "bg-orange-100 text-orange-700" :
+                  metaResponseUrgency === "immediate" ? "bg-red-100 text-red-700" :
+                  metaResponseUrgency === "within_1h" ? "bg-orange-100 text-orange-700" :
                   "bg-gray-100 text-gray-600"
                 }`}>
-                  {String(meta.response_urgency).replace(/_/g, " ")}
+                  {metaResponseUrgency.replace(/_/g, " ")}
                 </span>
               )}
-              {meta?.reported_false && (
+              {metaReportedFalse && (
                 <span className="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-600">
                   Reported False
                 </span>
@@ -346,36 +356,36 @@ const AlertCard: React.FC<AlertCardProps> = ({
           {alert.affected_patients_count != null && (
             <p className="text-sm text-gray-600">
               <span className="font-medium">Affected patients:</span>{" "}
-              {alert.affected_patients_count}
+              {String(alert.affected_patients_count)}
             </p>
           )}
-          {meta?.recommendation && (
+          {metaRecommendation && (
             <p className="text-sm text-blue-700 bg-blue-50 rounded px-2 py-1">
               <span className="font-medium">AI Recommendation:</span>{" "}
-              {String(meta.recommendation)}
+              {metaRecommendation}
             </p>
           )}
-          {Array.isArray(meta?.priority_factors) && (meta.priority_factors as string[]).length > 0 && (
+          {metaPriorityFactors.length > 0 && (
             <div className="text-xs text-gray-600">
               <span className="font-medium">Priority Factors:</span>
               <ul className="mt-1 ms-4 list-disc space-y-0.5">
-                {(meta.priority_factors as string[]).map((f, i) => (
+                {metaPriorityFactors.map((f, i) => (
                   <li key={i}>{f}</li>
                 ))}
               </ul>
             </div>
           )}
-          {meta?.nearby_alert_count != null && Number(meta.nearby_alert_count) > 0 && (
+          {metaNearbyAlertCount > 0 && (
             <p className="text-xs text-gray-600">
-              <span className="font-medium">Nearby alerts:</span> {String(meta.nearby_alert_count)}
-              {meta.telegram_corroborated && (
+              <span className="font-medium">Nearby alerts:</span> {metaNearbyAlertCount}
+              {metaTelegramCorroborated && (
                 <span className="ms-2 text-cyan-600 font-medium">Telegram confirmed</span>
               )}
             </p>
           )}
-          {meta?.patient_id && (
+          {metaPatientId && (
             <Link
-              to={`/dashboard/patients/${meta.patient_id}`}
+              to={`/dashboard/patients/${metaPatientId}`}
               onClick={(e) => e.stopPropagation()}
               className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
             >

@@ -50,19 +50,19 @@ export default function AnalyticsPage() {
   const barData = [
     { name: "Patients", value: stats?.total_patients ?? 0 },
     { name: "Active Alerts", value: stats?.active_alerts ?? 0 },
-    { name: "SOS Pending", value: stats?.sos_pending ?? 0 },
-    { name: "SOS Today", value: stats?.sos_today ?? 0 },
+    { name: "SOS Pending", value: stats?.sos_pending ?? stats?.pending_sos ?? 0 },
+    { name: "SOS Today", value: stats?.sos_today ?? stats?.created_sos_today ?? 0 },
     { name: "At Risk", value: stats?.patients_at_risk ?? 0 },
   ];
 
   const pieData = [
     {
       name: "Operational",
-      value: stats?.hospitals_operational ?? 0,
+      value: stats?.hospitals_operational ?? stats?.operational_hospitals ?? 0,
     },
     {
       name: "Non-operational",
-      value: (stats?.hospitals_total ?? 0) - (stats?.hospitals_operational ?? 0),
+      value: (stats?.hospitals_total ?? stats?.total_hospitals ?? 0) - (stats?.hospitals_operational ?? stats?.operational_hospitals ?? 0),
     },
   ];
 
