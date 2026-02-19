@@ -36,6 +36,7 @@ class SOSCreateRequest(BaseModel):
     patient_status: PatientStatus = PatientStatus.INJURED
     severity: int = Field(default=3, ge=1, le=5)
     details: Optional[str] = None
+    triage_transcript: Optional[list[dict]] = None  # [{role, content, timestamp}, ...]
 
 
 class SOSStatusUpdateRequest(BaseModel):
@@ -119,6 +120,11 @@ async def send_sos(
         source=SOSSource.API,
         details=payload.details,
     )
+
+    # Save triage conversation transcript if provided
+    if payload.triage_transcript:
+        sos.triage_transcript = payload.triage_transcript
+        await db.flush()
 
     await log_audit(
         action="create",

@@ -4,6 +4,8 @@
 
 import { create } from 'zustand';
 import type { NewsArticle, NewsFilters, NewsState } from '../types/newsTypes';
+import type { SourcePlatform } from '../types/newsTypes';
+import { getNews, type NewsArticleAPI } from '../services/api';
 import { DUMMY_NEWS } from '../data/dummyNewsData';
 
 const initialFilters: NewsFilters = {
@@ -136,17 +138,65 @@ export const useNewsStore = create<NewsState>((set, get) => ({
   },
 }));
 
+/** Map backend NewsArticleAPI to frontend NewsArticle type. */
+function mapApiArticle(a: NewsArticleAPI): NewsArticle {
+  const validPlatforms: SourcePlatform[] = ['twitter', 'telegram', 'facebook', 'instagram', 'other'];
+  const platform: SourcePlatform = validPlatforms.includes(a.source_platform as SourcePlatform)
+    ? (a.source_platform as SourcePlatform)
+    : 'other';
+
+  return {
+    id: a.id,
+    title: a.title,
+    summary: a.summary,
+    content: a.content ?? undefined,
+    source_platform: platform,
+    source_url: a.source_url ?? undefined,
+    source_author: a.source_author ?? undefined,
+    latitude: a.latitude ?? undefined,
+    longitude: a.longitude ?? undefined,
+    location_name: a.location_name ?? undefined,
+    distance_km: a.distance_km ?? undefined,
+    trust_score: a.trust_score,
+    priority_score: a.priority_score,
+    relevance_tags: a.relevance_tags,
+    category: a.category as NewsArticle['category'],
+    severity: a.severity as NewsArticle['severity'],
+    event_type: a.event_type ?? undefined,
+    media_urls: a.media_urls,
+    engagement_count: a.engagement_count,
+    verified: a.verified,
+    published_at: a.published_at,
+    created_at: a.created_at,
+  };
+}
+
 /**
- * Initialize store with dummy data (for development)
- * Call this when the News page mounts
+ * Fetch news from the backend API.
+ * Falls back to dummy data if the API call fails.
  */
-export function initializeNewsWithDummyData() {
+export async function fetchNewsFromAPI(params?: {
+  category?: string;
+  severity?: string;
+  hours?: number;
+}) {
   const store = useNewsStore.getState();
   store.setLoading(true);
+  store.setError(null);
 
-  // Simulate API delay
-  setTimeout(() => {
+  try {
+    const { articles } = await getNews({
+      category: params?.category,
+      severity: params?.severity,
+      hours: params?.hours ?? 48,
+      limit: 100,
+    });
+    const mapped = articles.map(mapApiArticle);
+    store.setArticles(mapped.length > 0 ? mapped : DUMMY_NEWS);
+  } catch (err) {
+    console.warn('News API unavailable, using dummy data:', err);
     store.setArticles(DUMMY_NEWS);
+  } finally {
     store.setLoading(false);
-  }, 500);
+  }
 }

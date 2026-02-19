@@ -182,6 +182,7 @@ export default function SOS() {
 
   // AI Assistant store
   const resetAIAssistant = useAIAssistantStore((s: { reset: () => void }) => s.reset);
+  const aiMessages = useAIAssistantStore((s: { messages: Array<{ role: string; content: string; timestamp: Date }> }) => s.messages);
 
   // ─── Countdown Timer (Cancellation Window) ─────────────────
 
@@ -519,12 +520,22 @@ export default function SOS() {
 
     if (isOnline) {
       try {
+        // Build triage transcript from AI conversation
+        const transcript = aiMessages.length > 0
+          ? aiMessages.map((m) => ({
+              role: m.role,
+              content: m.content,
+              timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : String(m.timestamp),
+            }))
+          : undefined;
+
         const response = await createSOS({
           latitude,
           longitude,
           patient_status: patientStatus,
           severity,
           details: details || undefined,
+          triage_transcript: transcript,
         });
 
         setSosResponse({

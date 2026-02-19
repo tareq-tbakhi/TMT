@@ -11,7 +11,7 @@ from sqlalchemy import text
 import app.models  # noqa: F401 — register all ORM models with Base.metadata
 
 logger = logging.getLogger(__name__)
-from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap, auth, admin, aid_requests, transfers, simulation, telegram
+from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap, auth, admin, aid_requests, transfers, simulation, telegram, news
 from app.api.websocket.handler import sio
 
 settings = get_settings()
@@ -50,6 +50,7 @@ app.include_router(aid_requests.router, prefix=settings.API_PREFIX, tags=["Aid R
 app.include_router(transfers.router, prefix=settings.API_PREFIX, tags=["Transfers"])
 app.include_router(simulation.router, prefix=settings.API_PREFIX, tags=["Simulation"])
 app.include_router(telegram.router, prefix=settings.API_PREFIX, tags=["Telegram"])
+app.include_router(news.router, prefix=settings.API_PREFIX, tags=["News"])
 
 
 @app.on_event("startup")
@@ -264,6 +265,15 @@ async def startup():
                     resolved_at TIMESTAMP
                 )
             """))
+    except Exception:
+        pass
+
+    # Step 16: Add triage_transcript JSONB column to sos_requests (idempotent)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text(
+                "ALTER TABLE sos_requests ADD COLUMN IF NOT EXISTS triage_transcript JSONB"
+            ))
     except Exception:
         pass
 

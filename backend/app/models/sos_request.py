@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Column, String, Enum, DateTime, Float, Integer, Boolean, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from geoalchemy2 import Geometry
 
 from app.db.postgres import Base
@@ -47,6 +47,9 @@ class SosRequest(Base):
     details = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     resolved_at = Column(DateTime, nullable=True)
+
+    # --- AI triage conversation transcript ---
+    triage_transcript = Column(JSONB, nullable=True)  # [{role, content, timestamp}, ...]
 
     # --- Multi-department routing ---
     routed_department = Column(String, nullable=True)  # "hospital", "police", "civil_defense"

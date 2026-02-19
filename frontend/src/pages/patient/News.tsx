@@ -3,7 +3,7 @@
  */
 
 import { useEffect, useMemo } from 'react';
-import { useNewsStore, initializeNewsWithDummyData } from '../../store/newsStore';
+import { useNewsStore, fetchNewsFromAPI } from '../../store/newsStore';
 import { NewsFilters, NewsList, NewsDetail } from '../../components/news';
 
 export default function News() {
@@ -17,9 +17,9 @@ export default function News() {
     setSelectedArticle,
   } = useNewsStore();
 
-  // Initialize with dummy data on mount
+  // Fetch news from API on mount (falls back to dummy data)
   useEffect(() => {
-    initializeNewsWithDummyData();
+    fetchNewsFromAPI();
   }, []);
 
   // Compute category counts from all articles (unfiltered)

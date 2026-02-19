@@ -369,6 +369,7 @@ export interface SOSRequest {
   patient_status?: string;
   severity?: number;
   details?: string;
+  triage_transcript?: Array<{ role: string; content: string; timestamp: string }>;
 }
 
 export interface SOSResponse {
@@ -562,4 +563,52 @@ export function updateAidRequestStatus(
     method: "PUT",
     body: { status },
   });
+}
+
+// ─── News endpoints ────────────────────────────────────────────
+
+export interface NewsArticleAPI {
+  id: string;
+  title: string;
+  summary: string;
+  content: string | null;
+  source_platform: string;
+  source_url: string | null;
+  source_author: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  location_name: string | null;
+  distance_km: number | null;
+  trust_score: number;
+  priority_score: number;
+  relevance_tags: string[];
+  category: string;
+  severity: string;
+  event_type: string | null;
+  media_urls: string[];
+  engagement_count: number;
+  verified: boolean;
+  published_at: string;
+  created_at: string;
+}
+
+export async function getNews(params?: {
+  category?: string;
+  severity?: string;
+  source?: string;
+  hours?: number;
+  limit?: number;
+  offset?: number;
+}): Promise<{ articles: NewsArticleAPI[]; total: number }> {
+  const searchParams = new URLSearchParams();
+  if (params?.category) searchParams.set("category", params.category);
+  if (params?.severity) searchParams.set("severity", params.severity);
+  if (params?.source) searchParams.set("source", params.source);
+  if (params?.hours) searchParams.set("hours", String(params.hours));
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.offset) searchParams.set("offset", String(params.offset));
+  const qs = searchParams.toString();
+  return request<{ articles: NewsArticleAPI[]; total: number }>(
+    `/news${qs ? `?${qs}` : ""}`
+  );
 }
