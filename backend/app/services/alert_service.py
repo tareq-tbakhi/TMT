@@ -220,6 +220,7 @@ def _build_alert_filters(
     event_type: str | EventType | None = None,
     active_only: bool = True,
     source: str | None = None,
+    exclude_source: str | None = None,
     routed_department: str | None = None,
 ):
     """Build reusable WHERE conditions for alert queries."""
@@ -238,6 +239,8 @@ def _build_alert_filters(
         conditions.append(Alert.event_type == event_type)
     if source is not None:
         conditions.append(Alert.source == source)
+    if exclude_source is not None:
+        conditions.append((Alert.source != exclude_source) | Alert.source.is_(None))
     if routed_department is not None:
         conditions.append(Alert.routed_department == routed_department)
     return conditions
@@ -250,12 +253,14 @@ async def count_alerts(
     event_type: str | EventType | None = None,
     active_only: bool = True,
     source: str | None = None,
+    exclude_source: str | None = None,
     routed_department: str | None = None,
 ) -> int:
     """Return the total count of alerts matching the given filters."""
     conditions = _build_alert_filters(
         severity=severity, event_type=event_type,
         active_only=active_only, source=source,
+        exclude_source=exclude_source,
         routed_department=routed_department,
     )
     query = select(func.count(Alert.id))
@@ -321,6 +326,7 @@ async def get_alerts(
     event_type: str | EventType | None = None,
     active_only: bool = True,
     source: str | None = None,
+    exclude_source: str | None = None,
     routed_department: str | None = None,
     limit: int = 100,
     offset: int = 0,
@@ -332,6 +338,7 @@ async def get_alerts(
     conditions = _build_alert_filters(
         severity=severity, event_type=event_type,
         active_only=active_only, source=source,
+        exclude_source=exclude_source,
         routed_department=routed_department,
     )
     query = select(Alert).order_by(Alert.created_at.desc()).limit(limit).offset(offset)
@@ -409,6 +416,7 @@ async def get_alerts_prioritized(
     severity: str | AlertSeverity | None = None,
     event_type: str | EventType | None = None,
     source: str | None = None,
+    exclude_source: str | None = None,
     routed_department: str | None = None,
     active_only: bool = True,
     limit: int = 100,
@@ -420,6 +428,7 @@ async def get_alerts_prioritized(
     """
     alerts = await get_alerts(
         db, severity=severity, event_type=event_type, source=source,
+        exclude_source=exclude_source,
         routed_department=routed_department,
         active_only=active_only, limit=limit, offset=offset,
     )

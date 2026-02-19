@@ -6,12 +6,14 @@ import { useState, useRef, useEffect } from "react";
 
 interface TextInputProps {
   onSend: (text: string) => void;
+  onTyping?: () => void;
   disabled?: boolean;
   placeholder?: string;
 }
 
 export function TextInput({
   onSend,
+  onTyping,
   disabled = false,
   placeholder = "Type your message...",
 }: TextInputProps) {
@@ -21,6 +23,14 @@ export function TextInput({
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setText(e.target.value);
+    // Signal that user is actively typing — resets inactivity timer
+    if (e.target.value.length > 0 && onTyping) {
+      onTyping();
+    }
+  };
 
   const handleSubmit = () => {
     const trimmed = text.trim();
@@ -43,7 +53,7 @@ export function TextInput({
         ref={inputRef}
         type="text"
         value={text}
-        onChange={(e) => setText(e.target.value)}
+        onChange={handleChange}
         onKeyDown={handleKeyDown}
         disabled={disabled}
         placeholder={placeholder}

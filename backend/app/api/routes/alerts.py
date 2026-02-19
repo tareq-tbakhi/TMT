@@ -144,6 +144,7 @@ async def list_alerts(
     """
     List alerts, optionally filtered by severity, event type, source, department.
     Department admins automatically see alerts for their department.
+    Patients only see non-SOS crisis alerts (never other people's SOS data).
     Returns true total count and aggregate stats for the UI header.
     """
     # Auto-filter by department for non-super-admin users
@@ -151,11 +152,18 @@ async def list_alerts(
     if current_user.role != UserRole.SUPER_ADMIN and dept_filter is None:
         dept_filter = current_user.department_type
 
+    # SECURITY: Patients must never see SOS-sourced alerts (those contain other
+    # patients' emergency data). They only see crisis/news alerts near them.
+    exclude_src = None
+    if current_user.role == UserRole.PATIENT:
+        exclude_src = "sos"
+
     alerts = await alert_service.get_alerts(
         db,
         severity=severity,
         event_type=event_type,
         source=source,
+        exclude_source=exclude_src,
         routed_department=dept_filter,
         active_only=active_only,
         limit=limit,
@@ -167,6 +175,7 @@ async def list_alerts(
         severity=severity,
         event_type=event_type,
         source=source,
+        exclude_source=exclude_src,
         routed_department=dept_filter,
         active_only=active_only,
     )
@@ -197,17 +206,24 @@ async def list_alerts_prioritized(
     List alerts sorted by AI-computed priority score (highest first).
     Supports severity, event_type, source, and department filters.
     Department admins automatically see only their department's alerts.
+    Patients never see SOS-sourced alerts.
     Returns true total count and aggregate stats.
     """
     dept_filter = routed_department
     if current_user.role != UserRole.SUPER_ADMIN and dept_filter is None:
         dept_filter = current_user.department_type
 
+    # SECURITY: Patients must never see SOS-sourced alerts
+    exclude_src = None
+    if current_user.role == UserRole.PATIENT:
+        exclude_src = "sos"
+
     alerts = await alert_service.get_alerts_prioritized(
         db,
         severity=severity,
         event_type=event_type,
         source=source,
+        exclude_source=exclude_src,
         routed_department=dept_filter,
         active_only=active_only,
         limit=limit,
@@ -219,6 +235,7 @@ async def list_alerts_prioritized(
         severity=severity,
         event_type=event_type,
         source=source,
+        exclude_source=exclude_src,
         routed_department=dept_filter,
         active_only=active_only,
     )

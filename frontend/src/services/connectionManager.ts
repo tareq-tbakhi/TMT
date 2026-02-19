@@ -144,9 +144,10 @@ class ConnectionManagerImpl {
    */
   getFallbackChain(): ConnectionLayer[] {
     const chain: ConnectionLayer[] = [];
+    const hasInternet = this.state.internet.available || navigator.onLine;
 
-    // Internet first if good quality
-    if (this.state.internet.available && this.state.internet.quality === 'good') {
+    // Internet first — always prioritize when available
+    if (hasInternet) {
       chain.push('internet');
     }
 
@@ -158,11 +159,6 @@ class ConnectionManagerImpl {
     // Bluetooth mesh if running and has devices
     if (this.state.bluetooth.meshRunning) {
       chain.push('bluetooth');
-    }
-
-    // Internet as last resort even if poor
-    if (this.state.internet.available && !chain.includes('internet')) {
-      chain.push('internet');
     }
 
     return chain;

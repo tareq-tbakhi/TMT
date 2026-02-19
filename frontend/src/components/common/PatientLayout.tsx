@@ -165,6 +165,7 @@ export default function PatientLayout() {
       {/* Bottom tab navigation */}
       <nav
         className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 z-50"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
         role="navigation"
         aria-label={t("nav.patient")}
       >

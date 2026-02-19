@@ -40,6 +40,14 @@ class SOSCreateRequest(BaseModel):
     triage_transcript: Optional[list[dict]] = None  # [{role, content, timestamp}, ...]
 
 
+class SOSTriageUpdateRequest(BaseModel):
+    """Patient updates their SOS with triage info after the initial send."""
+    patient_status: Optional[PatientStatus] = None
+    severity: Optional[int] = Field(default=None, ge=1, le=5)
+    details: Optional[str] = None
+    triage_transcript: Optional[list[dict]] = None
+
+
 class SOSStatusUpdateRequest(BaseModel):
     status: SOSStatus
     hospital_notified_id: Optional[UUID] = None
@@ -255,6 +263,61 @@ async def bulk_sos(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to dispatch bulk SOS tasks",
         )
+
+
+@router.patch("/sos/{sos_id}/triage", response_model=SOSResponse)
+async def update_sos_triage(
+    sos_id: UUID,
+    payload: SOSTriageUpdateRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.PATIENT)),
+):
+    """
+    Patient updates their own SOS with triage data (after initial send).
+    Only the owning patient can update their SOS.
+    """
+    # Verify the SOS belongs to this patient
+    from sqlalchemy import select as sa_select
+    result = await db.execute(
+        sa_select(SosRequest).where(
+            SosRequest.id == sos_id,
+            SosRequest.patient_id == current_user.patient_id,
+        )
+    )
+    sos = result.scalar_one_or_none()
+    if sos is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SOS request not found",
+        )
+
+    update_data: dict = {}
+    if payload.patient_status is not None:
+        update_data["patient_status"] = payload.patient_status
+    if payload.severity is not None:
+        update_data["severity"] = payload.severity
+    if payload.details is not None:
+        update_data["details"] = payload.details
+    if payload.triage_transcript is not None:
+        update_data["triage_transcript"] = payload.triage_transcript
+
+    if update_data:
+        updated = await patient_service.update_sos_request(db, sos_id, update_data)
+    else:
+        updated = sos
+
+    await log_audit(
+        action="update",
+        resource="sos_request",
+        resource_id=str(sos_id),
+        user_id=current_user.id,
+        details=f"Patient updated SOS triage data",
+        request=request,
+        db=db,
+    )
+
+    return updated
 
 
 @router.get("/sos", response_model=SOSListResponse)
