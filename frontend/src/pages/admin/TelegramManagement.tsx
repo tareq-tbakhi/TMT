@@ -292,7 +292,7 @@ const TelegramContent: React.FC = () => {
               channel_name: data.channel_name,
               text: data.text,
               date: data.date,
-              status: "processing",
+              status: "processing" as const,
             },
             ...prev,
           ].slice(0, 50);

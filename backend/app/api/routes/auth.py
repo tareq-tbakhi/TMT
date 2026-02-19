@@ -8,6 +8,7 @@ Endpoints:
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from app.api.middleware.rate_limit import rate_limit
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,7 +36,8 @@ class UnifiedLoginResponse(BaseModel):
     facility_type: Optional[str] = None  # "hospital", "police", "civil_defense"
 
 
-@router.post("/auth/login", response_model=UnifiedLoginResponse)
+@router.post("/auth/login", response_model=UnifiedLoginResponse,
+              dependencies=[rate_limit(max_requests=10, window_seconds=60, key_prefix="auth")])
 async def unified_login(
     payload: UnifiedLoginRequest,
     db: AsyncSession = Depends(get_db),

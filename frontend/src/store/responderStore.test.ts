@@ -3,8 +3,16 @@
  * Tests state management for field responders
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useResponderStore } from './responderStore';
+
+// Mock useDataMode to always return dummy mode in tests
+vi.mock('../hooks/useDataMode', () => ({
+  isDummyMode: () => true,
+  isApiMode: () => false,
+  useDummyData: () => true,
+  useDataMode: () => 'dummy',
+}));
 
 describe('responderStore', () => {
   beforeEach(() => {
