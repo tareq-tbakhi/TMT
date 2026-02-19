@@ -1,6 +1,6 @@
 /**
  * Zustand store for Field Responder state management
- * Includes demo data for frontend-only demo
+ * Uses demo data when VITE_USE_DUMMY_DATA=true, otherwise fetches from API
  */
 
 import { create } from "zustand";
@@ -11,6 +11,7 @@ import type {
   GeoLocation,
 } from "../types/responderTypes";
 import type { ResponderType } from "./authStore";
+import { isDummyMode } from "../hooks/useDataMode";
 
 // ─── Store Interface ─────────────────────────────────────────────
 
@@ -333,6 +334,12 @@ export const useResponderStore = create<ResponderStore>((set, get) => ({
   setConnected: (connected) => set({ isConnected: connected }),
 
   loadDemoCase: (responderType) => {
+    // Only load demo case if in dummy mode
+    if (!isDummyMode()) {
+      console.warn('loadDemoCase called in API mode - use fetchCase instead');
+      return;
+    }
+
     const demoMap: Record<ResponderType, AssignedCase> = {
       ambulance: DEMO_AMBULANCE_CASE,
       police: DEMO_POLICE_CASE,
@@ -342,6 +349,14 @@ export const useResponderStore = create<ResponderStore>((set, get) => ({
 
     set({ activeCase: demoMap[responderType] });
   },
+
+  // TODO: Implement when backend dispatch API is available
+  // fetchCase: async () => {
+  //   if (isDummyMode()) return;
+  //   const response = await fetch('/api/v1/responders/me/case');
+  //   const data = await response.json();
+  //   set({ activeCase: data });
+  // },
 }));
 
 // ─── Selectors ───────────────────────────────────────────────────
@@ -349,3 +364,6 @@ export const useResponderStore = create<ResponderStore>((set, get) => ({
 export const selectActiveCase = (state: ResponderStore) => state.activeCase;
 export const selectIsOnDuty = (state: ResponderStore) => state.isOnDuty;
 export const selectCompletedCases = (state: ResponderStore) => state.completedCases;
+
+// ─── Data Mode Helper ─────────────────────────────────────────────
+export const isUsingDummyData = isDummyMode;

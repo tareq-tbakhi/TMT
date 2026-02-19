@@ -1,5 +1,6 @@
 /**
  * News Store - Zustand state management for News Tab
+ * Fetches from backend API, uses dummy data as fallback or when VITE_USE_DUMMY_DATA=true
  */
 
 import { create } from 'zustand';
@@ -7,6 +8,7 @@ import type { NewsArticle, NewsFilters, NewsState } from '../types/newsTypes';
 import type { SourcePlatform } from '../types/newsTypes';
 import { getNews, type NewsArticleAPI } from '../services/api';
 import { DUMMY_NEWS } from '../data/dummyNewsData';
+import { isDummyMode } from '../hooks/useDataMode';
 
 const initialFilters: NewsFilters = {
   category: 'all',
@@ -173,6 +175,7 @@ function mapApiArticle(a: NewsArticleAPI): NewsArticle {
 
 /**
  * Fetch news from the backend API.
+ * Uses dummy data when VITE_USE_DUMMY_DATA=true, otherwise calls real API.
  * Falls back to dummy data if the API call fails.
  */
 export async function fetchNewsFromAPI(params?: {
@@ -183,6 +186,15 @@ export async function fetchNewsFromAPI(params?: {
   const store = useNewsStore.getState();
   store.setLoading(true);
   store.setError(null);
+
+  if (isDummyMode()) {
+    // Use dummy data with simulated delay
+    setTimeout(() => {
+      store.setArticles(DUMMY_NEWS);
+      store.setLoading(false);
+    }, 500);
+    return;
+  }
 
   try {
     const { articles } = await getNews({
@@ -200,3 +212,20 @@ export async function fetchNewsFromAPI(params?: {
     store.setLoading(false);
   }
 }
+
+/**
+ * @deprecated Use fetchNewsFromAPI() instead
+ */
+export function initializeNewsWithDummyData() {
+  fetchNewsFromAPI();
+}
+
+/**
+ * @deprecated Use fetchNewsFromAPI() instead
+ */
+export function initializeNews() {
+  fetchNewsFromAPI();
+}
+
+// Export data mode helper
+export const isUsingDummyData = isDummyMode;

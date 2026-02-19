@@ -4,6 +4,7 @@ import { getAlerts, getHospitals, type Alert, type Hospital } from "../../servic
 import { useAuthStore } from "../../store/authStore";
 import { getCurrentPosition } from "../../utils/locationCodec";
 import { eventTypeLabels, timeAgo } from "../../utils/formatting";
+import { isDummyMode } from "../../hooks/useDataMode";
 
 // ─── Haversine Distance ─────────────────────────────────────────
 
@@ -441,8 +442,14 @@ export default function Alerts() {
     return { ...closest, distance: minDist };
   };
 
-  // Use demo alerts based on selected main tab
-  const displayAlerts: Alert[] = mainTab === "alerts" ? DEMO_CRISIS_ALERTS : DEMO_HOSPITAL_NEEDS;
+  // Use dummy data or real API based on VITE_USE_DUMMY_DATA env variable
+  // Filter alerts by tab - "alerts" shows crisis alerts, "needs" shows hospital needs (blood, supplies)
+  const needsEventTypes = ['blood_donation', 'supplies_needed', 'volunteers_needed'];
+  const displayAlerts: Alert[] = isDummyMode()
+    ? (mainTab === "alerts" ? DEMO_CRISIS_ALERTS : DEMO_HOSPITAL_NEEDS)
+    : (mainTab === "alerts"
+        ? alerts.filter(a => !needsEventTypes.includes(a.event_type))
+        : alerts.filter(a => needsEventTypes.includes(a.event_type)));
 
   // Sort: non-expired first, then by severity, then by recency
   const severityOrder: Record<string, number> = {
