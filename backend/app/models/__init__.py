@@ -10,6 +10,7 @@ from app.models.user import User
 from app.models.telegram_channel import TelegramChannel
 from app.models.aid_request import AidRequest, AidResponse
 from app.models.case_transfer import CaseTransfer
+from app.models.telegram_message import TelegramMessage
 
 __all__ = [
     "Patient",
@@ -28,4 +29,5 @@ __all__ = [
     "AidRequest",
     "AidResponse",
     "CaseTransfer",
+    "TelegramMessage",
 ]

@@ -82,21 +82,41 @@ shooting, building collapse, fire, chemical hazard, medical emergency, infrastru
 Respond ONLY with valid JSON:
 {"is_crisis": true/false, "confidence": 0.0-1.0, "category": "crisis_type_or_none"}"""
 
+    # Strong crisis keywords — if these appear and the AI says "not a crisis",
+    # the keyword match overrides the AI to prevent dangerous false negatives.
+    crisis_keywords = [
+        "قصف", "bombing", "flood", "سيول", "earthquake", "زلزال",
+        "fire", "حريق", "explosion", "انفجار", "shooting", "إطلاق",
+        "collapse", "انهيار", "injured", "إصابات", "killed", "شهداء",
+        "trapped", "محاصر", "evacuation", "إخلاء", "غارة", "airstrike",
+        "شهيد", "martyrs", "جرحى", "wounded", "تدمير", "destruction",
+        "صاروخ", "missile", "rocket", "قذيفة", "shell", "مجزرة", "massacre",
+    ]
+    text_lower = text.lower()
+    keyword_hit = any(kw in text_lower for kw in crisis_keywords)
+
     try:
         result = await _call_glm(system, f"Message: {text}")
-        return json.loads(result)
+        parsed = json.loads(result)
+
+        # Sanity check: if strong crisis keywords are present but AI said
+        # not a crisis, override — false negatives can cost lives.
+        if not parsed.get("is_crisis") and keyword_hit:
+            logger.warning(
+                "AI classified as non-crisis but crisis keywords detected, overriding: %s",
+                text[:100],
+            )
+            return {"is_crisis": True, "confidence": 0.6, "category": "keyword_override"}
+
+        return parsed
     except Exception as e:
         logger.error(f"Classification failed: {e}")
         # Fallback: keyword-based classification
-        crisis_keywords = [
-            "قصف", "bombing", "flood", "سيول", "earthquake", "زلزال",
-            "fire", "حريق", "explosion", "انفجار", "shooting", "إطلاق",
-            "collapse", "انهيار", "injured", "إصابات", "killed", "شهداء",
-            "trapped", "محاصر", "evacuation", "إخلاء",
-        ]
-        text_lower = text.lower()
-        is_crisis = any(kw in text_lower for kw in crisis_keywords)
-        return {"is_crisis": is_crisis, "confidence": 0.3 if is_crisis else 0.1, "category": "unknown"}
+        return {
+            "is_crisis": keyword_hit,
+            "confidence": 0.3 if keyword_hit else 0.1,
+            "category": "unknown",
+        }
 
 
 async def extract_crisis_info(text: str) -> Optional[dict]:

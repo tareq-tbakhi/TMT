@@ -1,19 +1,31 @@
 import uuid
+import logging
 from datetime import datetime, timezone
 
 import socketio
 
-sio = socketio.AsyncServer(async_mode="asgi", cors_allowed_origins="*")
+from app.config import get_settings
+
+logger = logging.getLogger(__name__)
+_settings = get_settings()
+
+# Use Redis manager so Celery workers can emit events via the same bus
+_redis_mgr = socketio.AsyncRedisManager(_settings.REDIS_URL)
+sio = socketio.AsyncServer(
+    async_mode="asgi",
+    cors_allowed_origins="*",
+    client_manager=_redis_mgr,
+)
 
 
 @sio.event
 async def connect(sid, environ):
-    print(f"Client connected: {sid}")
+    logger.info("Socket.IO client connected: %s", sid)
 
 
 @sio.event
 async def disconnect(sid):
-    print(f"Client disconnected: {sid}")
+    logger.info("Socket.IO client disconnected: %s", sid)
 
 
 @sio.event
@@ -51,6 +63,14 @@ async def join_patient(sid, data):
     if patient_id:
         await sio.enter_room(sid, f"patient_{patient_id}")
         await sio.emit("joined", {"room": f"patient_{patient_id}"}, to=sid)
+
+
+@sio.event
+async def join_telegram(sid, data=None):
+    """Join the Telegram real-time feed room."""
+    await sio.enter_room(sid, "telegram")
+    await sio.emit("joined", {"room": "telegram"}, to=sid)
+    logger.info("Client %s joined 'telegram' room", sid)
 
 
 # --- Broadcast functions (called from services) ---
@@ -194,3 +214,18 @@ async def broadcast_sos_resolved(resolution_data: dict):
             "created_at": datetime.now(timezone.utc).isoformat(),
             "expires_at": None,
         }, room="livemap")
+
+
+async def broadcast_telegram_message(msg_data: dict):
+    """Push a new Telegram message to all connected dashboards."""
+    await sio.emit("telegram_message", msg_data, room="telegram")
+
+
+async def broadcast_telegram_analysis(analysis_data: dict):
+    """Push AI analysis result for a Telegram message."""
+    await sio.emit("telegram_analysis", analysis_data, room="telegram")
+
+
+async def broadcast_telegram_processing(processing_data: dict):
+    """Notify dashboards that a message is being processed by AI."""
+    await sio.emit("telegram_processing", processing_data, room="telegram")
