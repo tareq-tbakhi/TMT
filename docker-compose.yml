@@ -50,19 +50,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: tmt-backend
+    env_file:
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://tmt_user:${POSTGRES_PASSWORD:-tmt_dev_password}@postgres:5432/tmt
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
-      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
-      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:-dev-master-key-change-in-production}
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
-      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
-      GLM_API_KEY: ${GLM_API_KEY:-}
-      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
-      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
-      TELEGRAM_PHONE: ${TELEGRAM_PHONE:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -81,18 +74,12 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: tmt-celery-worker
+    env_file:
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://tmt_user:${POSTGRES_PASSWORD:-tmt_dev_password}@postgres:5432/tmt
       REDIS_URL: redis://redis:6379/0
       QDRANT_URL: http://qdrant:6333
-      ENCRYPTION_MASTER_KEY: ${ENCRYPTION_MASTER_KEY:-dev-master-key-change-in-production}
-      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
-      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
-      TWILIO_PHONE_NUMBER: ${TWILIO_PHONE_NUMBER:-}
-      GLM_API_KEY: ${GLM_API_KEY:-}
-      TELEGRAM_API_ID: ${TELEGRAM_API_ID:-}
-      TELEGRAM_API_HASH: ${TELEGRAM_API_HASH:-}
-      TELEGRAM_PHONE: ${TELEGRAM_PHONE:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -112,6 +99,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: tmt-celery-beat
+    env_file:
+      - ./backend/.env
     environment:
       DATABASE_URL: postgresql+asyncpg://tmt_user:${POSTGRES_PASSWORD:-tmt_dev_password}@postgres:5432/tmt
       REDIS_URL: redis://redis:6379/0

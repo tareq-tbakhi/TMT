@@ -56,6 +56,29 @@ app.include_router(mesh.router, prefix=settings.API_PREFIX, tags=["Mesh Network"
 
 @app.on_event("startup")
 async def startup():
+    # Wait for Postgres to be fully ready (PostGIS image restarts once during init)
+    for _attempt in range(20):
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("SELECT 1"))
+            break
+        except Exception:
+            await asyncio.sleep(2)
+    else:
+        raise RuntimeError("Database not reachable after retries")
+
+    # Pre-create enum types that use create_type=False in models.
+    # Must exist before Base.metadata.create_all() or table creation fails.
+    for _enum_sql in [
+        "DO $$ BEGIN CREATE TYPE department_type AS ENUM ('hospital', 'police', 'civil_defense'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;",
+        "DO $$ BEGIN CREATE TYPE hospitalstatus AS ENUM ('operational', 'limited', 'full', 'destroyed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;",
+    ]:
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text(_enum_sql))
+        except Exception:
+            pass
+
     # Step 1: Create all tables (own transaction — must not be poisoned)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

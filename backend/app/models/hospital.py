@@ -37,7 +37,8 @@ class Hospital(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String, nullable=False)
     department_type = Column(
-        Enum(DepartmentType, name="department_type", create_type=False),
+        Enum(DepartmentType, name="department_type", create_type=False,
+             values_callable=lambda x: [e.value for e in x]),
         nullable=False,
         default=DepartmentType.HOSPITAL,
         server_default="hospital",
@@ -45,7 +46,8 @@ class Hospital(Base):
     location = Column(Geometry("POINT", srid=4326), nullable=True)
     latitude = Column(Float, nullable=True)
     longitude = Column(Float, nullable=True)
-    status = Column(Enum(FacilityStatus, name="hospitalstatus", create_type=False), default=FacilityStatus.OPERATIONAL)
+    status = Column(Enum(FacilityStatus, name="hospitalstatus", create_type=False,
+                         values_callable=lambda x: [e.value for e in x]), default=FacilityStatus.OPERATIONAL)
     coverage_area = Column(Geometry("POLYGON", srid=4326), nullable=True)
     coverage_radius_km = Column(Float, default=15.0)
     phone = Column(String, nullable=True)
