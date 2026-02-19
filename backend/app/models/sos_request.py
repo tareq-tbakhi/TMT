@@ -20,6 +20,7 @@ class SOSStatus(str, enum.Enum):
 class SOSSource(str, enum.Enum):
     API = "api"
     SMS = "sms"
+    MESH = "mesh"  # Bridgefy Bluetooth mesh relay
 
 
 class PatientStatus(str, enum.Enum):
@@ -53,3 +54,9 @@ class SosRequest(Base):
     facility_notified_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), nullable=True)
     transferred_from_id = Column(UUID(as_uuid=True), ForeignKey("sos_requests.id"), nullable=True)
     transfer_reason = Column(String, nullable=True)
+
+    # --- Mesh relay tracking ---
+    mesh_message_id = Column(String, nullable=True, index=True)  # Bridgefy message UUID for dedup
+    mesh_relay_device_id = Column(String, nullable=True)  # Device that relayed to backend
+    mesh_hop_count = Column(Integer, nullable=True)  # Number of mesh hops
+    mesh_relay_timestamp = Column(DateTime, nullable=True)  # When relayed to backend

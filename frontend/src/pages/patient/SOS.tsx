@@ -7,6 +7,11 @@ import { getCurrentPosition } from "../../utils/locationCodec";
 import { patientStatusConfig } from "../../utils/formatting";
 import type { TriageData } from "../../types/sosTypes";
 
+// SOSDispatcher with fallback chain (Internet → SMS → Bluetooth Mesh)
+import { SOSDispatcher } from "../../services/sosDispatcher";
+import { ConnectionManager } from "../../services/connectionManager";
+import { useConnectionStatus, useConnectionIndicator } from "../../hooks/useConnectionStatus";
+
 // AI Assistant Components
 import { AIAssistantScreen } from "../../components/sos/AIAssistantScreen";
 import { CallingScreen } from "../../components/sos/CallingScreen";
@@ -118,8 +123,12 @@ function haversineKm(
 export default function SOS() {
   const user = useAuthStore((s) => s.user);
 
-  // Online/Offline state
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  // Connection status from unified ConnectionManager
+  const connectionStatus = useConnectionStatus();
+  const connectionIndicator = useConnectionIndicator();
+
+  // Online/Offline state (derived from connection status)
+  const isOnline = connectionStatus.hasInternet;
 
   // GPS state
   const [latitude, setLatitude] = useState<number | null>(null);
@@ -162,23 +171,29 @@ export default function SOS() {
   const syncTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
   const countdownTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
-  // ─── Online/Offline Listeners ─────────────────────────────
+  // ─── Initialize SOSDispatcher and ConnectionManager ─────────
 
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      syncPendingSOS();
-    };
-    const handleOffline = () => setIsOnline(false);
+    // Initialize the connection manager with user ID
+    const userId = user?.patientId || user?.id;
+    if (userId) {
+      ConnectionManager.initialize(userId);
+    }
 
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
+    // Initialize SOS dispatcher
+    SOSDispatcher.initialize();
+
+    // Sync pending SOS when connection changes
+    const unsubscribe = ConnectionManager.subscribe((state) => {
+      if (state.currentLayer !== 'none') {
+        syncPendingSOS();
+      }
+    });
 
     return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
+      unsubscribe();
     };
-  }, []);
+  }, [user]);
 
   // AI Assistant store
   const resetAIAssistant = useAIAssistantStore((s: { reset: () => void }) => s.reset);
@@ -343,9 +358,9 @@ export default function SOS() {
     };
   }, [isOnline, pendingCount, syncPendingSOS]);
 
-  // ─── Send SOS Online ──────────────────────────────────────
+  // ─── Send SOS via Unified Dispatcher (Internet → SMS → Mesh) ──────────────────────────────────────
 
-  const handleSOSOnline = async () => {
+  const handleSOSWithDispatcher = async (triageData?: TriageData) => {
     if (latitude === null || longitude === null) {
       setSosError("GPS location is required. Please enable location services.");
       return;
@@ -354,29 +369,74 @@ export default function SOS() {
     setSosState("sending");
     setSosError(null);
 
+    // Build payload from form or triage data
+    const patientId = user?.patientId || user?.id || "UNKNOWN";
+    const patientStatus = triageData?.emergencyType || form.patientStatus;
+    const severity = triageData
+      ? (triageData.injuryStatus === "serious" ? 5 : triageData.injuryStatus === "minor" ? 3 : 1)
+      : form.severity;
+
+    // Build details string from triage data if present
+    let details = form.details;
+    if (triageData) {
+      const detailsParts: string[] = [];
+      if (triageData.emergencyType) detailsParts.push(`Type: ${triageData.emergencyType}`);
+      if (triageData.injuryStatus) detailsParts.push(`Injury: ${triageData.injuryStatus}`);
+      if (triageData.peopleCount) detailsParts.push(`People: ${triageData.peopleCount.replace(/_/g, " ")}`);
+      if (triageData.canMove) detailsParts.push(`Mobility: ${triageData.canMove.replace(/_/g, " ")}`);
+      if (triageData.additionalDetails) detailsParts.push(`Details: ${triageData.additionalDetails}`);
+      details = detailsParts.join("; ");
+    }
+
     try {
-      const response = await createSOS({
+      // Use the unified SOSDispatcher with automatic fallback
+      const result = await SOSDispatcher.dispatch({
+        patientId,
         latitude,
         longitude,
-        patient_status: form.patientStatus,
-        severity: form.severity,
-        details: form.details || undefined,
+        patientStatus,
+        severity,
+        details: details || undefined,
       });
 
-      setSosResponse({
-        id: response.id,
-        hospital_name: nearestHospitals[0]?.name,
-      });
-      setSosState("sent");
+      if (result.success) {
+        setSosResponse({
+          id: result.sosId,
+          hospital_name: nearestHospitals[0]?.name,
+        });
+
+        // Show different state based on which layer was used
+        if (result.layer === 'sms') {
+          // For SMS, we need to show the SMS ready screen
+          const smsBodyText = await buildSMSBody(
+            patientId,
+            latitude,
+            longitude,
+            patientStatus,
+            String(severity)
+          );
+          setSmsBody(smsBodyText);
+          setSosState("sms_ready");
+        } else {
+          setSosState("sent");
+        }
+
+        // Show connection indicator info
+        console.log(`[SOS] Sent via ${result.layer}, fallbacks tried: ${result.fallbacksAttempted.join(' → ')}`);
+      } else {
+        setSosError(result.error || "Failed to send SOS through all available channels.");
+        setSosState("error");
+      }
     } catch (err) {
       setSosError(
         err instanceof Error
           ? err.message
-          : "Failed to send SOS. Try SMS fallback."
+          : "Failed to send SOS. Please try again."
       );
       setSosState("error");
     }
   };
+
 
   // ─── Send SOS Offline (SMS) ───────────────────────────────
 
@@ -514,36 +574,8 @@ export default function SOS() {
       details,
     });
 
-    setSosState("sending");
-    setSosError(null);
-
-    if (isOnline) {
-      try {
-        const response = await createSOS({
-          latitude,
-          longitude,
-          patient_status: patientStatus,
-          severity,
-          details: details || undefined,
-        });
-
-        setSosResponse({
-          id: response.id,
-          hospital_name: nearestHospitals[0]?.name,
-        });
-        setSosState("sent");
-      } catch (err) {
-        setSosError(
-          err instanceof Error
-            ? err.message
-            : "Failed to send SOS. Try SMS fallback."
-        );
-        setSosState("error");
-      }
-    } else {
-      // Offline - use SMS
-      await buildAndSendSMS(latitude, longitude);
-    }
+    // Use the unified dispatcher with automatic fallback (Internet → SMS → Mesh)
+    await handleSOSWithDispatcher(triageData);
   };
 
   // ─── Handle Urgent Call ──────────────────────────────────
@@ -823,18 +855,35 @@ export default function SOS() {
       {/* Inject heartbeat animation CSS */}
       <style>{heartbeatStyle}</style>
 
-      {/* Offline Banner - Only show when not connected */}
+      {/* Connection Status Banner */}
       {!isOnline && (
-        <div className="px-4 py-2.5 text-center text-sm font-medium bg-amber-500 text-white">
+        <div className={`px-4 py-2.5 text-center text-sm font-medium text-white ${
+          connectionStatus.hasBluetooth ? 'bg-blue-500' :
+          connectionStatus.hasSMS ? 'bg-amber-500' : 'bg-red-500'
+        }`}>
           <span className="flex items-center justify-center gap-2">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M3.707 2.293a1 1 0 00-1.414 1.414l6.921 6.922c.05.062.105.118.168.167l6.91 6.911a1 1 0 001.415-1.414l-.675-.675A9.001 9.001 0 0010 2H9.5a1 1 0 000 2H10a7 7 0 014.95 2.05l-1.414 1.414A5 5 0 0010 6a4.978 4.978 0 00-2.793.856L3.707 2.293z"
-                clipRule="evenodd"
-              />
-            </svg>
-            No Internet - SMS SOS Mode
+            {connectionStatus.hasBluetooth ? (
+              <>
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd" />
+                </svg>
+                Bluetooth Mesh Mode ({connectionIndicator.description})
+              </>
+            ) : connectionStatus.hasSMS ? (
+              <>
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                </svg>
+                No Internet - SMS Fallback Mode
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l6.921 6.922c.05.062.105.118.168.167l6.91 6.911a1 1 0 001.415-1.414l-.675-.675A9.001 9.001 0 0010 2H9.5a1 1 0 000 2H10a7 7 0 014.95 2.05l-1.414 1.414A5 5 0 0010 6a4.978 4.978 0 00-2.793.856L3.707 2.293z" clipRule="evenodd" />
+                </svg>
+                No Connectivity - SOS will be queued
+              </>
+            )}
           </span>
         </div>
       )}

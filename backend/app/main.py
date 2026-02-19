@@ -5,7 +5,7 @@ import socketio
 from app.config import get_settings
 from app.db.postgres import engine, Base
 from sqlalchemy import text
-from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap, auth, admin, aid_requests, transfers, simulation
+from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap, auth, admin, aid_requests, transfers, simulation, mesh
 from app.api.websocket.handler import sio
 
 settings = get_settings()
@@ -43,6 +43,7 @@ app.include_router(livemap.router, prefix=settings.API_PREFIX, tags=["Live Map"]
 app.include_router(aid_requests.router, prefix=settings.API_PREFIX, tags=["Aid Requests"])
 app.include_router(transfers.router, prefix=settings.API_PREFIX, tags=["Transfers"])
 app.include_router(simulation.router, prefix=settings.API_PREFIX, tags=["Simulation"])
+app.include_router(mesh.router, prefix=settings.API_PREFIX, tags=["Mesh Network"])
 
 
 @app.on_event("startup")
@@ -132,6 +133,27 @@ async def startup():
                 "ALTER TABLE sos_requests ADD COLUMN IF NOT EXISTS auto_resolved BOOLEAN DEFAULT FALSE",
             ]:
                 await conn.execute(text(stmt))
+    except Exception:
+        pass
+
+    # Step 8b: Add mesh relay columns to sos_requests (Bridgefy integration)
+    try:
+        async with engine.begin() as conn:
+            for stmt in [
+                "ALTER TABLE sos_requests ADD COLUMN IF NOT EXISTS mesh_message_id VARCHAR",
+                "ALTER TABLE sos_requests ADD COLUMN IF NOT EXISTS mesh_relay_device_id VARCHAR",
+                "ALTER TABLE sos_requests ADD COLUMN IF NOT EXISTS mesh_hop_count INTEGER",
+                "ALTER TABLE sos_requests ADD COLUMN IF NOT EXISTS mesh_relay_timestamp TIMESTAMP",
+                "CREATE INDEX IF NOT EXISTS idx_sos_mesh_message_id ON sos_requests(mesh_message_id)",
+            ]:
+                await conn.execute(text(stmt))
+    except Exception:
+        pass
+
+    # Step 8c: Add MESH value to sossource enum (for Bridgefy integration)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("ALTER TYPE sossource ADD VALUE IF NOT EXISTS 'mesh'"))
     except Exception:
         pass
 
