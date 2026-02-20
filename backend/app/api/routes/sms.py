@@ -21,12 +21,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.postgres import get_db
 from app.models.patient import Patient
-from app.models.sms_log import SmsLog, SMSDirection
-from app.models.sos_request import SOSSource
+from app.models.sms_log import SMSDirection
 from app.api.middleware.audit import log_audit
-from app.api.middleware.encryption import decrypt_sms_payload
-from app.services import sms_service, patient_service
-from app.api.websocket.handler import broadcast_sos
+from app.services import sms_service
 
 router = APIRouter()
 settings = get_settings()
@@ -134,83 +131,35 @@ async def sms_inbound_webhook(
     # Normalize phone number
     phone = From.strip()
 
-    # Log the inbound SMS
-    sms_log = SmsLog(
-        direction=SMSDirection.INBOUND,
-        phone=phone,
-        message_body=None,  # Never store raw body for privacy
-        twilio_sid=MessageSid or None,
-    )
-    db.add(sms_log)
-
-    # Look up patient by phone
-    result = await db.execute(select(Patient).where(Patient.phone == phone))
-    patient = result.scalar_one_or_none()
-
-    if patient is None:
-        logger.info("SMS from unknown phone: %s", phone)
-        sms_log.delivery_status = "no_patient"
-        await db.flush()
-        # Respond with TwiML (empty response to avoid Twilio errors)
-        return '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
-
-    sms_log.patient_id = patient.id
-
-    # Attempt to decrypt if it's an encrypted SOS payload
-    decrypted_body = None
-    is_encrypted = Body.startswith("TMT:v1:")
-
-    if is_encrypted:
-        try:
-            decrypted_body = decrypt_sms_payload(Body, str(patient.id))
-            sms_log.decrypted = True
-            sms_log.delivery_status = "decrypted"
-        except Exception as e:
-            logger.error("Failed to decrypt SMS from %s: %s", phone, str(e))
-            sms_log.delivery_status = "decrypt_failed"
-            await db.flush()
-            return '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
-    else:
-        # Plain text SOS — treat the body as details
-        decrypted_body = Body
-        sms_log.delivery_status = "plaintext"
-
-    # Process the SOS via the SMS service
-    sos = await sms_service.process_inbound_sms(
+    # Delegate to sms_service — handles patient lookup, decryption,
+    # compact payload parsing, dedup, SOS creation, logging, and broadcast
+    result = await sms_service.process_inbound_sms(
         db,
-        patient=patient,
-        message_body=decrypted_body or "",
-        source=SOSSource.SMS,
+        phone=phone,
+        sms_body=Body,
+        twilio_sid=MessageSid or None,
     )
 
     await db.flush()
 
+    sos_id = result.get("sos_id")
+    is_encrypted = Body.startswith("TMT:v1:")
+
     await log_audit(
         action="create",
         resource="sos_request",
-        resource_id=str(sos.id) if sos else None,
-        details=f"SMS SOS from {phone} (encrypted={is_encrypted})",
+        resource_id=sos_id,
+        details=f"SMS SOS from {phone} (encrypted={is_encrypted}, status={result.get('status')})",
         request=request,
         db=db,
     )
 
-    # Broadcast SOS to dashboards
-    if sos:
-        await broadcast_sos({
-            "id": str(sos.id),
-            "patient_id": str(sos.patient_id),
-            "latitude": sos.latitude,
-            "longitude": sos.longitude,
-            "status": sos.status.value,
-            "patient_status": sos.patient_status.value if sos.patient_status else None,
-            "severity": sos.severity,
-            "source": sos.source.value,
-            "details": sos.details,
-            "created_at": sos.created_at.isoformat() if sos.created_at else None,
-        })
-
-    # Respond with TwiML
-    return '<?xml version="1.0" encoding="UTF-8"?><Response><Message>SOS received. Help is on the way.</Message></Response>'
+    if result.get("status") == "sos_created":
+        return '<?xml version="1.0" encoding="UTF-8"?><Response><Message>SOS received. Help is on the way.</Message></Response>'
+    elif result.get("status") == "duplicate":
+        return '<?xml version="1.0" encoding="UTF-8"?><Response><Message>SOS already received.</Message></Response>'
+    else:
+        return '<?xml version="1.0" encoding="UTF-8"?><Response></Response>'
 
 
 @router.post("/sms/test", response_model=SMSTestResponse)
@@ -243,42 +192,26 @@ async def test_sms_endpoint(
             patient_found=False,
         )
 
-    # Try decryption
-    decrypted = False
-    body = payload.body
-    if body.startswith("TMT:v1:"):
-        try:
-            body = decrypt_sms_payload(body, str(patient.id))
-            decrypted = True
-        except Exception as e:
-            return SMSTestResponse(
-                status="error",
-                message=f"Decryption failed: {str(e)}",
-                patient_found=True,
-                patient_id=str(patient.id),
-            )
-
-    # Process the SOS
-    sos = await sms_service.process_inbound_sms(
+    # Process the SOS via the service (handles decryption, dedup, etc.)
+    result = await sms_service.process_inbound_sms(
         db,
-        patient=patient,
-        message_body=body,
-        source=SOSSource.SMS,
+        phone=phone,
+        sms_body=payload.body,
     )
 
     await log_audit(
         action="create",
         resource="sos_request",
-        resource_id=str(sos.id) if sos else None,
+        resource_id=result.get("sos_id"),
         details=f"Test SMS SOS from {phone}",
         request=request,
         db=db,
     )
 
     return SMSTestResponse(
-        status="success",
-        message="SOS processed successfully",
+        status="success" if result.get("status") == "sos_created" else result.get("status", "error"),
+        message=f"SOS {result.get('status', 'processed')}",
         patient_found=True,
         patient_id=str(patient.id),
-        decrypted=decrypted,
+        decrypted=result.get("decrypted", False),
     )

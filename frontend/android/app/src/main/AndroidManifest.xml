@@ -70,6 +70,9 @@
     <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <!-- SMS for offline SOS delivery (silent send via SmsManager) -->
+    <uses-permission android:name="android.permission.SEND_SMS" />
+
     <!-- Keep app running during emergencies -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />

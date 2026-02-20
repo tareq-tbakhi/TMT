@@ -83,19 +83,27 @@ async function syncPendingSOS() {
 
     for (const sos of requests) {
       try {
+        // Get auth token from stored data or try to read from cache
+        const token = sos.token || '';
         const response = await fetch('/api/v1/sos', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${sos.token}`,
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify(sos.data),
+          body: JSON.stringify({
+            latitude: sos.latitude,
+            longitude: sos.longitude,
+            patient_status: sos.patientStatus,
+            severity: sos.severity,
+            details: sos.details,
+          }),
         });
 
         if (response.ok) {
-          // Remove from queue
+          // Remove from queue using messageId key
           const delTx = db.transaction('pending_sos', 'readwrite');
-          delTx.objectStore('pending_sos').delete(sos.id);
+          delTx.objectStore('pending_sos').delete(sos.messageId);
         }
       } catch {
         // Still offline, will retry on next sync
@@ -108,11 +116,12 @@ async function syncPendingSOS() {
 
 function openDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open('tmt_offline', 1);
+    // Must match sosDispatcher.ts DB_NAME so both systems share the same queue
+    const request = indexedDB.open('tmt-sos-queue', 1);
     request.onupgradeneeded = (event) => {
       const db = event.target.result;
       if (!db.objectStoreNames.contains('pending_sos')) {
-        db.createObjectStore('pending_sos', { keyPath: 'id', autoIncrement: true });
+        db.createObjectStore('pending_sos', { keyPath: 'messageId' });
       }
     };
     request.onsuccess = () => resolve(request.result);

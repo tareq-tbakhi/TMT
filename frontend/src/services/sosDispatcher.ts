@@ -13,6 +13,7 @@ import { createSOS } from './api';
 import { buildSMSBody, sendViaSMS } from './smsService';
 import { BridgefyService } from '../native/bridgefyService';
 import { ConnectionManager, type ConnectionLayer } from './connectionManager';
+import { OfflineVault } from './offlineVault';
 import type { BridgefyAckMessage } from '../plugins/bridgefy';
 
 // ─── Types ───────────────────────────────────────────────────────
@@ -61,69 +62,26 @@ const TMT_SMS_NUMBER = import.meta.env.VITE_TMT_SMS_NUMBER || '+970599000000';
 const INTERNET_TIMEOUT = 10000; // 10 seconds
 const MESH_ACK_TIMEOUT = 60000; // 1 minute for mesh delivery
 
-// IndexedDB constants
-const DB_NAME = 'tmt-sos-queue';
-const DB_VERSION = 1;
-const STORE_NAME = 'pending_sos';
+// ─── Encrypted Vault Helpers ─────────────────────────────────────
+// All pending SOS data is encrypted at rest via OfflineVault (AES-256-GCM)
 
-// ─── IndexedDB Helpers ───────────────────────────────────────────
+type PendingSOS = SOSPayload & { messageId: string; createdAt: number };
 
-async function openDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(STORE_NAME)) {
-        db.createObjectStore(STORE_NAME, { keyPath: 'messageId' });
-      }
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+async function storePendingSOS(data: PendingSOS): Promise<void> {
+  await OfflineVault.put('pending_sos', data.messageId, data);
 }
 
-async function storePendingSOS(data: SOSPayload & { messageId: string; createdAt: number }): Promise<void> {
-  const db = await openDB();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
-  const store = tx.objectStore(STORE_NAME);
-  store.put(data);
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function getPendingSOS(): Promise<Array<SOSPayload & { messageId: string; createdAt: number }>> {
-  const db = await openDB();
-  const tx = db.transaction(STORE_NAME, 'readonly');
-  const store = tx.objectStore(STORE_NAME);
-  const request = store.getAll();
-  return new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+async function getPendingSOS(): Promise<PendingSOS[]> {
+  const records = await OfflineVault.getAll<PendingSOS>('pending_sos');
+  return records;
 }
 
 async function removePendingSOS(messageId: string): Promise<void> {
-  const db = await openDB();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
-  const store = tx.objectStore(STORE_NAME);
-  store.delete(messageId);
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  await OfflineVault.delete('pending_sos', messageId);
 }
 
 async function clearPendingSOS(): Promise<void> {
-  const db = await openDB();
-  const tx = db.transaction(STORE_NAME, 'readwrite');
-  const store = tx.objectStore(STORE_NAME);
-  store.clear();
-  return new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+  await OfflineVault.clear('pending_sos');
 }
 
 // ─── Service Class ───────────────────────────────────────────────
@@ -314,7 +272,9 @@ class SOSDispatcherImpl {
       payload.latitude,
       payload.longitude,
       payload.patientStatus,
-      String(payload.severity)
+      String(payload.severity),
+      undefined, // encryptionKey — use default
+      messageId  // for dedup on backend
     );
 
     const sent = await sendViaSMS(smsBody, TMT_SMS_NUMBER);
