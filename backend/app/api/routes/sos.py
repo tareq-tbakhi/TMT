@@ -12,6 +12,7 @@ from typing import Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from app.api.middleware.rate_limit import rate_limit
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -72,7 +73,8 @@ class SOSListResponse(BaseModel):
 # Endpoints
 # ---------------------------------------------------------------------------
 
-@router.post("/sos", response_model=SOSResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/sos", response_model=SOSResponse, status_code=status.HTTP_201_CREATED,
+              dependencies=[rate_limit(max_requests=10, window_seconds=60, key_prefix="sos")])
 async def send_sos(
     payload: SOSCreateRequest,
     request: Request,

@@ -387,6 +387,52 @@ export function createSOS(data: SOSRequest): Promise<SOSResponse> {
   });
 }
 
+export interface SOSListItem {
+  id: string;
+  patient_id: string;
+  latitude: number | null;
+  longitude: number | null;
+  status: string;
+  patient_status: string;
+  severity: number;
+  source: string;
+  hospital_notified_id: string | null;
+  origin_hospital_id: string | null;
+  routed_department: string | null;
+  auto_resolved: boolean;
+  details: string | null;
+  created_at: string;
+  resolved_at: string | null;
+  triage_transcript: Array<{ role: string; content: string; timestamp: string }> | null;
+}
+
+export function getSOSRequests(params?: {
+  status_filter?: string;
+  severity_min?: number;
+  routed_department?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ sos_requests: SOSListItem[]; total: number }> {
+  const searchParams = new URLSearchParams();
+  if (params?.status_filter) searchParams.set("status_filter", params.status_filter);
+  if (params?.severity_min) searchParams.set("severity_min", String(params.severity_min));
+  if (params?.routed_department) searchParams.set("routed_department", params.routed_department);
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.offset) searchParams.set("offset", String(params.offset));
+  const qs = searchParams.toString();
+  return request<{ sos_requests: SOSListItem[]; total: number }>(`/sos${qs ? `?${qs}` : ""}`);
+}
+
+export function updateSOSStatus(
+  sosId: string,
+  newStatus: string
+): Promise<SOSResponse> {
+  return request<SOSResponse>(`/sos/${sosId}/status`, {
+    method: "PUT",
+    body: { status: newStatus },
+  });
+}
+
 // ─── Analytics endpoints ────────────────────────────────────────
 
 export interface AnalyticsStats {

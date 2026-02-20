@@ -8,10 +8,13 @@ import type {
   AssignedCase,
   CaseHistoryEntry,
   CaseStatus,
+  CaseType,
+  CasePriority,
   GeoLocation,
 } from "../types/responderTypes";
 import type { ResponderType } from "./authStore";
 import { isDummyMode } from "../hooks/useDataMode";
+import { getSOSRequests, getPatient, updateSOSStatus, type SOSListItem } from "../services/api";
 
 // ─── Store Interface ─────────────────────────────────────────────
 
@@ -350,13 +353,6 @@ export const useResponderStore = create<ResponderStore>((set, get) => ({
     set({ activeCase: demoMap[responderType] });
   },
 
-  // TODO: Implement when backend dispatch API is available
-  // fetchCase: async () => {
-  //   if (isDummyMode()) return;
-  //   const response = await fetch('/api/v1/responders/me/case');
-  //   const data = await response.json();
-  //   set({ activeCase: data });
-  // },
 }));
 
 // ─── Selectors ───────────────────────────────────────────────────
@@ -367,3 +363,103 @@ export const selectCompletedCases = (state: ResponderStore) => state.completedCa
 
 // ─── Data Mode Helper ─────────────────────────────────────────────
 export const isUsingDummyData = isDummyMode;
+
+// ─── API-backed Case Fetching ─────────────────────────────────────
+
+/** Map SOS severity (1-5) to case priority */
+function mapSeverityToPriority(severity: number): CasePriority {
+  if (severity >= 5) return "critical";
+  if (severity >= 4) return "high";
+  if (severity >= 3) return "medium";
+  return "low";
+}
+
+/** Map patient_status / routed_department to case type */
+function mapToCaseType(patientStatus: string, department: string | null): CaseType {
+  if (department === "police") return "security";
+  if (department === "civil_defense") return "rescue";
+  if (patientStatus === "trapped") return "rescue";
+  return "medical";
+}
+
+/** Convert a backend SOS item to an AssignedCase */
+function sosToAssignedCase(sos: SOSListItem, responderType: ResponderType): AssignedCase {
+  return {
+    id: sos.id,
+    caseNumber: `SOS-${sos.id.slice(0, 8).toUpperCase()}`,
+    type: mapToCaseType(sos.patient_status, sos.routed_department),
+    priority: mapSeverityToPriority(sos.severity),
+    status: sos.status === "acknowledged" ? "accepted" : "pending",
+    responderType,
+    briefDescription: sos.details || `${sos.patient_status} — Severity ${sos.severity}/5`,
+    victimCount: 1,
+    pickupLocation: {
+      lat: sos.latitude ?? 31.5,
+      lng: sos.longitude ?? 34.47,
+      address: "Location from SOS coordinates",
+    },
+    createdAt: sos.created_at,
+    assignedAt: sos.created_at,
+  };
+}
+
+/**
+ * Fetch the most recent pending/acknowledged SOS as the responder's active case.
+ * Uses demo data in dummy mode.
+ */
+export async function fetchActiveCase(responderType: ResponderType) {
+  const store = useResponderStore.getState();
+
+  if (isDummyMode()) {
+    store.loadDemoCase(responderType);
+    return;
+  }
+
+  try {
+    const departmentMap: Record<ResponderType, string> = {
+      ambulance: "hospital",
+      police: "police",
+      civil_defense: "civil_defense",
+      firefighter: "civil_defense",
+    };
+
+    const { sos_requests } = await getSOSRequests({
+      status_filter: "pending",
+      routed_department: departmentMap[responderType],
+      limit: 1,
+    });
+
+    if (sos_requests.length > 0) {
+      const mapped = sosToAssignedCase(sos_requests[0], responderType);
+
+      // Try to enrich with patient data
+      try {
+        const patient = await getPatient(sos_requests[0].patient_id);
+        mapped.victimInfo = {
+          name: patient.name,
+          phone: patient.phone,
+          bloodType: patient.blood_type ?? undefined,
+          medicalConditions: patient.chronic_conditions,
+          allergies: patient.allergies,
+        };
+        if (patient.emergency_contacts?.length > 0) {
+          const ec = patient.emergency_contacts[0];
+          mapped.victimInfo.emergencyContact = {
+            name: ec.name,
+            phone: ec.phone,
+            relation: ec.relationship || "Contact",
+          };
+        }
+      } catch {
+        // Patient data fetch failed — continue without it
+      }
+
+      store.setActiveCase(mapped);
+    } else {
+      store.setActiveCase(null);
+    }
+  } catch (err) {
+    console.warn("Failed to fetch active case from API, falling back to demo:", err);
+    store.loadDemoCase(responderType);
+  }
+}
