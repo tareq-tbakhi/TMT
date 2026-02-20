@@ -15,6 +15,15 @@ import { BridgefyService } from '../native/bridgefyService';
 import { ConnectionManager, type ConnectionLayer } from './connectionManager';
 import { OfflineVault } from './offlineVault';
 import type { BridgefyAckMessage } from '../plugins/bridgefy';
+import {
+  addPendingSOS,
+  getPendingSOS as getSOSFromDB,
+  removePendingSOS as removeSOSFromDB,
+  clearPendingSOS as clearSOSFromDB,
+  updatePendingSOSRetry,
+} from './offlineDB';
+import { requestSOSSync } from './swRegistration';
+import type { PendingSOS as PendingSOSType } from '../types/cache';
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -62,26 +71,44 @@ const TMT_SMS_NUMBER = import.meta.env.VITE_TMT_SMS_NUMBER || '+970599000000';
 const INTERNET_TIMEOUT = 10000; // 10 seconds
 const MESH_ACK_TIMEOUT = 60000; // 1 minute for mesh delivery
 
-// ─── Encrypted Vault Helpers ─────────────────────────────────────
-// All pending SOS data is encrypted at rest via OfflineVault (AES-256-GCM)
+// ─── Storage Helpers ─────────────────────────────────────────────
+// Uses both encrypted OfflineVault (for extended offline) and offlineDB (for sync)
 
 type PendingSOS = SOSPayload & { messageId: string; createdAt: number };
 
 async function storePendingSOS(data: PendingSOS): Promise<void> {
+  // Store in both encrypted vault (for extended offline) and offlineDB (for service worker sync)
   await OfflineVault.put('pending_sos', data.messageId, data);
+  await addPendingSOS({
+    messageId: data.messageId,
+    patientId: (data as any).patientId || '',
+    latitude: data.latitude,
+    longitude: data.longitude,
+    patientStatus: (data as any).patient_status || 'injured',
+    severity: data.severity || 3,
+    details: data.details,
+    triage_transcript: (data as any).triage_transcript,
+    createdAt: data.createdAt,
+    retryCount: 0,
+  });
 }
 
 async function getPendingSOS(): Promise<PendingSOS[]> {
+  // Use encrypted vault as source
   const records = await OfflineVault.getAll<PendingSOS>('pending_sos');
   return records;
 }
 
 async function removePendingSOS(messageId: string): Promise<void> {
+  // Remove from both storages
   await OfflineVault.delete('pending_sos', messageId);
+  await removeSOSFromDB(messageId);
 }
 
 async function clearPendingSOS(): Promise<void> {
+  // Clear both storages
   await OfflineVault.clear('pending_sos');
+  await clearSOSFromDB();
 }
 
 // ─── Service Class ───────────────────────────────────────────────
