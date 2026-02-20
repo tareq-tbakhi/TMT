@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { createSOS, getHospitals, type Hospital } from "../../services/api";
+import { createSOS, updateSOSTriage, getHospitals, type Hospital } from "../../services/api";
 import { buildSMSBody, sendViaSMS } from "../../services/smsService";
 import { useAuthStore } from "../../store/authStore";
 import { useAIAssistantStore } from "../../store/aiAssistantStore";
@@ -38,7 +38,7 @@ interface SOSFormData {
   details: string;
 }
 
-type SOSState = "idle" | "countdown" | "ai_assistant" | "calling" | "sending" | "sent" | "sms_ready" | "error" | "cancelled";
+type SOSState = "idle" | "ai_assistant" | "calling" | "sending" | "sent" | "sms_ready" | "error" | "cancelled";
 
 // ─── IndexedDB Helper ───────────────────────────────────────────
 
@@ -164,8 +164,10 @@ export default function SOS() {
   // Pending SOS count
   const [pendingCount, setPendingCount] = useState(0);
 
-  // Countdown before sending (cancellation window)
-  const [countdownSeconds, setCountdownSeconds] = useState(5);
+  // Countdown removed — SOS sends immediately
+
+  // Active SOS ID (so triage can update it)
+  const [activeSosId, setActiveSosId] = useState<string | null>(null);
 
   // Refs for cleanup
   const syncTimerRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
@@ -199,33 +201,7 @@ export default function SOS() {
   const resetAIAssistant = useAIAssistantStore((s: { reset: () => void }) => s.reset);
   const aiMessages = useAIAssistantStore((s: { messages: Array<{ role: string; content: string; timestamp: Date }> }) => s.messages);
 
-  // ─── Countdown Timer (Cancellation Window) ─────────────────
-
-  useEffect(() => {
-    if (sosState === "countdown") {
-      // Reset countdown to 5 seconds
-      setCountdownSeconds(5);
-
-      countdownTimerRef.current = setInterval(() => {
-        setCountdownSeconds((prev: number) => {
-          if (prev <= 1) {
-            // Countdown finished - transition to AI Assistant
-            clearInterval(countdownTimerRef.current);
-            resetAIAssistant();
-            setSosState("ai_assistant");
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      return () => {
-        if (countdownTimerRef.current) {
-          clearInterval(countdownTimerRef.current);
-        }
-      };
-    }
-  }, [sosState, resetAIAssistant]);
+  // Countdown no longer used — SOS sends immediately on button press
 
   // ─── Auto-detect GPS on Load ──────────────────────────────
 
@@ -289,13 +265,34 @@ export default function SOS() {
     if (latitude === null || longitude === null) return;
     setHospitalLoading(true);
 
-    // Always use dummy data for now (demo purposes)
-    const now = new Date().toISOString();
-    setNearestHospitals([
-      { id: "dummy-1", name: "Al-Shifa Medical Complex", latitude: 31.5, longitude: 34.45, status: "operational", available_beds: 120, bed_capacity: 200, icu_beds: 20, specialties: ["Emergency", "Trauma"], coverage_radius_km: 10, phone: null, email: null, address: null, website: null, supply_levels: {}, created_at: now, updated_at: now, distance: 2.3 },
-      { id: "dummy-2", name: "Al-Quds Hospital", latitude: 31.52, longitude: 34.47, status: "offline", available_beds: 0, bed_capacity: 150, icu_beds: 15, specialties: ["General"], coverage_radius_km: 8, phone: null, email: null, address: null, website: null, supply_levels: {}, created_at: now, updated_at: now, distance: 5.7 },
-      { id: "dummy-3", name: "European Gaza Hospital", latitude: 31.35, longitude: 34.32, status: "operational", available_beds: 45, bed_capacity: 100, icu_beds: 10, specialties: ["Emergency"], coverage_radius_km: 15, phone: null, email: null, address: null, website: null, supply_levels: {}, created_at: now, updated_at: now, distance: 12.1 },
-    ]);
+    try {
+      const hospitals = await getHospitals();
+      // Calculate distance and sort by nearest
+      const withDistance = hospitals
+        .filter((h: Hospital) => h.latitude != null && h.longitude != null)
+        .map((h: Hospital) => {
+          const R = 6371;
+          const hLat = h.latitude!;
+          const hLon = h.longitude!;
+          const dLat = ((hLat - latitude) * Math.PI) / 180;
+          const dLon = ((hLon - longitude) * Math.PI) / 180;
+          const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos((latitude * Math.PI) / 180) *
+              Math.cos((hLat * Math.PI) / 180) *
+              Math.sin(dLon / 2) ** 2;
+          const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+          return { ...h, distance: Math.round(distance * 10) / 10 };
+        });
+      withDistance.sort((a, b) => a.distance - b.distance);
+      setNearestHospitals(withDistance.slice(0, 3));
+    } catch (err) {
+      console.warn("Failed to fetch hospitals, using fallback:", err);
+      const now = new Date().toISOString();
+      setNearestHospitals([
+        { id: "fallback-1", name: "Nearest Hospital", latitude: 0, longitude: 0, status: "operational", available_beds: 0, bed_capacity: 0, icu_beds: 0, specialties: [], coverage_radius_km: 0, phone: null, email: null, address: null, website: null, supply_levels: {}, created_at: now, updated_at: now, distance: 0 },
+      ]);
+    }
     setHospitalLoading(false);
   }, [latitude, longitude]);
 
@@ -359,94 +356,6 @@ export default function SOS() {
     };
   }, [isOnline, pendingCount, syncPendingSOS]);
 
-  // ─── Send SOS via Unified Dispatcher (Internet → SMS → Mesh) ──────────────────────────────────────
-
-  const handleSOSWithDispatcher = async (triageData?: TriageData) => {
-    if (latitude === null || longitude === null) {
-      setSosError("GPS location is required. Please enable location services.");
-      return;
-    }
-
-    setSosState("sending");
-    setSosError(null);
-
-    // Build payload from form or triage data
-    const patientId = user?.patientId || user?.id || "UNKNOWN";
-    const patientStatus = triageData?.emergencyType || form.patientStatus;
-    const severity = triageData
-      ? (triageData.injuryStatus === "serious" ? 5 : triageData.injuryStatus === "minor" ? 3 : 1)
-      : form.severity;
-
-    // Build details string from triage data if present
-    let details = form.details;
-    if (triageData) {
-      const detailsParts: string[] = [];
-      if (triageData.emergencyType) detailsParts.push(`Type: ${triageData.emergencyType}`);
-      if (triageData.injuryStatus) detailsParts.push(`Injury: ${triageData.injuryStatus}`);
-      if (triageData.peopleCount) detailsParts.push(`People: ${triageData.peopleCount.replace(/_/g, " ")}`);
-      if (triageData.canMove) detailsParts.push(`Mobility: ${triageData.canMove.replace(/_/g, " ")}`);
-      if (triageData.additionalDetails) detailsParts.push(`Details: ${triageData.additionalDetails}`);
-      details = detailsParts.join("; ");
-    }
-
-    try {
-      // Build triage transcript from AI conversation
-      const transcript = aiMessages.length > 0
-        ? aiMessages.map((m) => ({
-            role: m.role,
-            content: m.content,
-            timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : String(m.timestamp),
-          }))
-        : undefined;
-
-      // Use the unified SOSDispatcher with automatic fallback
-      const result = await SOSDispatcher.dispatch({
-        patientId,
-        latitude,
-        longitude,
-        patientStatus,
-        severity,
-        details: details || undefined,
-        triage_transcript: transcript,
-      });
-
-      if (result.success) {
-        setSosResponse({
-          id: result.sosId,
-          hospital_name: nearestHospitals[0]?.name,
-        });
-
-        // Show different state based on which layer was used
-        if (result.layer === 'sms') {
-          // For SMS, we need to show the SMS ready screen
-          const smsBodyText = await buildSMSBody(
-            patientId,
-            latitude,
-            longitude,
-            patientStatus,
-            String(severity)
-          );
-          setSmsBody(smsBodyText);
-          setSosState("sms_ready");
-        } else {
-          setSosState("sent");
-        }
-
-        // Show connection indicator info
-        console.log(`[SOS] Sent via ${result.layer}, fallbacks tried: ${result.fallbacksAttempted.join(' → ')}`);
-      } else {
-        setSosError(result.error || "Failed to send SOS through all available channels.");
-        setSosState("error");
-      }
-    } catch (err) {
-      setSosError(
-        err instanceof Error
-          ? err.message
-          : "Failed to send SOS. Please try again."
-      );
-      setSosState("error");
-    }
-  };
 
 
   // ─── Send SOS Offline (SMS) ───────────────────────────────
@@ -519,21 +428,62 @@ export default function SOS() {
 
   // ─── Handle SOS Button Press ──────────────────────────────
 
-  const handleSOS = () => {
-    // Start countdown instead of directly sending
-    setSosState("countdown");
-    setCountdownSeconds(5);
-  };
-
-  // ─── Cancel SOS (during countdown) ─────────────────────────
-
-  const cancelCountdown = () => {
-    if (countdownTimerRef.current) {
-      clearInterval(countdownTimerRef.current);
+  const handleSOS = async () => {
+    if (latitude === null || longitude === null) {
+      setSosError("GPS location is required. Please enable location services.");
+      return;
     }
-    setSosState("idle");
-    setCountdownSeconds(5);
+
+    // Send SOS IMMEDIATELY — no waiting
+    setSosState("sending");
+    setSosError(null);
+
+    const patientId = user?.patientId || user?.id || "UNKNOWN";
+
+    try {
+      const result = await SOSDispatcher.dispatch({
+        patientId,
+        latitude,
+        longitude,
+        patientStatus: form.patientStatus,
+        severity: form.severity,
+        details: form.details || undefined,
+      });
+
+      if (result.success) {
+        // Store the SOS ID so triage can update it later
+        setActiveSosId(result.sosId || null);
+        setSosResponse({
+          id: result.sosId,
+          hospital_name: nearestHospitals[0]?.name,
+        });
+
+        if (result.layer === 'sms') {
+          const smsBodyText = await buildSMSBody(
+            patientId, latitude, longitude,
+            form.patientStatus, String(form.severity)
+          );
+          setSmsBody(smsBodyText);
+          setSosState("sms_ready");
+        } else {
+          // SOS sent successfully — now show AI triage to collect more info
+          console.log(`[SOS] Sent via ${result.layer}, SOS ID: ${result.sosId}`);
+          resetAIAssistant();
+          setSosState("ai_assistant");
+        }
+      } else {
+        setSosError(result.error || "Failed to send SOS through all available channels.");
+        setSosState("error");
+      }
+    } catch (err) {
+      setSosError(
+        err instanceof Error ? err.message : "Failed to send SOS. Please try again."
+      );
+      setSosState("error");
+    }
   };
+
+  // Countdown cancel removed — SOS sends immediately
 
   // ─── Cancel SOS ───────────────────────────────────────────
 
@@ -552,20 +502,21 @@ export default function SOS() {
     setSosResponse(null);
     setSmsBody(null);
     setSosError(null);
+    setActiveSosId(null);
     resetAIAssistant();
   };
 
   // ─── Handle AI Assistant Send SOS ────────────────────────
 
   const handleAISendSOS = async (triageData: TriageData) => {
-    if (latitude === null || longitude === null) {
-      setSosError("GPS location is required.");
-      setSosState("error");
-      return;
-    }
-
-    // Map triage data to patient status
-    const patientStatus = triageData.emergencyType || "injured";
+    // Map triage emergencyType → valid PatientStatus enum (safe|injured|trapped|evacuate)
+    const statusMap: Record<string, string> = {
+      medical: "injured",
+      danger: "injured",
+      trapped: "trapped",
+      evacuate: "evacuate",
+    };
+    const patientStatus = statusMap[triageData.emergencyType || ""] || "injured";
     const severity = triageData.injuryStatus === "serious" ? 5 : triageData.injuryStatus === "minor" ? 3 : 1;
 
     // Build details string from triage data
@@ -578,16 +529,32 @@ export default function SOS() {
 
     const details = detailsParts.join("; ");
 
-    // Update form state
-    setForm({
-      patientStatus: patientStatus as PatientStatus,
-      severity,
-      details,
-    });
+    // Build triage transcript from AI conversation
+    const transcript = aiMessages.length > 0
+      ? aiMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp instanceof Date ? m.timestamp.toISOString() : String(m.timestamp),
+        }))
+      : undefined;
 
-    // Use the unified dispatcher with automatic fallback (Internet → SMS → Mesh)
-    // Transcript is included via handleSOSWithDispatcher → SOSDispatcher.dispatch
-    await handleSOSWithDispatcher(triageData);
+    // UPDATE the existing SOS with triage data (SOS was already sent on button press)
+    if (activeSosId) {
+      try {
+        await updateSOSTriage(activeSosId, {
+          patient_status: patientStatus,
+          severity,
+          details,
+          triage_transcript: transcript,
+        });
+        console.log(`[SOS] Updated SOS ${activeSosId} with triage data`);
+      } catch (err) {
+        console.warn("[SOS] Failed to update triage data:", err);
+      }
+    }
+
+    // Show confirmation
+    setSosState("sent");
   };
 
   // ─── Handle Urgent Call ──────────────────────────────────
@@ -629,61 +596,7 @@ export default function SOS() {
     return <CallingScreen onEndCall={handleEndCall} />;
   }
 
-  // ─── Render: Countdown Screen (Cancellation Window) ────────
-
-  if (sosState === "countdown") {
-    return (
-      <div className="min-h-full bg-red-600 flex items-center justify-center p-4">
-        <div className="max-w-md w-full text-center">
-          {/* Countdown Circle */}
-          <div className="relative w-48 h-48 mx-auto mb-8">
-            {/* Background circle */}
-            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-              <circle
-                cx="50"
-                cy="50"
-                r="45"
-                fill="none"
-                stroke="rgba(255,255,255,0.2)"
-                strokeWidth="8"
-              />
-              {/* Animated progress circle */}
-              <circle
-                cx="50"
-                cy="50"
-                r="45"
-                fill="none"
-                stroke="white"
-                strokeWidth="8"
-                strokeLinecap="round"
-                strokeDasharray={`${(countdownSeconds / 5) * 283} 283`}
-                className="transition-all duration-1000 ease-linear"
-              />
-            </svg>
-            {/* Countdown number */}
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-7xl font-bold text-white">{countdownSeconds}</span>
-            </div>
-          </div>
-
-          <h2 className="text-2xl font-bold text-white mb-2">
-            Sending SOS...
-          </h2>
-          <p className="text-white/80 mb-8">
-            Tap cancel if this was a mistake
-          </p>
-
-          {/* Cancel Button */}
-          <button
-            onClick={cancelCountdown}
-            className="w-full bg-white text-red-600 font-bold py-4 px-6 rounded-xl text-lg active:bg-gray-100 transition-colors"
-          >
-            CANCEL
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // Countdown screen removed — SOS sends immediately
 
   // ─── Render: Confirmation Screen ──────────────────────────
 

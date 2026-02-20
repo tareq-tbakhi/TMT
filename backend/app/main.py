@@ -11,7 +11,7 @@ from sqlalchemy import text
 import app.models  # noqa: F401 — register all ORM models with Base.metadata
 
 logger = logging.getLogger(__name__)
-from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap, auth, admin, aid_requests, transfers, simulation, telegram, news, mesh
+from app.api.routes import patients, hospitals, records, alerts, analytics, sos, sms, livemap, auth, admin, aid_requests, transfers, simulation, telegram, news, mesh, sync
 from app.api.websocket.handler import sio
 
 settings = get_settings()
@@ -56,6 +56,7 @@ app.include_router(simulation.router, prefix=settings.API_PREFIX, tags=["Simulat
 app.include_router(telegram.router, prefix=settings.API_PREFIX, tags=["Telegram"])
 app.include_router(news.router, prefix=settings.API_PREFIX, tags=["News"])
 app.include_router(mesh.router, prefix=settings.API_PREFIX, tags=["Mesh Network"])
+app.include_router(sync.router, prefix=settings.API_PREFIX, tags=["Offline Sync"])
 
 
 @app.on_event("startup")

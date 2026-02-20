@@ -387,6 +387,20 @@ export function createSOS(data: SOSRequest): Promise<SOSResponse> {
   });
 }
 
+export interface SOSTriageUpdate {
+  patient_status?: string;
+  severity?: number;
+  details?: string;
+  triage_transcript?: Array<{ role: string; content: string; timestamp: string }>;
+}
+
+export function updateSOSTriage(sosId: string, data: SOSTriageUpdate): Promise<SOSResponse> {
+  return request<SOSResponse>(`/sos/${sosId}/triage`, {
+    method: "PATCH",
+    body: data,
+  });
+}
+
 export interface SOSListItem {
   id: string;
   patient_id: string;

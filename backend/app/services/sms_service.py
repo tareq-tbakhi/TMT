@@ -107,7 +107,7 @@ async def process_inbound_sms(
         logger.error("Failed to decrypt SMS from patient %s: %s", patient.id, exc)
         # Fall through — we still log the message
 
-    # Step 3 — parse SOS payload
+    # Step 3 — parse SOS payload (supports both compact and full-key formats)
     sos_data: dict[str, Any] = {}
     if plaintext:
         try:
@@ -115,6 +115,57 @@ async def process_inbound_sms(
         except json.JSONDecodeError:
             # Treat the whole plaintext as free-text details
             sos_data = {"details": plaintext}
+
+    # Expand compact keys from mobile SMS payload:
+    #   u → patientId, l → "lat,lon", s → status short code, v → severity,
+    #   t → timestamp, m → messageId (for dedup)
+    _STATUS_SHORT_MAP = {"S": "safe", "I": "injured", "T": "trapped", "E": "evacuate"}
+
+    if "s" in sos_data and "patient_status" not in sos_data:
+        sos_data["patient_status"] = _STATUS_SHORT_MAP.get(sos_data["s"], "injured")
+    if "v" in sos_data and "severity" not in sos_data:
+        try:
+            sos_data["severity"] = int(sos_data["v"])
+        except (ValueError, TypeError):
+            sos_data["severity"] = 3
+    if "l" in sos_data and "latitude" not in sos_data:
+        try:
+            parts = str(sos_data["l"]).split(",")
+            sos_data["latitude"] = float(parts[0])
+            sos_data["longitude"] = float(parts[1])
+        except (ValueError, IndexError):
+            pass
+
+    sms_message_id: str | None = sos_data.get("m")  # compact messageId for dedup
+
+    # Step 3b — dedup: skip if an SOS with this messageId already exists
+    if sms_message_id:
+        existing = await db.execute(
+            select(SosRequest).where(
+                SosRequest.patient_id == patient.id,
+                SosRequest.mesh_message_id == sms_message_id,
+            ).limit(1)
+        )
+        if existing.scalar_one_or_none() is not None:
+            logger.info(
+                "Duplicate SMS SOS from patient %s (messageId=%s) — skipping",
+                patient.id, sms_message_id,
+            )
+            await log_sms(
+                db,
+                direction=SMSDirection.INBOUND,
+                phone=phone,
+                patient_id=patient.id,
+                message_body="[duplicate]",
+                decrypted=decrypted,
+                delivery_status="duplicate",
+                twilio_sid=twilio_sid,
+            )
+            return {
+                "status": "duplicate",
+                "patient_id": str(patient.id),
+                "sms_message_id": sms_message_id,
+            }
 
     # Step 4 — create SOS request
     patient_status_raw = sos_data.get("patient_status", "injured")
@@ -171,6 +222,7 @@ async def process_inbound_sms(
         source=SOSSource.SMS,
         details=sos_data.get("details"),
         origin_hospital_id=origin_hospital_id,
+        mesh_message_id=sms_message_id,  # reuse mesh_message_id for SMS dedup
     )
     db.add(sos)
     await db.flush()

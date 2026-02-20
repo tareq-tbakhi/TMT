@@ -13,16 +13,17 @@ import { createSOS } from './api';
 import { buildSMSBody, sendViaSMS } from './smsService';
 import { BridgefyService } from '../native/bridgefyService';
 import { ConnectionManager, type ConnectionLayer } from './connectionManager';
+import { OfflineVault } from './offlineVault';
 import type { BridgefyAckMessage } from '../plugins/bridgefy';
 import {
   addPendingSOS,
-  getPendingSOS,
-  removePendingSOS,
-  clearPendingSOS,
+  getPendingSOS as getSOSFromDB,
+  removePendingSOS as removeSOSFromDB,
+  clearPendingSOS as clearSOSFromDB,
   updatePendingSOSRetry,
 } from './offlineDB';
 import { requestSOSSync } from './swRegistration';
-import type { PendingSOS } from '../types/cache';
+import type { PendingSOS as PendingSOSType } from '../types/cache';
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -69,6 +70,46 @@ interface PendingAck {
 const TMT_SMS_NUMBER = import.meta.env.VITE_TMT_SMS_NUMBER || '+970599000000';
 const INTERNET_TIMEOUT = 10000; // 10 seconds
 const MESH_ACK_TIMEOUT = 60000; // 1 minute for mesh delivery
+
+// ─── Storage Helpers ─────────────────────────────────────────────
+// Uses both encrypted OfflineVault (for extended offline) and offlineDB (for sync)
+
+type PendingSOS = SOSPayload & { messageId: string; createdAt: number };
+
+async function storePendingSOS(data: PendingSOS): Promise<void> {
+  // Store in both encrypted vault (for extended offline) and offlineDB (for service worker sync)
+  await OfflineVault.put('pending_sos', data.messageId, data);
+  await addPendingSOS({
+    messageId: data.messageId,
+    patientId: (data as any).patientId || '',
+    latitude: data.latitude,
+    longitude: data.longitude,
+    patientStatus: (data as any).patient_status || 'injured',
+    severity: data.severity || 3,
+    details: data.details,
+    triage_transcript: (data as any).triage_transcript,
+    createdAt: data.createdAt,
+    retryCount: 0,
+  });
+}
+
+async function getPendingSOS(): Promise<PendingSOS[]> {
+  // Use encrypted vault as source
+  const records = await OfflineVault.getAll<PendingSOS>('pending_sos');
+  return records;
+}
+
+async function removePendingSOS(messageId: string): Promise<void> {
+  // Remove from both storages
+  await OfflineVault.delete('pending_sos', messageId);
+  await removeSOSFromDB(messageId);
+}
+
+async function clearPendingSOS(): Promise<void> {
+  // Clear both storages
+  await OfflineVault.clear('pending_sos');
+  await clearSOSFromDB();
+}
 
 // ─── Service Class ───────────────────────────────────────────────
 
@@ -143,16 +184,7 @@ class SOSDispatcherImpl {
 
     // All layers failed - store for later retry
     console.log('[SOSDispatcher] All layers failed - storing for retry');
-    const pendingPayload: PendingSOS = {
-      ...payload,
-      messageId,
-      createdAt: Date.now(),
-      retryCount: 0,
-    };
-    await addPendingSOS(pendingPayload);
-
-    // Request background sync
-    await requestSOSSync();
+    await storePendingSOS({ ...payload, messageId, createdAt: Date.now() });
 
     return {
       success: false,
@@ -179,17 +211,10 @@ class SOSDispatcherImpl {
 
     let succeeded = 0;
     for (const sos of pending) {
-      try {
-        const result = await this.dispatch(sos);
-        if (result.success) {
-          await removePendingSOS(sos.messageId);
-          succeeded++;
-        } else {
-          await updatePendingSOSRetry(sos.messageId, result.error);
-        }
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        await updatePendingSOSRetry(sos.messageId, errorMessage);
+      const result = await this.dispatch(sos);
+      if (result.success) {
+        await removePendingSOS(sos.messageId);
+        succeeded++;
       }
     }
 
@@ -274,7 +299,9 @@ class SOSDispatcherImpl {
       payload.latitude,
       payload.longitude,
       payload.patientStatus,
-      String(payload.severity)
+      String(payload.severity),
+      undefined, // encryptionKey — use default
+      messageId  // for dedup on backend
     );
 
     const sent = await sendViaSMS(smsBody, TMT_SMS_NUMBER);
@@ -338,16 +365,7 @@ class SOSDispatcherImpl {
     messageId: string
   ): Promise<SOSDispatchResult> {
     // Store for later retry
-    const pendingPayload: PendingSOS = {
-      ...payload,
-      messageId,
-      createdAt: Date.now(),
-      retryCount: 0,
-    };
-    await addPendingSOS(pendingPayload);
-
-    // Request background sync
-    await requestSOSSync();
+    await storePendingSOS({ ...payload, messageId, createdAt: Date.now() });
 
     // Try Bluetooth even without confirmed connectivity
     // (there might be nearby devices)

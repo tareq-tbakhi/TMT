@@ -50,7 +50,13 @@ class Settings(BaseSettings):
         return int(v)
 
     # CORS
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
+    CORS_ORIGINS: list[str] = [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "https://tmt.local",
+        "capacitor://localhost",
+        "http://localhost",
+    ]
 
     class Config:
         env_file = ".env"

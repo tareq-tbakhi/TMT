@@ -8,11 +8,10 @@ import { useVoiceInput } from "../../hooks/useVoiceInput";
 import { useConversationTimer } from "../../hooks/useConversationTimer";
 import { AI_CONVERSATION_FLOW, URGENCY_KEYWORDS, AI_RESPONSES } from "../../config/conversationFlow";
 import { SOS_CONFIG } from "../../config/sosConfig";
-import type { ConversationMessage, TriageData, QuickOption, InputMode } from "../../types/sosTypes";
+import type { ConversationMessage, TriageData, QuickOption } from "../../types/sosTypes";
 
 import { ConversationArea } from "./ConversationArea";
 import { QuickResponses } from "./QuickResponses";
-import { VoiceInput } from "./VoiceInput";
 import { TextInput } from "./TextInput";
 import { UrgentCallButton } from "./UrgentCallButton";
 import { TimeoutOverlay } from "./TimeoutOverlay";
@@ -36,8 +35,6 @@ export function AIAssistantScreen({
   const store = useAIAssistantStore();
 
   // Local state
-  const [inputMode, setInputMode] = useState<InputMode>("voice");
-  const [showTextInput, setShowTextInput] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [showTimeoutOverlay, setShowTimeoutOverlay] = useState(false);
   const [timeoutSeconds, setTimeoutSeconds] = useState(SOS_CONFIG.AUTO_SEND_SECONDS - SOS_CONFIG.FIRST_REMINDER_SECONDS);
@@ -56,11 +53,17 @@ export function AIAssistantScreen({
   // Voice input hook
   const { voiceState, isSupported, startListening, stopListening, resetTranscript } = useVoiceInput({
     onResult: (transcript, isFinal) => {
+      // Any voice activity means user is present — reset inactivity timer
+      resetResponseTimerRef.current();
+      if (showTimeoutOverlay) setShowTimeoutOverlay(false);
       if (isFinal && transcript.trim()) {
         handleUserResponse(transcript);
       }
     },
   });
+
+  // Ref to break circular dependency (voice callback needs resetResponseTimer before it's defined)
+  const resetResponseTimerRef = useRef<() => void>(() => {});
 
   // Conversation timer
   const { resetResponseTimer } = useConversationTimer({
@@ -72,6 +75,9 @@ export function AIAssistantScreen({
     onAutoSend: handleAutoSend,
     onMaxTime: handleAutoSend,
   });
+
+  // Keep ref in sync so voice callback can access resetResponseTimer
+  resetResponseTimerRef.current = resetResponseTimer;
 
   // Timeout countdown
   useEffect(() => {
@@ -233,6 +239,15 @@ export function AIAssistantScreen({
     handleUserResponse(text);
   };
 
+  // Handle typing activity — resets inactivity timer so auto-call doesn't interrupt
+  const handleTypingActivity = () => {
+    resetResponseTimer();
+    // Dismiss timeout overlay if user is actively typing
+    if (showTimeoutOverlay) {
+      setShowTimeoutOverlay(false);
+    }
+  };
+
   // Handle camera capture
   const handleCameraCapture = (imageUrl: string) => {
     const existingImages = store.triageData.attachedImages || [];
@@ -262,27 +277,6 @@ export function AIAssistantScreen({
     resetResponseTimer();
   };
 
-  // Toggle input mode
-  const toggleInputMode = () => {
-    if (inputMode === "voice") {
-      stopListening();
-      setInputMode("text");
-      setShowTextInput(true);
-    } else {
-      setShowTextInput(false);
-      setInputMode("voice");
-      startListening();
-    }
-  };
-
-  // Toggle voice
-  const toggleVoice = () => {
-    if (voiceState.isListening) {
-      stopListening();
-    } else {
-      startListening();
-    }
-  };
 
   return (
     <div className="min-h-full bg-gray-50 flex flex-col">
@@ -330,46 +324,31 @@ export function AIAssistantScreen({
         />
       )}
 
-      {/* Voice Input */}
-      {inputMode === "voice" && !showTextInput && (
-        <VoiceInput
-          voiceState={voiceState}
-          isSupported={isSupported}
-          onToggle={toggleVoice}
-        />
-      )}
+      {/* Text Input — always visible so user can free-write at any time */}
+      <TextInput onSend={handleTextSend} onTyping={handleTypingActivity} disabled={isProcessing} placeholder="Describe what's happening..." />
 
-      {/* Text Input */}
-      {showTextInput && (
-        <TextInput onSend={handleTextSend} disabled={isProcessing} />
-      )}
-
-      {/* Input Mode Toggle & Camera */}
+      {/* Voice & Camera Toggle Bar */}
       <div className="flex items-center justify-center gap-3 py-3 px-4 bg-gray-50">
         <button
-          onClick={toggleInputMode}
+          onClick={() => {
+            if (voiceState.isListening) {
+              stopListening();
+            } else {
+              startListening();
+              handleTypingActivity(); // reset timer when starting voice
+            }
+          }}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
-            showTextInput
-              ? "bg-blue-50 border-blue-300 text-blue-700"
+            voiceState.isListening
+              ? "bg-red-50 border-red-300 text-red-700 animate-pulse"
               : "bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600"
           }`}
-          aria-label={inputMode === "voice" ? "Switch to text" : "Switch to voice"}
+          aria-label={voiceState.isListening ? "Stop recording" : "Start voice input"}
         >
-          {inputMode === "voice" ? (
-            <>
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z" />
-              </svg>
-              <span className="text-sm font-medium">Type</span>
-            </>
-          ) : (
-            <>
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V22h-2v-6.07z" />
-              </svg>
-              <span className="text-sm font-medium">Voice</span>
-            </>
-          )}
+          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V22h-2v-6.07z" />
+          </svg>
+          <span className="text-sm font-medium">{voiceState.isListening ? "Stop" : "Voice"}</span>
         </button>
 
         <button

@@ -442,14 +442,30 @@ export default function Alerts() {
     return { ...closest, distance: minDist };
   };
 
-  // Use dummy data or real API based on VITE_USE_DUMMY_DATA env variable
+  // Filter out SOS-sourced alerts (those are for admin dashboards, not patients)
+  // and filter by proximity (only show alerts within their radius or 50km)
+  const patientAlerts = isDummyMode() ? alerts : alerts.filter(a => {
+    // Exclude SOS-originated alerts — patients don't need to see other people's SOS
+    if (a.source === "sos") return false;
+
+    // If we have patient location and alert location, filter by distance
+    if (latitude !== null && longitude !== null && a.latitude !== null && a.longitude !== null) {
+      const dist = haversineKm(latitude, longitude, a.latitude, a.longitude);
+      const radiusKm = (a.radius_m || 50000) / 1000; // default 50km
+      return dist <= radiusKm;
+    }
+
+    // No location data — show the alert anyway (better safe than sorry)
+    return true;
+  });
+
   // Filter alerts by tab - "alerts" shows crisis alerts, "needs" shows hospital needs (blood, supplies)
   const needsEventTypes = ['blood_donation', 'supplies_needed', 'volunteers_needed'];
   const displayAlerts: Alert[] = isDummyMode()
     ? (mainTab === "alerts" ? DEMO_CRISIS_ALERTS : DEMO_HOSPITAL_NEEDS)
     : (mainTab === "alerts"
-        ? alerts.filter(a => !needsEventTypes.includes(a.event_type))
-        : alerts.filter(a => needsEventTypes.includes(a.event_type)));
+        ? patientAlerts.filter(a => !needsEventTypes.includes(a.event_type))
+        : patientAlerts.filter(a => needsEventTypes.includes(a.event_type)));
 
   // Sort: non-expired first, then by severity, then by recency
   const severityOrder: Record<string, number> = {
@@ -725,7 +741,7 @@ export default function Alerts() {
                   : "text-gray-500"
               }`}
             >
-              Alerts ({DEMO_CRISIS_ALERTS.length})
+              Alerts ({isDummyMode() ? DEMO_CRISIS_ALERTS.length : patientAlerts.filter(a => !needsEventTypes.includes(a.event_type)).length})
             </button>
             <button
               onClick={() => setMainTab("needs")}
@@ -735,7 +751,7 @@ export default function Alerts() {
                   : "text-gray-500"
               }`}
             >
-              Needs ({DEMO_HOSPITAL_NEEDS.length})
+              Needs ({isDummyMode() ? DEMO_HOSPITAL_NEEDS.length : patientAlerts.filter(a => needsEventTypes.includes(a.event_type)).length})
             </button>
           </div>
         </div>
