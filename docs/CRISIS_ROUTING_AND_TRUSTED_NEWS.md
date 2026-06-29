@@ -12,7 +12,7 @@
 8. [Recommended Technology Stack](#recommended-technology-stack)
 9. [Implementation Plan](#implementation-plan)
 10. [Data Models & API Design](#data-models--api-design)
-11. [Edge Cases & Failure Modes](#edge-cases--failure-modes)
+11. [EdgeV Cases & Failure Modes](#edge-cases--failure-modes)
 12. [Architecture Diagrams](#architecture-diagrams)
 
 ---

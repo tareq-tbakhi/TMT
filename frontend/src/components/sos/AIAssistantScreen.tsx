@@ -3,7 +3,9 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { useAIAssistantStore } from "../../store/aiAssistantStore";
+import type { AssistantMessage } from "../../services/api";
 import { useVoiceInput } from "../../hooks/useVoiceInput";
 import { useConversationTimer } from "../../hooks/useConversationTimer";
 import { AI_CONVERSATION_FLOW, URGENCY_KEYWORDS, AI_RESPONSES } from "../../config/conversationFlow";
@@ -33,6 +35,7 @@ export function AIAssistantScreen({
   longitude,
 }: AIAssistantScreenProps) {
   const store = useAIAssistantStore();
+  const { i18n } = useTranslation();
 
   // Local state
   const [showCamera, setShowCamera] = useState(false);
@@ -164,38 +167,46 @@ export function AIAssistantScreen({
       return;
     }
 
-    // Update triage data based on current question
+    // Update triage data based on current question (keeps local heuristics even
+    // if the backend triage is partial).
     if (currentQuestion) {
       updateTriageData(currentQuestion.id, selectedOption || text);
     }
 
-    // Move to next question
+    // Build the conversation so far (existing messages + this new user turn) in
+    // the {role, content} shape the backend expects.
+    const convo: AssistantMessage[] = [
+      ...store.messages.map((m) => ({
+        role: m.role === "ai" ? ("assistant" as const) : ("user" as const),
+        content: m.content,
+      })),
+      { role: "user", content: text },
+    ];
+
+    // Ask the GLM-backed assistant for its next turn. The store transparently
+    // falls back to the scripted conversationFlow on error/offline.
     setIsProcessing(true);
-    setTimeout(() => {
-      // Acknowledgment
-      addAIMessage(AI_RESPONSES.understood);
-
-      setTimeout(() => {
+    store
+      .requestAssistantReply(convo, i18n.language)
+      .then((turn) => {
+        // Advance the scripted index so quick-response options keep cycling
+        // (they serve as the fallback UI even on the AI path).
         const nextIndex = store.currentQuestionIndex + 1;
+        const nextQuestion = AI_CONVERSATION_FLOW[nextIndex];
 
-        // Check if we should end (max questions reached or all questions answered)
-        if (nextIndex >= maxQuestions || nextIndex >= AI_CONVERSATION_FLOW.length) {
-          addAIMessage(AI_RESPONSES.sendingNow);
-          setTimeout(() => {
-            handleSendSOS();
-          }, 500);
+        if (turn.done || nextIndex >= maxQuestions) {
+          addAIMessage(turn.message);
+          setIsProcessing(false);
+          setTimeout(() => handleSendSOS(), 500);
         } else {
-          // Ask next question
           store.nextQuestion();
-          const nextQuestion = AI_CONVERSATION_FLOW[nextIndex];
-          if (nextQuestion) {
-            addAIMessage(nextQuestion.question, nextQuestion.id, nextQuestion.options);
-          }
+          // Show the assistant's message; attach the next scripted question's
+          // quick options so the user can still tap-to-answer.
+          addAIMessage(turn.message, nextQuestion?.id, nextQuestion?.options);
+          setIsProcessing(false);
         }
-        setIsProcessing(false);
-      }, 800);
-    }, 300);
-  }, [currentQuestion, store.currentQuestionIndex, maxQuestions, resetResponseTimer, resetTranscript, addUserMessage, addAIMessage]);
+      });
+  }, [currentQuestion, store, maxQuestions, resetResponseTimer, resetTranscript, addUserMessage, addAIMessage, i18n.language]);
 
   // Update triage data
   const updateTriageData = (questionId: string, value: string) => {

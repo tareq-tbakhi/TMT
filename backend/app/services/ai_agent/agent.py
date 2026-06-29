@@ -14,8 +14,8 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-GLM_API_URL = "https://api.z.ai/api/paas/v4/chat/completions"
-GLM_MODEL = "glm-5"
+GLM_API_URL = f"{settings.GLM_API_BASE}/chat/completions"
+GLM_MODEL = settings.GLM_MODEL_REASONING
 
 
 def _extract_json(text: str) -> str:
@@ -278,6 +278,16 @@ Respond ONLY with valid JSON:
         result = json.loads(raw)
         # Ensure score is in valid range
         result["priority_score"] = max(0, min(100, int(result.get("priority_score", 50))))
+        # Surface a structured explanation on the LLM path too. The LLM does not
+        # emit exact numeric attributions, so we wrap its free-text factor
+        # strings into best-effort attributions tagged with source="llm" (no
+        # exactness guarantee on this path — that is reserved for the rule model).
+        if "priority_explanation" not in result:
+            llm_factors = result.get("priority_factors") or []
+            result["priority_explanation"] = [
+                {"factor": "llm", "contribution": None, "detail": str(f), "source": "llm"}
+                for f in llm_factors
+            ]
         return result
     except Exception as e:
         logger.warning("AI priority assessment failed, using rule-based: %s", e)
@@ -291,75 +301,23 @@ def _rule_based_priority(
     nearby_alerts: list[dict] | None = None,
     nearby_telegram_events: list[dict] | None = None,
 ) -> dict:
-    """Fallback rule-based priority scoring when AI is unavailable."""
-    score = 0
-    factors = []
+    """Fallback rule-based priority scoring when AI is unavailable.
 
-    # Base score from SOS severity (1-5 → 10-50)
-    sev = sos_data.get("severity", 3)
-    base = sev * 10
-    score += base
-    factors.append(f"SOS severity {sev}/5: +{base}")
+    Delegates the scoring + explanation to the pure, single-source-of-truth
+    `explain_priority` so the score, the human-readable factor strings, and the
+    structured attributions can never drift apart.
+    """
+    from app.services.ai_agent.priority_explain import explain_priority
 
-    # Patient status
-    status = sos_data.get("patient_status", "")
-    if status == "trapped":
-        score += 20
-        factors.append("Patient trapped: +20")
-    elif status == "injured":
-        score += 10
-        factors.append("Patient injured: +10")
-
-    # Patient vulnerability
-    if patient_info:
-        mobility = patient_info.get("mobility", "")
-        if mobility in ("bedridden", "wheelchair"):
-            score += 20
-            factors.append(f"Mobility {mobility}: +20")
-        living = patient_info.get("living_situation", "")
-        if living == "alone":
-            score += 10
-            factors.append("Living alone: +10")
-
-    # Medical conditions
-    if medical_records:
-        conditions = set()
-        equipment = set()
-        for rec in medical_records:
-            conditions.update(rec.get("conditions", []))
-            equipment.update(rec.get("special_equipment", []))
-        if equipment:
-            score += 20
-            factors.append(f"Requires equipment ({', '.join(list(equipment)[:3])}): +20")
-        elif conditions:
-            score += 10
-            factors.append(f"Has conditions ({', '.join(list(conditions)[:3])}): +10")
-
-    # Alert density
-    if nearby_alerts and len(nearby_alerts) >= 3:
-        density_bonus = min(20, len(nearby_alerts) * 2)
-        score += density_bonus
-        factors.append(f"{len(nearby_alerts)} nearby alerts: +{density_bonus}")
-
-    # Telegram intel corroboration
-    if nearby_telegram_events and len(nearby_telegram_events) > 0:
-        score += 10
-        factors.append(f"Telegram intel confirms activity: +10")
-
-    # Patient trust score penalty
-    if patient_info:
-        trust = patient_info.get("trust_score", 1.0)
-        false_alarms = patient_info.get("false_alarm_count", 0)
-        if trust < 0.3:
-            penalty = 20
-            score -= penalty
-            factors.append(f"Low trust score ({trust:.2f}, {false_alarms} false alarms): -{penalty}")
-        elif trust < 0.5:
-            penalty = 10
-            score -= penalty
-            factors.append(f"Reduced trust ({trust:.2f}, {false_alarms} false alarms): -{penalty}")
-
-    score = max(0, min(100, score))
+    explanation = explain_priority(
+        sos_data,
+        patient_info=patient_info,
+        medical_records=medical_records,
+        nearby_alerts=nearby_alerts,
+        nearby_telegram_events=nearby_telegram_events,
+    )
+    score = explanation["priority_score"]
+    factors = explanation["priority_factors"]
 
     urgency = "when_available"
     if score >= 80:
@@ -372,6 +330,8 @@ def _rule_based_priority(
     return {
         "priority_score": score,
         "priority_factors": factors,
+        # Structured, faithful attributions (SHAP-style) — the new explainability surface.
+        "priority_explanation": explanation["attributions"],
         "recommendation": f"Priority score {score}/100 based on {len(factors)} factors",
         "estimated_response_urgency": urgency,
     }

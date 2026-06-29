@@ -31,7 +31,7 @@ app.add_middleware(RateLimitMiddleware, max_requests=200, window_seconds=60)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -141,6 +141,8 @@ async def startup():
                 "ALTER TABLE patients ADD COLUMN IF NOT EXISTS special_equipment JSONB DEFAULT '[]'::jsonb",
                 "ALTER TABLE patients ADD COLUMN IF NOT EXISTS insurance_info VARCHAR",
                 "ALTER TABLE patients ADD COLUMN IF NOT EXISTS notes VARCHAR",
+                "ALTER TABLE patients ADD COLUMN IF NOT EXISTS encrypted_data BYTEA",
+                "ALTER TABLE medical_records ADD COLUMN IF NOT EXISTS encrypted_data BYTEA",
             ]:
                 await conn.execute(text(stmt))
     except Exception:
@@ -258,6 +260,10 @@ async def startup():
             for stmt in [
                 "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS routed_department VARCHAR",
                 "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS target_facility_id UUID REFERENCES hospitals(id)",
+                # Human-in-the-Loop approval gate columns
+                "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS approval_status VARCHAR DEFAULT 'auto_approved'",
+                "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS approved_by UUID",
+                "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS approved_at TIMESTAMP",
             ]:
                 await conn.execute(text(stmt))
     except Exception:

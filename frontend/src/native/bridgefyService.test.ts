@@ -41,6 +41,8 @@ import { BridgefyService } from './bridgefyService';
 describe('BridgefyService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Reset the singleton so each test starts from a clean state
+    BridgefyService.reset();
     // Reset localStorage mock
     vi.spyOn(Storage.prototype, 'getItem').mockReturnValue(null);
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {});

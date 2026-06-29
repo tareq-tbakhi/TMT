@@ -20,6 +20,7 @@ from app.models.patient import Patient, MobilityStatus, LivingSituation, Gender
 from app.models.medical_record import MedicalRecord
 from app.models.sos_request import SosRequest, SOSStatus, SOSSource, PatientStatus
 from app.models.audit_log import AuditLog
+from app.api.middleware.encryption import encrypt_phi, decrypt_phi, PHI_FIELDS
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,64 @@ def _make_point(longitude: float, latitude: float):
     return func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
 
 
+# PHI/PII fields on the Patient row that are encrypted at rest into
+# `encrypted_data`. mobility/living_situation (SQL-filtered) and blood_type
+# (emergency-critical) are deliberately excluded — see the model for rationale.
+_PATIENT_PHI_FIELDS = (
+    "national_id",
+    "chronic_conditions",
+    "allergies",
+    "current_medications",
+    "special_equipment",
+    "insurance_info",
+    "notes",
+    "emergency_contacts",
+)
+
+
+def _read_patient_phi(patient: Patient) -> dict[str, Any]:
+    """Return the patient's encrypted PHI/PII, falling back to legacy plaintext
+    columns for rows created before patient-level encryption was enabled."""
+    if patient.encrypted_data:
+        try:
+            return decrypt_phi(patient.encrypted_data)
+        except Exception:
+            logger.exception("Failed to decrypt patient PHI for %s", patient.id)
+            return {}
+    return {
+        "national_id": patient.national_id,
+        "chronic_conditions": patient.chronic_conditions or [],
+        "allergies": patient.allergies or [],
+        "current_medications": patient.current_medications or [],
+        "special_equipment": patient.special_equipment or [],
+        "insurance_info": patient.insurance_info,
+        "notes": patient.notes,
+        "emergency_contacts": patient.emergency_contacts or [],
+    }
+
+
+def _write_patient_phi(patient: Patient, updates: dict[str, Any]) -> None:
+    """Merge PHI updates into the patient's encrypted blob and clear the
+    plaintext columns so no sensitive data is persisted in the clear."""
+    merged = _read_patient_phi(patient)
+    for key in _PATIENT_PHI_FIELDS:
+        if key in updates:
+            merged[key] = updates[key]
+    patient.encrypted_data = encrypt_phi({k: merged.get(k) for k in _PATIENT_PHI_FIELDS})
+    # Clear plaintext columns.
+    patient.national_id = None
+    patient.chronic_conditions = []
+    patient.allergies = []
+    patient.current_medications = []
+    patient.special_equipment = []
+    patient.insurance_info = None
+    patient.notes = None
+    patient.emergency_contacts = []
+
+
 def _patient_to_dict(patient: Patient) -> dict[str, Any]:
-    """Serialise a Patient ORM instance into a plain dict."""
+    """Serialise a Patient ORM instance into a plain dict (PHI decrypted)."""
+    phi = _read_patient_phi(patient)
     return {
         "id": str(patient.id),
         "phone": patient.phone,
@@ -41,7 +98,7 @@ def _patient_to_dict(patient: Patient) -> dict[str, Any]:
         # Demographics
         "date_of_birth": patient.date_of_birth.isoformat() if patient.date_of_birth else None,
         "gender": patient.gender.value if patient.gender else None,
-        "national_id": patient.national_id,
+        "national_id": phi.get("national_id"),
         "primary_language": patient.primary_language,
         # Location
         "latitude": patient.latitude,
@@ -53,15 +110,15 @@ def _patient_to_dict(patient: Patient) -> dict[str, Any]:
         "blood_type": patient.blood_type,
         "height_cm": patient.height_cm,
         "weight_kg": patient.weight_kg,
-        # Medical
-        "chronic_conditions": patient.chronic_conditions or [],
-        "allergies": patient.allergies or [],
-        "current_medications": patient.current_medications or [],
-        "special_equipment": patient.special_equipment or [],
-        "insurance_info": patient.insurance_info,
-        "notes": patient.notes,
-        # Contacts
-        "emergency_contacts": patient.emergency_contacts or [],
+        # Medical (decrypted)
+        "chronic_conditions": phi.get("chronic_conditions") or [],
+        "allergies": phi.get("allergies") or [],
+        "current_medications": phi.get("current_medications") or [],
+        "special_equipment": phi.get("special_equipment") or [],
+        "insurance_info": phi.get("insurance_info"),
+        "notes": phi.get("notes"),
+        # Contacts (decrypted)
+        "emergency_contacts": phi.get("emergency_contacts") or [],
         # System
         "false_alarm_count": patient.false_alarm_count,
         "total_sos_count": patient.total_sos_count,
@@ -111,10 +168,11 @@ async def create_patient(
         mobility=mobility,
         living_situation=living_situation,
         blood_type=blood_type,
-        emergency_contacts=emergency_contacts or [],
         consent_given_at=datetime.utcnow() if consent_given else None,
         is_active=True,
     )
+    # Encrypt PHI/PII (emergency_contacts here; other PHI set via update) at rest.
+    _write_patient_phi(patient, {"emergency_contacts": emergency_contacts or []})
     db.add(patient)
     await db.flush()
     await db.refresh(patient)
@@ -168,6 +226,10 @@ async def update_patient(
     if patient is None:
         return None
 
+    # Pull out PHI/PII fields so they are encrypted at rest rather than written
+    # to the plaintext columns.
+    phi_updates = {k: fields.pop(k) for k in list(fields) if k in _PATIENT_PHI_FIELDS}
+
     # Normalise enum strings
     if "mobility" in fields and isinstance(fields["mobility"], str):
         fields["mobility"] = MobilityStatus(fields["mobility"])
@@ -177,8 +239,11 @@ async def update_patient(
         fields["gender"] = Gender(fields["gender"])
 
     for key, value in fields.items():
-        if hasattr(patient, key) and key not in ("id", "created_at"):
+        if hasattr(patient, key) and key not in ("id", "created_at", "encrypted_data"):
             setattr(patient, key, value)
+
+    if phi_updates:
+        _write_patient_phi(patient, phi_updates)
 
     # Keep geometry in sync with scalar lat/lon
     lat = fields.get("latitude", patient.latitude)
@@ -423,17 +488,63 @@ async def count_patients(db: AsyncSession, *, active_only: bool = True) -> int:
 # ---------------------------------------------------------------------------
 
 def _record_to_dict(record: MedicalRecord) -> dict[str, Any]:
+    """Serialize a medical record, decrypting PHI from encrypted_data.
+
+    Backward compatible: records written before at-rest encryption (e.g. seed
+    data) have NULL encrypted_data and plaintext JSONB columns — those are read
+    from the legacy columns. New/updated records keep PHI only in encrypted_data.
+    """
+    phi = _read_phi(record)
     return {
         "id": record.id,
         "patient_id": record.patient_id,
+        "conditions": phi.get("conditions") or [],
+        "medications": phi.get("medications") or [],
+        "allergies": phi.get("allergies") or [],
+        "special_equipment": phi.get("special_equipment") or [],
+        "notes": phi.get("notes"),
+        "created_at": record.created_at,
+        "updated_at": record.updated_at,
+    }
+
+
+def _read_phi(record: MedicalRecord) -> dict[str, Any]:
+    """Return the PHI for a record from encrypted_data, falling back to legacy
+    plaintext columns for records created before encryption was enabled."""
+    if record.encrypted_data:
+        try:
+            return decrypt_phi(record.encrypted_data)
+        except Exception:
+            logger.exception("Failed to decrypt medical record %s", record.id)
+            return {}
+    # Legacy plaintext fallback
+    return {
         "conditions": record.conditions or [],
         "medications": record.medications or [],
         "allergies": record.allergies or [],
         "special_equipment": record.special_equipment or [],
         "notes": record.notes,
-        "created_at": record.created_at,
-        "updated_at": record.updated_at,
     }
+
+
+def _write_phi(record: MedicalRecord, phi: dict[str, Any]) -> None:
+    """Encrypt PHI into encrypted_data and clear the plaintext columns so no
+    sensitive data is persisted in the clear."""
+    record.encrypted_data = encrypt_phi(
+        {
+            "conditions": phi.get("conditions") or [],
+            "medications": phi.get("medications") or [],
+            "allergies": phi.get("allergies") or [],
+            "special_equipment": phi.get("special_equipment") or [],
+            "notes": phi.get("notes"),
+        }
+    )
+    # Ensure nothing sensitive remains in the plaintext JSONB/notes columns.
+    record.conditions = []
+    record.medications = []
+    record.allergies = []
+    record.special_equipment = []
+    record.notes = None
 
 
 async def get_medical_records(
@@ -458,15 +569,17 @@ async def create_medical_record(
     special_equipment: list[str] | None = None,
     notes: str | None = None,
 ) -> MedicalRecord:
-    """Create a new medical record for a patient."""
-    record = MedicalRecord(
-        id=uuid.uuid4(),
-        patient_id=patient_id,
-        conditions=conditions or [],
-        medications=medications or [],
-        allergies=allergies or [],
-        special_equipment=special_equipment or [],
-        notes=notes,
+    """Create a new medical record for a patient. PHI is encrypted at rest."""
+    record = MedicalRecord(id=uuid.uuid4(), patient_id=patient_id)
+    _write_phi(
+        record,
+        {
+            "conditions": conditions or [],
+            "medications": medications or [],
+            "allergies": allergies or [],
+            "special_equipment": special_equipment or [],
+            "notes": notes,
+        },
     )
     db.add(record)
     await db.flush()
@@ -485,9 +598,13 @@ async def update_medical_record(
     record = result.scalar_one_or_none()
     if record is None:
         return None
+    # Merge updates into the decrypted PHI, then re-encrypt at rest. Only PHI
+    # fields are accepted; id/patient_id/timestamps are never overwritten here.
+    phi = _read_phi(record)
     for key, value in fields.items():
-        if hasattr(record, key) and key not in ("id", "patient_id", "created_at"):
-            setattr(record, key, value)
+        if key in PHI_FIELDS:
+            phi[key] = value
+    _write_phi(record, phi)
     record.updated_at = datetime.utcnow()
     await db.flush()
     await db.refresh(record)

@@ -56,7 +56,7 @@ function sleep(ms: number): Promise<void> {
 // ─── API helper ──────────────────────────────────────────────────
 
 function getAuthToken(): string {
-  return localStorage.getItem("auth_token") || "";
+  return localStorage.getItem("tmt-token") || "";
 }
 
 function getApiBase(): string {

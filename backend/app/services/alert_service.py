@@ -18,6 +18,8 @@ from app.models.alert import Alert, AlertSeverity, EventType
 from app.models.patient import Patient, MobilityStatus, LivingSituation
 from app.api.websocket.handler import broadcast_alert, notify_patient
 from app.services.livemap_service import create_geo_event
+from app.services.alert_approval import requires_human_approval
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +91,66 @@ def _alert_to_dict(alert: Alert) -> dict[str, Any]:
         "target_facility_id": str(alert.target_facility_id) if getattr(alert, "target_facility_id", None) else None,
         "alert_type": getattr(alert, "alert_type", "primary"),
         "parent_alert_id": str(alert.parent_alert_id) if getattr(alert, "parent_alert_id", None) else None,
+        "approval_status": getattr(alert, "approval_status", "auto_approved"),
+        "approved_by": str(alert.approved_by) if getattr(alert, "approved_by", None) else None,
+        "approved_at": alert.approved_at.isoformat() if getattr(alert, "approved_at", None) else None,
     }
+
+
+async def _broadcast_and_notify(
+    db: AsyncSession,
+    alert: Alert,
+    payload: dict[str, Any],
+    *,
+    broadcast: bool = True,
+    notify_patients: bool = True,
+    create_geo: bool = True,
+) -> None:
+    """Broadcast an alert to dashboards, notify affected patients, and emit a
+    GeoEvent. Shared by ``create_alert`` (auto-approved path) and
+    ``approve_alert`` (post-approval path) so the live-feed behaviour is
+    identical regardless of which path released the alert.
+    """
+    affected = await find_affected_patients(db, alert_id=alert.id)
+
+    if broadcast:
+        try:
+            await broadcast_alert(payload)
+        except Exception:
+            logger.exception("Failed to broadcast alert %s", alert.id)
+
+    if notify_patients:
+        for p in affected:
+            try:
+                await notify_patient(p["id"], payload)
+            except Exception:
+                logger.debug("Could not notify patient %s for alert %s", p["id"], alert.id)
+
+    if create_geo:
+        severity_val = alert.severity.value if alert.severity else "medium"
+        severity_int = {"low": 1, "medium": 2, "high": 3, "critical": 5}.get(severity_val, 2)
+        try:
+            async with db.begin_nested():
+                await create_geo_event(
+                    db,
+                    event_type=alert.event_type,
+                    latitude=alert.latitude,
+                    longitude=alert.longitude,
+                    source="system",
+                    layer="crisis",
+                    severity=severity_int,
+                    title=alert.title,
+                    details=alert.details,
+                    metadata={
+                        "alert_id": str(alert.id),
+                        "radius_m": alert.radius_m,
+                        **(alert.metadata_ or {}),
+                    },
+                    expires_hours=None,
+                    broadcast=broadcast,
+                )
+        except Exception:
+            logger.exception("Could not create geo event for alert %s", alert.id)
 
 
 # ---------------------------------------------------------------------------
@@ -130,6 +191,16 @@ async def create_alert(
 
     severity = classify_severity(event_type, confidence, severity_override)
 
+    # --- Human-in-the-Loop gate ---
+    # High/critical automated alerts are held for human sign-off and are NOT
+    # broadcast / not patient-notified until approved. The pure decision rule
+    # lives in app/services/alert_approval.py (single source of truth).
+    settings = get_settings()
+    pending = requires_human_approval(
+        severity, source, enabled=settings.HITL_REQUIRED
+    )
+    approval_status = "pending_approval" if pending else "auto_approved"
+
     alert = Alert(
         id=uuid.uuid4(),
         event_type=event_type,
@@ -149,11 +220,12 @@ async def create_alert(
         target_facility_id=target_facility_id,
         alert_type=alert_type,
         parent_alert_id=parent_alert_id,
+        approval_status=approval_status,
     )
     db.add(alert)
     await db.flush()
 
-    # Count and optionally notify affected patients
+    # Always count affected patients (used for triage UI even while pending).
     affected = await find_affected_patients(db, alert_id=alert.id)
     alert.affected_patients_count = len(affected)
     await db.flush()
@@ -161,47 +233,108 @@ async def create_alert(
 
     payload = _alert_to_dict(alert)
 
-    # Broadcast to all dashboards
-    if broadcast:
-        try:
-            await broadcast_alert(payload)
-        except Exception:
-            logger.exception("Failed to broadcast alert %s", alert.id)
+    if pending:
+        # Held for approval: persist only. Skip broadcast, patient notify, and
+        # the live-map GeoEvent so the alert stays off the live feed until a
+        # human approves it via approve_alert().
+        logger.info(
+            "Alert %s [%s/%s] HELD for human approval (source=%s) — %d affected patients",
+            alert.id, event_type.value, severity.value, source, len(affected),
+        )
+        return payload
 
-    # Notify each affected patient individually
-    if notify_patients:
-        for p in affected:
-            try:
-                await notify_patient(p["id"], payload)
-            except Exception:
-                logger.debug("Could not notify patient %s for alert %s", p["id"], alert.id)
-
-    # Also create a GeoEvent so the alert appears on the Live Map
-    severity_int = {"low": 1, "medium": 2, "high": 3, "critical": 5}.get(severity.value, 2)
-    try:
-        async with db.begin_nested():
-            await create_geo_event(
-                db,
-                event_type=event_type,
-                latitude=latitude,
-                longitude=longitude,
-                source="system",
-                layer="crisis",
-                severity=severity_int,
-                title=title,
-                details=details,
-                metadata={"alert_id": str(alert.id), "radius_m": radius_m, **(metadata or {})},
-                expires_hours=expires_hours,
-                broadcast=broadcast,
-            )
-    except Exception:
-        logger.exception("Could not create geo event for alert %s", alert.id)
+    # Auto-approved path: behave exactly as before.
+    await _broadcast_and_notify(
+        db, alert, payload,
+        broadcast=broadcast,
+        notify_patients=notify_patients,
+        create_geo=True,
+    )
 
     logger.info(
         "Created alert %s [%s/%s] — %d affected patients",
         alert.id, event_type.value, severity.value, len(affected),
     )
     return payload
+
+
+# ---------------------------------------------------------------------------
+# Human-in-the-Loop approve / reject
+# ---------------------------------------------------------------------------
+
+async def approve_alert(
+    db: AsyncSession,
+    alert_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> dict[str, Any] | None:
+    """Approve a pending alert: mark approved and release it to the live feed
+    (broadcast + notify affected patients + create GeoEvent).
+
+    Returns None if the alert does not exist. Only alerts currently in
+    ``pending_approval`` are acted on: an already-resolved alert (auto_approved
+    /approved/rejected) is returned unchanged with NO re-broadcast, so a
+    rejected alert cannot be silently flipped/re-broadcast.
+    """
+    result = await db.execute(select(Alert).where(Alert.id == alert_id))
+    alert = result.scalar_one_or_none()
+    if alert is None:
+        return None
+
+    if alert.approval_status != "pending_approval":
+        logger.info(
+            "Alert %s approve ignored — not pending (status=%s)",
+            alert_id, alert.approval_status,
+        )
+        return _alert_to_dict(alert)
+
+    alert.approval_status = "approved"
+    alert.approved_by = user_id
+    alert.approved_at = datetime.utcnow()
+    await db.flush()
+    await db.refresh(alert)
+
+    payload = _alert_to_dict(alert)
+    await _broadcast_and_notify(
+        db, alert, payload,
+        broadcast=True,
+        notify_patients=True,
+        create_geo=True,
+    )
+
+    logger.info("Alert %s approved by user %s — released to live feed", alert_id, user_id)
+    return payload
+
+
+async def reject_alert(
+    db: AsyncSession,
+    alert_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> dict[str, Any] | None:
+    """Reject a pending alert: mark rejected. NOT broadcast, no patient notify.
+
+    Only acts on alerts currently in ``pending_approval``; an already-resolved
+    alert is returned unchanged.
+    """
+    result = await db.execute(select(Alert).where(Alert.id == alert_id))
+    alert = result.scalar_one_or_none()
+    if alert is None:
+        return None
+
+    if alert.approval_status != "pending_approval":
+        logger.info(
+            "Alert %s reject ignored — not pending (status=%s)",
+            alert_id, alert.approval_status,
+        )
+        return _alert_to_dict(alert)
+
+    alert.approval_status = "rejected"
+    alert.approved_by = user_id
+    alert.approved_at = datetime.utcnow()
+    await db.flush()
+    await db.refresh(alert)
+
+    logger.info("Alert %s rejected by user %s — not broadcast", alert_id, user_id)
+    return _alert_to_dict(alert)
 
 
 # ---------------------------------------------------------------------------
@@ -222,6 +355,7 @@ def _build_alert_filters(
     source: str | None = None,
     exclude_source: str | None = None,
     routed_department: str | None = None,
+    approval_status: str | None = None,
 ):
     """Build reusable WHERE conditions for alert queries."""
     conditions = []
@@ -243,6 +377,8 @@ def _build_alert_filters(
         conditions.append((Alert.source != exclude_source) | Alert.source.is_(None))
     if routed_department is not None:
         conditions.append(Alert.routed_department == routed_department)
+    if approval_status is not None:
+        conditions.append(Alert.approval_status == approval_status)
     return conditions
 
 
@@ -255,6 +391,7 @@ async def count_alerts(
     source: str | None = None,
     exclude_source: str | None = None,
     routed_department: str | None = None,
+    approval_status: str | None = None,
 ) -> int:
     """Return the total count of alerts matching the given filters."""
     conditions = _build_alert_filters(
@@ -262,6 +399,7 @@ async def count_alerts(
         active_only=active_only, source=source,
         exclude_source=exclude_source,
         routed_department=routed_department,
+        approval_status=approval_status,
     )
     query = select(func.count(Alert.id))
     for c in conditions:
@@ -328,6 +466,7 @@ async def get_alerts(
     source: str | None = None,
     exclude_source: str | None = None,
     routed_department: str | None = None,
+    approval_status: str | None = None,
     limit: int = 100,
     offset: int = 0,
 ) -> list[dict[str, Any]]:
@@ -340,6 +479,7 @@ async def get_alerts(
         active_only=active_only, source=source,
         exclude_source=exclude_source,
         routed_department=routed_department,
+        approval_status=approval_status,
     )
     query = select(Alert).order_by(Alert.created_at.desc()).limit(limit).offset(offset)
     for c in conditions:

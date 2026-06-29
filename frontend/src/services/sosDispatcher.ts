@@ -115,6 +115,21 @@ class SOSDispatcherImpl {
   }
 
   /**
+   * Reset the dispatcher to an uninitialized state.
+   *
+   * Clears any pending acknowledgment timers and the initialized guard so the
+   * singleton can be re-initialized cleanly (used on logout and in tests to
+   * guarantee isolation between cases).
+   */
+  reset(): void {
+    for (const pending of this.pendingAcks.values()) {
+      clearTimeout(pending.timeout);
+    }
+    this.pendingAcks.clear();
+    this.initialized = false;
+  }
+
+  /**
    * Dispatch SOS through the best available channel with automatic fallback
    *
    * @param payload - SOS data to send

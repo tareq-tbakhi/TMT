@@ -80,18 +80,21 @@ def query_medical_records(patient_id: str) -> str:
         from app.models.medical_record import MedicalRecord
         from uuid import UUID
 
+        from app.services.patient_service import _read_phi
+
         async with _get_session() as db:
             result = await db.execute(
                 select(MedicalRecord).where(MedicalRecord.patient_id == UUID(patient_id))
             )
             records = []
             for rec in result.scalars().all():
+                phi = _read_phi(rec)  # decrypts at-rest PHI, legacy-safe
                 records.append({
-                    "conditions": rec.conditions or [],
-                    "medications": rec.medications or [],
-                    "allergies": rec.allergies or [],
-                    "special_equipment": rec.special_equipment or [],
-                    "notes": rec.notes,
+                    "conditions": phi.get("conditions") or [],
+                    "medications": phi.get("medications") or [],
+                    "allergies": phi.get("allergies") or [],
+                    "special_equipment": phi.get("special_equipment") or [],
+                    "notes": phi.get("notes"),
                 })
             return json.dumps(records, default=str)
 

@@ -8,7 +8,7 @@ Endpoints:
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -51,6 +51,34 @@ class SOSTriageUpdateRequest(BaseModel):
 class SOSStatusUpdateRequest(BaseModel):
     status: SOSStatus
     hospital_notified_id: Optional[UUID] = None
+
+
+class AssistantMessage(BaseModel):
+    """A single turn in the triage conversation. Untrusted user content."""
+    role: str = Field(..., pattern="^(user|assistant)$")
+    content: str = Field(..., max_length=2000)
+
+
+class AssistantRequest(BaseModel):
+    # Hard cap mirrors app.services.ai_agent.assistant.MAX_MESSAGES.
+    messages: list[AssistantMessage] = Field(..., max_length=30)
+    context: Optional[dict] = None
+    language: str = "ar"
+
+
+class AssistantTriage(BaseModel):
+    emergency_type: Optional[str] = None
+    severity: Optional[int] = None
+    num_people: Optional[int] = None
+    anyone_injured: Optional[bool] = None
+    needs: list[str] = Field(default_factory=list)
+
+
+class AssistantResponse(BaseModel):
+    message: str
+    triage: AssistantTriage
+    done: bool
+    source: Literal["glm", "fallback"]  # observability, no secret leakage
 
 
 class SOSResponse(BaseModel):
@@ -263,6 +291,60 @@ async def bulk_sos(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to dispatch bulk SOS tasks",
         )
+
+
+@router.post(
+    "/sos/assistant",
+    response_model=AssistantResponse,
+    dependencies=[rate_limit(max_requests=20, window_seconds=60, key_prefix="sos_assistant")],
+)
+async def sos_assistant(
+    payload: AssistantRequest,
+    request: Request,
+    current_user: User = Depends(require_role(UserRole.PATIENT)),
+):
+    """
+    Conversational SOS triage assistant for citizens.
+
+    GLM-backed when configured & reachable; falls back to a deterministic
+    scripted reply so it ALWAYS returns a valid response and never 500s on AI
+    failure. Auth matches the citizen SOS flow (PATIENT role). User message
+    content is treated as untrusted (prompt-injection mitigated in the system
+    prompt) and model output is sanitised before being returned.
+    """
+    import time
+    from app.services.ai_agent.assistant import (
+        assistant_reply,
+        validate_messages,
+        normalize_language,
+        AssistantInputError,
+    )
+
+    msgs = [{"role": m.role, "content": m.content} for m in payload.messages]
+
+    # Defence-in-depth: re-validate limits in the service layer too (422 on fail).
+    try:
+        msgs = validate_messages(msgs)
+    except AssistantInputError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        )
+
+    language = normalize_language(payload.language)
+
+    started = time.monotonic()
+    result = await assistant_reply(msgs, context=payload.context, language=language)
+    latency_ms = int((time.monotonic() - started) * 1000)
+
+    # Log metadata ONLY — never the conversation contents / PII.
+    import logging
+    logging.getLogger(__name__).info(
+        "sos_assistant reply: msgs=%d lang=%s source=%s done=%s latency_ms=%d",
+        len(msgs), language, result.get("source"), result.get("done"), latency_ms,
+    )
+
+    return result
 
 
 @router.patch("/sos/{sos_id}/triage", response_model=SOSResponse)

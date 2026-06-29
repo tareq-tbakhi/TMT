@@ -342,6 +342,7 @@ def _fallback_triage(sos_data: dict):
                 "routed_department": primary_dept,
                 "priority_score": priority.get("priority_score", 50),
                 "priority_factors": priority.get("priority_factors", []),
+                "priority_explanation": priority.get("priority_explanation", []),
                 "response_urgency": priority.get("estimated_response_urgency", "when_available"),
                 "recommendation": priority.get("recommendation", ""),
                 "nearby_alert_count": len(nearby_alerts),
@@ -458,13 +459,15 @@ async def _gather_context(db, patient_id, lat, lon):
                 recs = await db.execute(
                     select(MedicalRecord).where(MedicalRecord.patient_id == pid)
                 )
+                from app.services.patient_service import _read_phi
                 for rec in recs.scalars().all():
+                    phi = _read_phi(rec)  # decrypt PHI at rest (legacy-safe)
                     medical_records.append({
-                        "conditions": rec.conditions or [],
-                        "medications": rec.medications or [],
-                        "allergies": rec.allergies or [],
-                        "special_equipment": rec.special_equipment or [],
-                        "notes": rec.notes,
+                        "conditions": phi.get("conditions") or [],
+                        "medications": phi.get("medications") or [],
+                        "allergies": phi.get("allergies") or [],
+                        "special_equipment": phi.get("special_equipment") or [],
+                        "notes": phi.get("notes"),
                     })
         except Exception as e:
             logger.debug("Could not fetch patient context: %s", e)

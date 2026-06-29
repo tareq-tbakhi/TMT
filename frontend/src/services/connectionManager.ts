@@ -22,6 +22,9 @@ export interface ConnectionState {
   /** Current best available layer */
   currentLayer: ConnectionLayer;
 
+  /** Timestamp of the most recent connectivity health check */
+  lastCheck: Date;
+
   /** Internet connectivity status */
   internet: {
     available: boolean;
@@ -210,6 +213,7 @@ class ConnectionManagerImpl {
   private createInitialState(): ConnectionState {
     return {
       currentLayer: 'none',
+      lastCheck: new Date(),
       internet: {
         available: typeof navigator !== 'undefined' ? navigator.onLine : false,
         quality: 'none',
@@ -235,6 +239,7 @@ class ConnectionManagerImpl {
       this.checkBluetoothStatus(),
     ]);
 
+    this.state.lastCheck = new Date();
     this.updateCurrentLayer();
     this.notifyListeners();
   }

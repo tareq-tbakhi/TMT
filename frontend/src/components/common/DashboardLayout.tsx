@@ -15,6 +15,7 @@ const NAV_ITEMS_BY_DEPT: Record<DepartmentType, { path: string; label: string; i
   hospital: [
     { path: "/dashboard", label: "nav.dashboard", icon: "\uD83D\uDCCA" },
     { path: "/dashboard/alerts", label: "nav.alerts", icon: "\uD83D\uDD14" },
+    { path: "/dashboard/pending-approvals", label: "nav.pendingApprovals", icon: "\u2705" },
     { path: "/dashboard/analytics", label: "nav.analytics", icon: "\uD83D\uDCC8" },
     { path: "/dashboard/map", label: "nav.map", icon: "\uD83D\uDDFA\uFE0F" },
     { path: "/dashboard/aid-requests", label: "nav.aidRequests", icon: "\uD83E\uDD1D" },
@@ -24,6 +25,7 @@ const NAV_ITEMS_BY_DEPT: Record<DepartmentType, { path: string; label: string; i
   police: [
     { path: "/dashboard", label: "nav.dashboard", icon: "\uD83D\uDCCA" },
     { path: "/dashboard/alerts", label: "nav.alerts", icon: "\uD83D\uDD14" },
+    { path: "/dashboard/pending-approvals", label: "nav.pendingApprovals", icon: "\u2705" },
     { path: "/dashboard/analytics", label: "nav.analytics", icon: "\uD83D\uDCC8" },
     { path: "/dashboard/map", label: "nav.map", icon: "\uD83D\uDDFA\uFE0F" },
     { path: "/dashboard/transfers", label: "Transfers", icon: "\uD83D\uDD00" },
@@ -32,6 +34,7 @@ const NAV_ITEMS_BY_DEPT: Record<DepartmentType, { path: string; label: string; i
   civil_defense: [
     { path: "/dashboard", label: "nav.dashboard", icon: "\uD83D\uDCCA" },
     { path: "/dashboard/alerts", label: "nav.alerts", icon: "\uD83D\uDD14" },
+    { path: "/dashboard/pending-approvals", label: "nav.pendingApprovals", icon: "\u2705" },
     { path: "/dashboard/analytics", label: "nav.analytics", icon: "\uD83D\uDCC8" },
     { path: "/dashboard/map", label: "nav.map", icon: "\uD83D\uDDFA\uFE0F" },
     { path: "/dashboard/aid-requests", label: "Resource Requests", icon: "\uD83E\uDD1D" },
@@ -43,6 +46,7 @@ const NAV_ITEMS_BY_DEPT: Record<DepartmentType, { path: string; label: string; i
 const SUPER_ADMIN_NAV: { path: string; label: string; icon: string }[] = [
   { path: "/dashboard", label: "nav.dashboard", icon: "\uD83D\uDCCA" },
   { path: "/dashboard/alerts", label: "nav.alerts", icon: "\uD83D\uDD14" },
+  { path: "/dashboard/pending-approvals", label: "nav.pendingApprovals", icon: "\u2705" },
   { path: "/dashboard/patients", label: "Patients", icon: "\uD83D\uDC65" },
   { path: "/dashboard/analytics", label: "nav.analytics", icon: "\uD83D\uDCC8" },
   { path: "/dashboard/map", label: "nav.map", icon: "\uD83D\uDDFA\uFE0F" },

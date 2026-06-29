@@ -25,6 +25,7 @@ import LiveMap from "./pages/hospital/LiveMap";
 import StatusUpdate from "./pages/hospital/StatusUpdate";
 import AidRequests from "./pages/hospital/AidRequests";
 import CaseTransfers from "./pages/hospital/CaseTransfers";
+import PendingApprovals from "./pages/hospital/PendingApprovals";
 
 // Pages - Patient
 import SOSPage from "./pages/patient/SOS";
@@ -72,6 +73,7 @@ function App() {
           <Route element={<DashboardLayout />}>
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/dashboard/alerts" element={<CrisisAlerts />} />
+            <Route path="/dashboard/pending-approvals" element={<PendingApprovals />} />
             <Route path="/dashboard/analytics" element={<Analytics />} />
             <Route path="/dashboard/patients" element={<PatientList />} />
             <Route

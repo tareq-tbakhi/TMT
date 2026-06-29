@@ -45,10 +45,11 @@ def get_llm() -> LLM:
     """Get or create the shared LLM instance for all agents."""
     global _llm
     if _llm is None:
+        model = f"openai/{settings.GLM_MODEL_REASONING}"
         if settings.GLM_API_KEY:
             _llm = LLM(
-                model="openai/glm-5",
-                base_url="https://api.z.ai/api/paas/v4",
+                model=model,
+                base_url=settings.GLM_API_BASE,
                 api_key=settings.GLM_API_KEY,
                 temperature=0.3,
                 max_tokens=4096,
@@ -57,8 +58,8 @@ def get_llm() -> LLM:
             # Fallback — will cause agents to use tools only (no LLM reasoning)
             logger.warning("No LLM API key configured; agents will have limited capability")
             _llm = LLM(
-                model="openai/glm-5",
-                base_url="https://api.z.ai/api/paas/v4",
+                model=model,
+                base_url=settings.GLM_API_BASE,
                 api_key="placeholder",
                 temperature=0.3,
                 max_tokens=4096,

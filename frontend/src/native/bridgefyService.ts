@@ -421,6 +421,31 @@ class BridgefyServiceImpl {
     console.log('[Bridgefy] Service destroyed');
   }
 
+  /**
+   * Synchronously reset the singleton to its initial state.
+   *
+   * Unlike destroy(), this performs no async plugin teardown — it just
+   * clears in-memory flags/listeners. Use on logout (to drop stale auth
+   * state) and in tests to guarantee isolation between cases.
+   */
+  reset(): void {
+    this.cleanupFunctions.forEach((fn) => {
+      try {
+        fn();
+      } catch {
+        /* ignore cleanup errors during reset */
+      }
+    });
+    this.cleanupFunctions = [];
+    this.initialized = false;
+    this.running = false;
+    this.userId = '';
+    this.processedMessageIds.clear();
+    this.sosListeners = [];
+    this.ackListeners = [];
+    this.statusListeners = [];
+  }
+
   // ─── Private Methods ───────────────────────────────────────────
 
   private async setupEventListeners(): Promise<void> {
@@ -583,7 +608,7 @@ class BridgefyServiceImpl {
   private async relayToBackend(sos: BridgefySOSMessage, currentHops: number): Promise<void> {
     try {
       // Get auth token from localStorage
-      const token = localStorage.getItem('tmt-auth-token');
+      const token = localStorage.getItem('tmt-token');
 
       const response = await fetch(RELAY_ENDPOINT, {
         method: 'POST',
@@ -627,7 +652,7 @@ class BridgefyServiceImpl {
 
   private async notifyBackendAck(messageId: string, sosId?: string): Promise<void> {
     try {
-      const token = localStorage.getItem('tmt-auth-token');
+      const token = localStorage.getItem('tmt-token');
 
       await fetch(ACK_ENDPOINT, {
         method: 'POST',

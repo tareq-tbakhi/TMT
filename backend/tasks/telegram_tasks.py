@@ -12,6 +12,10 @@ import socketio
 from tasks.celery_app import celery_app
 from app.config import get_settings
 
+# Structured reason returned when user-session ingestion is disabled (kept in
+# sync with app.telegram.client._DISABLED_REASON).
+_DISABLED_REASON = "telegram_ingestion_disabled"
+
 logger = logging.getLogger(__name__)
 
 # Write-only Socket.IO Redis manager — lets Celery workers emit events
@@ -71,13 +75,22 @@ def fetch_and_process_messages():
 
     Tries CrewAI intel crew first, falls back to direct pipeline.
     """
+    # Compliance gate: the user-session join/scrape path is legally sensitive
+    # (Telegram ToS / data-protection) and OFF by default. When disabled, do
+    # not join channels or scrape — early-return a structured disabled status.
+    if not get_settings().telegram_ingestion_allowed():
+        logger.warning(
+            "Telegram ingestion task skipped: TELEGRAM_INGESTION_ENABLED is "
+            "off. Covert user-session scraping requires documented compliance "
+            "review/consent before it can run."
+        )
+        return {"status": "disabled", "reason": _DISABLED_REASON}
+
     # Try CrewAI first
     try:
         from app.services.ai_agent.crews import build_intel_crew
-        from app.config import get_settings as _get_settings
 
-        settings = _get_settings()
-        if not settings.GLM_API_KEY:
+        if not get_settings().GLM_API_KEY:
             raise RuntimeError("No LLM API key")
 
         crew = build_intel_crew()

@@ -20,6 +20,7 @@ const resources = {
       "nav.healthRecords": "Health Records",
       "nav.patient": "Patient",
       "nav.aidRequests": "Aid Requests",
+      "nav.pendingApprovals": "Pending Approvals",
 
       // Medical Records
       "records.title": "Health Records",
@@ -61,6 +62,21 @@ const resources = {
       "alerts.location": "Location",
       "alerts.time": "Time",
       "alerts.noAlerts": "No active alerts",
+
+      // Pending approvals (Human-in-the-Loop)
+      "approvals.title": "Pending Approvals",
+      "approvals.subtitle": "Review automated alerts awaiting human sign-off before they go live.",
+      "approvals.refresh": "Refresh",
+      "approvals.empty": "No alerts awaiting approval",
+      "approvals.whyThisScore": "Why this score",
+      "approvals.totalScore": "Total priority score",
+      "approvals.noExplanation": "No priority explanation available for this alert.",
+      "approvals.department": "Department",
+      "approvals.source": "Source",
+      "approvals.location": "Location",
+      "approvals.affectedPatients": "Affected patients",
+      "approvals.approve": "Approve",
+      "approvals.reject": "Reject",
 
       // Patients
       "patients.title": "Patients",
@@ -364,6 +380,7 @@ const resources = {
       "nav.healthRecords": "\u0627\u0644\u0633\u062c\u0644\u0627\u062a \u0627\u0644\u0635\u062d\u064a\u0629",
       "nav.patient": "\u0645\u0631\u064a\u0636",
       "nav.aidRequests": "\u0637\u0644\u0628\u0627\u062a \u0627\u0644\u0645\u0633\u0627\u0639\u062f\u0629",
+      "nav.pendingApprovals": "\u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0627\u062a \u0627\u0644\u0645\u0639\u0644\u0642\u0629",
 
       // Medical Records
       "records.title": "\u0627\u0644\u0633\u062c\u0644\u0627\u062a \u0627\u0644\u0635\u062d\u064a\u0629",
@@ -405,6 +422,21 @@ const resources = {
       "alerts.location": "\u0627\u0644\u0645\u0648\u0642\u0639",
       "alerts.time": "\u0627\u0644\u0648\u0642\u062a",
       "alerts.noAlerts": "\u0644\u0627 \u062a\u0648\u062c\u062f \u062a\u0646\u0628\u064a\u0647\u0627\u062a \u0646\u0634\u0637\u0629",
+
+      // Pending approvals (Human-in-the-Loop)
+      "approvals.title": "\u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0627\u062a \u0627\u0644\u0645\u0639\u0644\u0642\u0629",
+      "approvals.subtitle": "\u0631\u0627\u062c\u0639 \u0627\u0644\u062a\u0646\u0628\u064a\u0647\u0627\u062a \u0627\u0644\u0622\u0644\u064a\u0629 \u0627\u0644\u062a\u064a \u062a\u0646\u062a\u0638\u0631 \u0645\u0648\u0627\u0641\u0642\u0629 \u0628\u0634\u0631\u064a\u0629 \u0642\u0628\u0644 \u0646\u0634\u0631\u0647\u0627.",
+      "approvals.refresh": "\u062a\u062d\u062f\u064a\u062b",
+      "approvals.empty": "\u0644\u0627 \u062a\u0648\u062c\u062f \u062a\u0646\u0628\u064a\u0647\u0627\u062a \u062a\u0646\u062a\u0638\u0631 \u0627\u0644\u0645\u0648\u0627\u0641\u0642\u0629",
+      "approvals.whyThisScore": "\u0633\u0628\u0628 \u0647\u0630\u0647 \u0627\u0644\u062f\u0631\u062c\u0629",
+      "approvals.totalScore": "\u0625\u062c\u0645\u0627\u0644\u064a \u062f\u0631\u062c\u0629 \u0627\u0644\u0623\u0648\u0644\u0648\u064a\u0629",
+      "approvals.noExplanation": "\u0644\u0627 \u064a\u0648\u062c\u062f \u062a\u0641\u0633\u064a\u0631 \u0644\u0644\u0623\u0648\u0644\u0648\u064a\u0629 \u0645\u062a\u0627\u062d \u0644\u0647\u0630\u0627 \u0627\u0644\u062a\u0646\u0628\u064a\u0647.",
+      "approvals.department": "\u0627\u0644\u0642\u0633\u0645",
+      "approvals.source": "\u0627\u0644\u0645\u0635\u062f\u0631",
+      "approvals.location": "\u0627\u0644\u0645\u0648\u0642\u0639",
+      "approvals.affectedPatients": "\u0627\u0644\u0645\u0631\u0636\u0649 \u0627\u0644\u0645\u062a\u0623\u062b\u0631\u0648\u0646",
+      "approvals.approve": "\u0645\u0648\u0627\u0641\u0642\u0629",
+      "approvals.reject": "\u0631\u0641\u0636",
 
       // Patients
       "patients.title": "\u0627\u0644\u0645\u0631\u0636\u0649",

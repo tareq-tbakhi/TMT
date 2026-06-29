@@ -16,6 +16,20 @@ from app.config import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
+_DISABLED_REASON = "telegram_ingestion_disabled"
+
+
+def _ingestion_enabled() -> bool:
+    """True only when user-session scraping is deliberately enabled.
+
+    Reads the default-OFF TELEGRAM_INGESTION_ENABLED flag. The covert
+    user-session join/scrape path is legally sensitive (Telegram ToS /
+    data-protection) and must stay disabled unless a compliance review has
+    explicitly turned it on.
+    """
+    return get_settings().telegram_ingestion_allowed()
+
+
 # Global client instance
 _client: TelegramClient | None = None
 
@@ -77,6 +91,13 @@ async def get_telegram_client(session_name: str = "tmt_session") -> TelegramClie
 async def start_auth_flow() -> dict:
     """Start Telegram authentication. Sends a verification code to the phone."""
     global _client
+    if not _ingestion_enabled():
+        logger.warning(
+            "Telegram user-session sign-in blocked: TELEGRAM_INGESTION_ENABLED "
+            "is off (legally sensitive covert scraping path). Refusing to send "
+            "a phone verification code."
+        )
+        return {"status": "disabled", "reason": _DISABLED_REASON}
     _auth_state.clear()
 
     client = TelegramClient(
@@ -100,6 +121,12 @@ async def start_auth_flow() -> dict:
 async def complete_auth_flow(code: str, password: str | None = None) -> dict:
     """Complete Telegram authentication with the verification code."""
     global _client
+    if not _ingestion_enabled():
+        logger.warning(
+            "Telegram user-session sign-in completion blocked: "
+            "TELEGRAM_INGESTION_ENABLED is off."
+        )
+        return {"status": "disabled", "reason": _DISABLED_REASON}
 
     client = _auth_state.get("client")
     phone_code_hash = _auth_state.get("phone_code_hash")
@@ -190,6 +217,13 @@ async def list_my_dialogs() -> list[dict]:
 
 async def join_channel(channel_username: str) -> bool:
     """Join a Telegram channel. Returns True if successful."""
+    if not _ingestion_enabled():
+        logger.warning(
+            "Refusing to join channel %s: TELEGRAM_INGESTION_ENABLED is off "
+            "(legally sensitive auto-join path disabled by default).",
+            channel_username,
+        )
+        return False
     try:
         client = await get_telegram_client()
         entity = await client.get_entity(channel_username)
@@ -218,6 +252,14 @@ async def leave_channel(channel_username: str) -> bool:
 
 async def get_channel_messages(channel_id: str, limit: int = 50) -> list[dict]:
     """Read recent messages from a channel by username or chat_id."""
+    if not _ingestion_enabled():
+        logger.warning(
+            "Refusing to scrape messages from %s: TELEGRAM_INGESTION_ENABLED "
+            "is off (legally sensitive message-scraping path disabled by "
+            "default).",
+            channel_id,
+        )
+        return []
     try:
         client = await get_telegram_client()
         # Try numeric chat_id first, then username

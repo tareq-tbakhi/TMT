@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Column, String, Enum, DateTime, Boolean, Float, Integer, Date
+from sqlalchemy import Column, String, Enum, DateTime, Boolean, Float, Integer, Date, LargeBinary
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from geoalchemy2 import Geometry
 
@@ -61,7 +61,12 @@ class Patient(Base):
     height_cm = Column(Float, nullable=True)
     weight_kg = Column(Float, nullable=True)
 
-    # Medical info (directly on patient for quick access)
+    # Medical info. These columns are PHI and are encrypted at rest into
+    # `encrypted_data`; the plaintext columns are cleared on write and only used
+    # as a legacy read fallback for rows created before encryption was enabled.
+    # NOTE: `mobility` / `living_situation` stay plaintext on purpose — they are
+    # filtered in SQL for vulnerable-population matching. `blood_type` also stays
+    # plaintext (emergency-critical, low re-identification risk on its own).
     chronic_conditions = Column(JSONB, default=list)   # ["diabetes", "hypertension"]
     allergies = Column(JSONB, default=list)             # ["penicillin", "peanuts"]
     current_medications = Column(JSONB, default=list)   # ["metformin 500mg", "lisinopril 10mg"]
@@ -69,8 +74,12 @@ class Patient(Base):
     insurance_info = Column(String, nullable=True)
     notes = Column(String, nullable=True)
 
-    # Contacts
+    # Contacts (PII — encrypted at rest with the medical fields above)
     emergency_contacts = Column(JSONB, default=list)
+
+    # Authenticated AES-256-GCM ciphertext holding all PHI/PII fields above
+    # (national_id, medical arrays, insurance_info, notes, emergency_contacts).
+    encrypted_data = Column(LargeBinary, nullable=True)
 
     # System fields
     consent_given_at = Column(DateTime, nullable=True)

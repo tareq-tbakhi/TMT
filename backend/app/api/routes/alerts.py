@@ -67,6 +67,9 @@ class AlertResponse(BaseModel):
     affected_patients_count: int = 0
     routed_department: Optional[str] = None
     target_facility_id: Optional[UUID] = None
+    approval_status: Optional[str] = None
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime] = None
     created_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None
 
@@ -248,6 +251,101 @@ async def list_alerts_prioritized(
         "stats": stats_data,
         "sort": "priority_score_desc",
     }
+
+
+@router.get("/alerts/pending", response_model=AlertListResponse)
+async def list_pending_alerts(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_any_department_admin()),
+    limit: int = 50,
+    offset: int = 0,
+):
+    """List alerts awaiting human approval (the HITL review queue).
+
+    These are HIGH/CRITICAL automated alerts that have NOT been broadcast or
+    sent to patients. Restricted to department admins / super admin.
+    """
+    dept_filter = None
+    if current_user.role != UserRole.SUPER_ADMIN:
+        dept_filter = current_user.department_type
+
+    alerts = await alert_service.get_alerts(
+        db,
+        approval_status="pending_approval",
+        routed_department=dept_filter,
+        active_only=True,
+        limit=limit,
+        offset=offset,
+    )
+    total = await alert_service.count_alerts(
+        db,
+        approval_status="pending_approval",
+        routed_department=dept_filter,
+        active_only=True,
+    )
+    return AlertListResponse(
+        alerts=[AlertResponse.model_validate(a) for a in alerts],
+        total=total,
+    )
+
+
+@router.post("/alerts/{alert_id}/approve", response_model=AlertResponse)
+async def approve_alert(
+    alert_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_any_department_admin()),
+):
+    """Approve a pending alert: releases it to the live feed (broadcast +
+    notify affected patients). Restricted to department admins / super admin.
+    """
+    alert = await alert_service.approve_alert(
+        db, alert_id=alert_id, user_id=current_user.id,
+    )
+    if alert is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found",
+        )
+
+    await log_audit(
+        action="approve",
+        resource="alert",
+        resource_id=str(alert_id),
+        user_id=current_user.id,
+        details="Alert approved and broadcast",
+        request=request,
+        db=db,
+    )
+    return alert
+
+
+@router.post("/alerts/{alert_id}/reject", response_model=AlertResponse)
+async def reject_alert(
+    alert_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_any_department_admin()),
+):
+    """Reject a pending alert: it stays off the live feed (no broadcast)."""
+    alert = await alert_service.reject_alert(
+        db, alert_id=alert_id, user_id=current_user.id,
+    )
+    if alert is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Alert not found",
+        )
+
+    await log_audit(
+        action="reject",
+        resource="alert",
+        resource_id=str(alert_id),
+        user_id=current_user.id,
+        details="Alert rejected (not broadcast)",
+        request=request,
+        db=db,
+    )
+    return alert
 
 
 @router.get("/alerts/{alert_id}", response_model=AlertResponse)

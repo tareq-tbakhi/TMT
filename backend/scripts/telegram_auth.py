@@ -94,6 +94,22 @@ async def main():
     print("  A verification code will be sent to your Telegram app.")
     print()
 
+    # Respect the same default-off compliance gate as the runtime app: this
+    # script performs a real user-session phone sign-in, which is legally
+    # sensitive. Refuse unless TELEGRAM_INGESTION_ENABLED is explicitly set.
+    try:
+        from app.config import get_settings
+        if not get_settings().telegram_ingestion_allowed():
+            print(
+                "  REFUSED: TELEGRAM_INGESTION_ENABLED is off. User-session "
+                "sign-in requires a documented compliance review/consent.\n"
+                "  Set TELEGRAM_INGESTION_ENABLED=true only after that review."
+            )
+            return
+    except Exception:
+        print("  REFUSED: could not verify compliance gate; aborting sign-in.")
+        return
+
     client = TelegramClient(session_path, int(api_id), api_hash)
     await client.start(phone=phone)
 

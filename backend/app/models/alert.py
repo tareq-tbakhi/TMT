@@ -54,3 +54,9 @@ class Alert(Base):
     target_facility_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), nullable=True)
     alert_type = Column(String, default="primary")  # "primary" or "secondary"
     parent_alert_id = Column(UUID(as_uuid=True), nullable=True)  # links secondary to primary
+
+    # --- Human-in-the-Loop approval gate ---
+    # auto_approved | pending_approval | approved | rejected
+    approval_status = Column(String, default="auto_approved", nullable=False)
+    approved_by = Column(UUID(as_uuid=True), nullable=True)  # user who approved/rejected
+    approved_at = Column(DateTime, nullable=True)

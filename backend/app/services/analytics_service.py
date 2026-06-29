@@ -306,31 +306,25 @@ async def get_top_conditions(
 ) -> list[dict[str, Any]]:
     """Return the most frequent medical conditions across all patients.
 
-    Each entry: ``{condition, count}``.  Data is sourced from
-    ``MedicalRecord.conditions`` (a JSONB array).
+    Each entry: ``{condition, count}``.  Conditions are PHI encrypted at rest in
+    ``MedicalRecord.encrypted_data``, so we cannot unnest them in SQL — instead
+    decrypt each record app-side and aggregate. Legacy plaintext records are
+    handled transparently by ``_read_phi``.
     """
-    # Use jsonb_array_elements_text to unnest the JSONB array
-    unnest = (
-        select(
-            func.jsonb_array_elements_text(MedicalRecord.conditions).label("condition"),
-        )
-        .where(MedicalRecord.conditions.isnot(None))
-        .subquery()
-    )
+    from collections import Counter
+    from app.services.patient_service import _read_phi
 
-    query = (
-        select(
-            unnest.c.condition,
-            func.count().label("cnt"),
-        )
-        .group_by(unnest.c.condition)
-        .order_by(func.count().desc())
-        .limit(limit)
-    )
-    result = await db.execute(query)
-    rows = result.all()
+    result = await db.execute(select(MedicalRecord))
+    counter: Counter[str] = Counter()
+    for rec in result.scalars().all():
+        for condition in _read_phi(rec).get("conditions") or []:
+            if condition:
+                counter[condition] += 1
 
-    return [{"condition": row.condition, "count": row.cnt} for row in rows]
+    return [
+        {"condition": condition, "count": count}
+        for condition, count in counter.most_common(limit)
+    ]
 
 
 # ---------------------------------------------------------------------------

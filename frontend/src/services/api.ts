@@ -361,6 +361,58 @@ export async function getAlerts(params?: {
   return data.alerts;
 }
 
+// ─── Alert approval (Human-in-the-Loop) ─────────────────────────
+
+/**
+ * A single SHAP-style attribution within an alert's priority explanation.
+ * Lives under the alert's `metadata.priority_explanation`. `contribution` is
+ * the signed point value (may be null on the LLM path). `source` is "rule"
+ * (exact, deterministic) or "llm" (best-effort).
+ */
+export interface PriorityAttribution {
+  factor: string;
+  contribution: number | null;
+  detail: string;
+  source?: string;
+}
+
+/** An alert awaiting human approval, with its structured priority metadata. */
+export interface PendingAlert extends Alert {
+  approval_status?: string;
+  routed_department?: string | null;
+  metadata?: {
+    priority_score?: number;
+    priority_explanation?: PriorityAttribution[];
+    [key: string]: unknown;
+  } | null;
+}
+
+export async function getPendingAlerts(params?: {
+  limit?: number;
+  offset?: number;
+}): Promise<PendingAlert[]> {
+  const searchParams = new URLSearchParams();
+  if (params?.limit) searchParams.set("limit", String(params.limit));
+  if (params?.offset) searchParams.set("offset", String(params.offset));
+  const qs = searchParams.toString();
+  const data = await request<{ alerts: PendingAlert[]; total: number }>(
+    `/alerts/pending${qs ? `?${qs}` : ""}`
+  );
+  return data.alerts;
+}
+
+export function approveAlert(alertId: string): Promise<PendingAlert> {
+  return request<PendingAlert>(`/alerts/${alertId}/approve`, {
+    method: "POST",
+  });
+}
+
+export function rejectAlert(alertId: string): Promise<PendingAlert> {
+  return request<PendingAlert>(`/alerts/${alertId}/reject`, {
+    method: "POST",
+  });
+}
+
 // ─── SOS endpoints ──────────────────────────────────────────────
 
 export interface SOSRequest {
@@ -444,6 +496,39 @@ export function updateSOSStatus(
   return request<SOSResponse>(`/sos/${sosId}/status`, {
     method: "PUT",
     body: { status: newStatus },
+  });
+}
+
+// ─── SOS AI Assistant (GLM-backed triage) ──────────────────────
+
+export interface AssistantMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface AssistantTriage {
+  emergency_type: string | null;
+  severity: number | null;
+  num_people: number | null;
+  anyone_injured: boolean | null;
+  needs: string[];
+}
+
+export interface AssistantReply {
+  message: string;
+  triage: AssistantTriage;
+  done: boolean;
+  source: "glm" | "fallback";
+}
+
+export function sosAssistant(data: {
+  messages: AssistantMessage[];
+  language: string;
+  context?: Record<string, unknown>;
+}): Promise<AssistantReply> {
+  return request<AssistantReply>("/sos/assistant", {
+    method: "POST",
+    body: data,
   });
 }
 

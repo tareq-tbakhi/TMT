@@ -42,7 +42,7 @@ async function getVaultKey(): Promise<CryptoKey> {
   const parts: string[] = [];
 
   // User auth token hash (changes per session but stable during a session)
-  const token = localStorage.getItem("auth_token") || "";
+  const token = localStorage.getItem("tmt-token") || "";
   if (token) {
     const tokenBytes = new TextEncoder().encode(token);
     const hash = await crypto.subtle.digest("SHA-256", tokenBytes);

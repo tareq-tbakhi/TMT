@@ -41,7 +41,29 @@ vi.mock('./connectionManager', () => ({
   ConnectionManager: mockConnectionManager,
 }));
 
-// Mock IndexedDB
+// Mock the OfflineVault directly. The real vault is IndexedDB-backed; in the
+// test environment there is no working IndexedDB, so the prior indexedDB stub
+// never resolved and these tests timed out. Stub an in-memory store instead.
+const vaultStore = new Map<string, unknown>();
+vi.mock('./offlineVault', () => ({
+  OfflineVault: {
+    put: vi.fn(async (_s: string, key: string, value: unknown) => {
+      vaultStore.set(key, value);
+    }),
+    get: vi.fn(async (_s: string, key: string) => vaultStore.get(key)),
+    getAll: vi.fn(async () => Array.from(vaultStore.values())),
+    delete: vi.fn(async (_s: string, key: string) => {
+      vaultStore.delete(key);
+    }),
+    clear: vi.fn(async () => {
+      vaultStore.clear();
+    }),
+    count: vi.fn(async () => vaultStore.size),
+    invalidateKey: vi.fn(),
+  },
+}));
+
+// Mock IndexedDB (defensive; vault is mocked above)
 const mockIDB = {
   open: vi.fn(),
   deleteDatabase: vi.fn(),
@@ -63,6 +85,9 @@ describe('SOSDispatcher', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vaultStore.clear();
+    // Reset the singleton so initialize()/pending acks don't leak across tests
+    SOSDispatcher.reset();
 
     // Default mocks
     mockConnectionManager.getFallbackChain.mockReturnValue(['internet', 'sms', 'bluetooth']);
@@ -154,7 +179,13 @@ describe('SOSDispatcher', () => {
         lastCheck: new Date(),
       });
 
-      const result = await SOSDispatcher.dispatch(testPayload);
+      // The bluetooth path waits up to MESH_ACK_TIMEOUT (60s) for an ack before
+      // resolving as broadcast-without-ack. Use fake timers so we don't wait.
+      vi.useFakeTimers();
+      const dispatchPromise = SOSDispatcher.dispatch(testPayload);
+      await vi.runAllTimersAsync();
+      const result = await dispatchPromise;
+      vi.useRealTimers();
 
       // Will attempt all fallbacks
       expect(result.fallbacksAttempted.length).toBeGreaterThan(0);
