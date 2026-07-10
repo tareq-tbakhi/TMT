@@ -24,8 +24,13 @@ app = FastAPI(
 )
 
 # Rate limiting (must be added before CORS so it runs after CORS in the middleware stack)
+# Per-IP + per-user sliding windows with strict buckets on auth endpoints.
 from app.api.middleware.rate_limit import RateLimitMiddleware
-app.add_middleware(RateLimitMiddleware, max_requests=200, window_seconds=60)
+app.add_middleware(
+    RateLimitMiddleware,
+    max_requests=settings.RATE_LIMIT_PER_IP,
+    window_seconds=settings.RATE_LIMIT_WINDOW_SECONDS,
+)
 
 # CORS
 app.add_middleware(
@@ -57,6 +62,10 @@ app.include_router(telegram.router, prefix=settings.API_PREFIX, tags=["Telegram"
 app.include_router(news.router, prefix=settings.API_PREFIX, tags=["News"])
 app.include_router(mesh.router, prefix=settings.API_PREFIX, tags=["Mesh Network"])
 app.include_router(sync.router, prefix=settings.API_PREFIX, tags=["Offline Sync"])
+
+# GDPR privacy endpoints (Art. 17 right to erasure, Art. 20 data portability)
+from app.api.routes import privacy
+app.include_router(privacy.router, prefix=settings.API_PREFIX, tags=["Privacy"])
 
 
 @app.on_event("startup")

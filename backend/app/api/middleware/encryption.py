@@ -1,3 +1,18 @@
+"""
+Application-layer encryption helpers.
+
+Medical records at rest (feature 11.1.2) use AES-256-GCM — authenticated
+encryption, so ciphertext tampering is detected on decrypt. Data written by
+the legacy AES-CBC format (no authentication) is still readable:
+``decrypt_medical_data`` transparently falls back for old payloads.
+
+SMS SOS payloads (feature 11.1.4) use AES-128-GCM with a per-patient key
+derived from the master key via HKDF.
+
+The master key comes from ``ENCRYPTION_MASTER_KEY``; ``app.config`` refuses
+to boot in production (DEBUG=False) with a placeholder key.
+"""
+
 import base64
 import hashlib
 import os
@@ -12,6 +27,11 @@ from app.config import get_settings
 
 settings = get_settings()
 
+# Version tag prepended to AES-GCM medical payloads. Legacy AES-CBC blobs
+# start with a random IV, so a fixed magic prefix safely disambiguates.
+_MEDICAL_GCM_MAGIC = b"TMTE2:"
+_MEDICAL_AAD = b"tmt-medical-record-v2"
+
 
 def _get_master_key() -> bytes:
     key = settings.ENCRYPTION_MASTER_KEY.encode()
@@ -21,17 +41,31 @@ def _get_master_key() -> bytes:
 # --- AES-256 for medical records at rest ---
 
 def encrypt_medical_data(plaintext: bytes) -> bytes:
+    """Encrypt sensitive medical data with AES-256-GCM (authenticated)."""
     key = _get_master_key()
-    iv = os.urandom(16)
-    cipher = Cipher(algorithms.AES(key), modes.CBC(iv))
-    encryptor = cipher.encryptor()
-    padder = PKCS7(128).padder()
-    padded = padder.update(plaintext) + padder.finalize()
-    ciphertext = encryptor.update(padded) + encryptor.finalize()
-    return iv + ciphertext  # Prepend IV
+    aesgcm = AESGCM(key)
+    nonce = os.urandom(12)
+    ciphertext = aesgcm.encrypt(nonce, plaintext, _MEDICAL_AAD)
+    return _MEDICAL_GCM_MAGIC + nonce + ciphertext
 
 
 def decrypt_medical_data(encrypted: bytes) -> bytes:
+    """Decrypt medical data; supports current GCM and legacy CBC formats."""
+    if encrypted.startswith(_MEDICAL_GCM_MAGIC):
+        key = _get_master_key()
+        raw = encrypted[len(_MEDICAL_GCM_MAGIC):]
+        nonce, ciphertext = raw[:12], raw[12:]
+        aesgcm = AESGCM(key)
+        return aesgcm.decrypt(nonce, ciphertext, _MEDICAL_AAD)
+    return _decrypt_medical_data_legacy_cbc(encrypted)
+
+
+def _decrypt_medical_data_legacy_cbc(encrypted: bytes) -> bytes:
+    """Legacy AES-256-CBC format (IV-prefixed, unauthenticated).
+
+    Kept read-only for data written before the GCM migration. New writes
+    always use :func:`encrypt_medical_data`.
+    """
     key = _get_master_key()
     iv = encrypted[:16]
     ciphertext = encrypted[16:]
