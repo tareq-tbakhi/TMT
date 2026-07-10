@@ -400,3 +400,325 @@ async def update_sos_status(
     )
 
     return sos
+
+
+# ---------------------------------------------------------------------------
+# AI Triage Conversation (features 2.2.12 + 2.2.13)
+#
+#   POST /sos/{id}/conversation/message — user message in → AI reply out
+#   GET  /sos/{id}/conversation         — full stored transcript
+#
+# The transcript is persisted on SosRequest.triage_transcript as the
+# conversation happens, so responders can review it live and nothing is
+# lost if the patient's phone dies mid-conversation. When no LLM key is
+# configured (or the LLM fails), replies come from a deterministic
+# scripted flow and are marked mode="scripted" — the mobile client then
+# drives its identical local offline flow instead.
+# ---------------------------------------------------------------------------
+
+MAX_STORED_TRANSCRIPT_MESSAGES = 200
+MAX_LOCAL_CONTEXT_MESSAGES = 12
+
+
+class ConversationMessagePayload(BaseModel):
+    """Incoming conversation turn from the patient's device."""
+    content: str = Field(default="", max_length=4000)
+    start: bool = False  # True → handshake / conversation start (content optional)
+    battery_low: bool = False  # expedite: wrap up within 2 questions
+    language: str = Field(default="en", max_length=8)  # "en" | "ar"
+    client_message_id: Optional[str] = Field(default=None, max_length=64)
+    # Messages the client rendered locally (offline scripted flow) that the
+    # server hasn't stored yet — keeps the persisted transcript complete.
+    local_context: Optional[list[dict]] = None
+
+
+class QuickReplyOut(BaseModel):
+    id: str
+    label: str
+
+
+class ConversationReplyOut(BaseModel):
+    id: str
+    role: str = "ai"
+    content: str
+    timestamp: datetime
+    quick_replies: list[QuickReplyOut] = Field(default_factory=list)
+
+
+class ConversationMessageResponse(BaseModel):
+    sos_id: UUID
+    mode: str  # "llm" | "scripted"
+    reply: Optional[ConversationReplyOut] = None
+    # Structured triage extraction so far (snake_case keys, whitelisted values)
+    triage_data: Optional[dict] = None
+    conversation_complete: bool = False
+    urgency_detected: bool = False
+
+
+class ConversationTranscriptResponse(BaseModel):
+    sos_id: UUID
+    mode_available: str  # which engine would answer next ("llm" | "scripted")
+    messages: list[dict]
+    message_count: int
+
+
+def _sanitize_transcript_entry(entry: object) -> Optional[dict]:
+    """Whitelist a transcript entry to {role, content, timestamp}."""
+    if not isinstance(entry, dict):
+        return None
+    role = entry.get("role")
+    if role not in ("ai", "user"):
+        return None
+    content = str(entry.get("content", "")).strip()
+    if not content:
+        return None
+    timestamp = entry.get("timestamp")
+    if not isinstance(timestamp, str) or not timestamp:
+        timestamp = datetime.utcnow().isoformat()
+    return {"role": role, "content": content[:4000], "timestamp": timestamp[:64]}
+
+
+def _transcript_has_entry(transcript: list[dict], entry: dict, window: int = 8) -> bool:
+    """Dedup check against the tail of the stored transcript."""
+    for existing in transcript[-window:]:
+        if existing.get("role") == entry.get("role") and existing.get("content") == entry.get("content"):
+            return True
+    return False
+
+
+async def _get_owned_sos(db: AsyncSession, sos_id: UUID, current_user: User) -> SosRequest:
+    """Load an SOS owned by the current patient, or 404."""
+    from sqlalchemy import select as sa_select
+
+    result = await db.execute(
+        sa_select(SosRequest).where(
+            SosRequest.id == sos_id,
+            SosRequest.patient_id == current_user.patient_id,
+        )
+    )
+    sos = result.scalar_one_or_none()
+    if sos is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SOS request not found",
+        )
+    return sos
+
+
+@router.post(
+    "/sos/{sos_id}/conversation/message",
+    response_model=ConversationMessageResponse,
+    dependencies=[rate_limit(max_requests=30, window_seconds=60, key_prefix="sos_conv")],
+)
+async def post_sos_conversation_message(
+    sos_id: UUID,
+    payload: ConversationMessagePayload,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.PATIENT)),
+):
+    """
+    One turn of the AI triage conversation for an active SOS.
+
+    Send ``start=true`` (empty content allowed) to open the conversation:
+    the response's ``mode`` tells the client whether the server will drive
+    the chat ("llm") or the client should run its local scripted flow
+    ("scripted"). Each subsequent user message returns the next AI reply,
+    optional quick-reply suggestions, structured triage extraction, and a
+    completion signal. The transcript is persisted per SOS on every turn.
+    """
+    from uuid import uuid4
+
+    from app.services.ai_agent import triage_conversation
+
+    sos = await _get_owned_sos(db, sos_id, current_user)
+
+    if sos.status in (SOSStatus.RESOLVED, SOSStatus.CANCELLED):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This SOS is closed — start a new SOS if you still need help",
+        )
+
+    now = datetime.utcnow()
+    mode_available = "llm" if triage_conversation.is_llm_available() else "scripted"
+
+    transcript: list[dict] = [
+        m for m in (sos.triage_transcript or []) if isinstance(m, dict)
+    ]
+
+    # Merge messages the client rendered locally but hasn't synced yet
+    for raw_entry in (payload.local_context or [])[:MAX_LOCAL_CONTEXT_MESSAGES]:
+        clean = _sanitize_transcript_entry(raw_entry)
+        if clean and not _transcript_has_entry(transcript, clean):
+            transcript.append(clean)
+
+    content = (payload.content or "").strip()
+
+    # ── Handshake / conversation start ────────────────────────────────
+    if payload.start and not content:
+        reply_out: Optional[ConversationReplyOut] = None
+        if not any(m.get("role") == "ai" for m in transcript):
+            # Standalone client with nothing rendered yet — give it the
+            # deterministic opener (the LLM takes over from the next turn).
+            first = triage_conversation.scripted_turn([], language=payload.language)
+            transcript.append(
+                {"role": "ai", "content": first["message"], "timestamp": now.isoformat()}
+            )
+            reply_out = ConversationReplyOut(
+                id=f"srv_{uuid4().hex[:12]}",
+                content=first["message"],
+                timestamp=now,
+                quick_replies=[QuickReplyOut(**qr) for qr in first["quick_replies"]],
+            )
+
+        sos.triage_transcript = transcript[-MAX_STORED_TRANSCRIPT_MESSAGES:]
+        await db.flush()
+
+        return ConversationMessageResponse(
+            sos_id=sos_id,
+            mode=mode_available,
+            reply=reply_out,
+            triage_data=None,
+            conversation_complete=False,
+            urgency_detected=False,
+        )
+
+    if not content:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Message content is required (or set start=true)",
+        )
+
+    # ── Persist the user message ──────────────────────────────────────
+    transcript.append({"role": "user", "content": content, "timestamp": now.isoformat()})
+
+    # Compact patient profile so the LLM doesn't re-ask known facts.
+    patient_context = None
+    try:
+        patient = await patient_service.get_patient(db, current_user.patient_id)
+        if patient:
+            patient_context = {
+                "mobility": patient.get("mobility"),
+                "blood_type": patient.get("blood_type"),
+                "chronic_conditions": patient.get("chronic_conditions") or [],
+                "special_equipment": patient.get("special_equipment") or [],
+            }
+    except Exception:  # noqa: BLE001 — profile context is optional
+        patient_context = None
+
+    # ── Produce the AI turn (urgency fast-path → LLM → scripted) ─────
+    result = await triage_conversation.run_triage_turn(
+        transcript,
+        battery_low=payload.battery_low,
+        language=payload.language,
+        patient_context=patient_context,
+    )
+
+    transcript.append(
+        {"role": "ai", "content": result["message"], "timestamp": datetime.utcnow().isoformat()}
+    )
+    sos.triage_transcript = transcript[-MAX_STORED_TRANSCRIPT_MESSAGES:]
+
+    # ── Progressive structured refinement of the SOS record ──────────
+    extraction = result.get("triage_data") or {}
+    if result["mode"] == "llm" and extraction:
+        derived_status = triage_conversation.derive_patient_status(extraction)
+        if derived_status:
+            try:
+                sos.patient_status = PatientStatus(derived_status)
+            except ValueError:
+                pass
+        derived_severity = triage_conversation.derive_severity(extraction)
+        if derived_severity is not None:
+            sos.severity = derived_severity
+        if result.get("conversation_complete"):
+            summary = triage_conversation.build_details_summary(extraction)
+            if summary:
+                sos.details = summary
+
+    await db.flush()
+
+    await log_audit(
+        action="update",
+        resource="sos_conversation",
+        resource_id=str(sos_id),
+        user_id=current_user.id,
+        details=f"Triage conversation turn (mode={result['mode']}, complete={result['conversation_complete']})",
+        request=request,
+        db=db,
+    )
+
+    return ConversationMessageResponse(
+        sos_id=sos_id,
+        mode=result["mode"],
+        reply=ConversationReplyOut(
+            id=f"srv_{uuid4().hex[:12]}",
+            content=result["message"],
+            timestamp=datetime.utcnow(),
+            quick_replies=[QuickReplyOut(**qr) for qr in result["quick_replies"]],
+        ),
+        triage_data=extraction or None,
+        conversation_complete=bool(result["conversation_complete"]),
+        urgency_detected=bool(result["urgency_detected"]),
+    )
+
+
+@router.get("/sos/{sos_id}/conversation", response_model=ConversationTranscriptResponse)
+async def get_sos_conversation(
+    sos_id: UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Full triage conversation transcript for an SOS.
+
+    Accessible to the owning patient and to department admins
+    (for responder review of what the patient reported).
+    """
+    from sqlalchemy import select as sa_select
+
+    from app.services.ai_agent import triage_conversation
+
+    result = await db.execute(sa_select(SosRequest).where(SosRequest.id == sos_id))
+    sos = result.scalar_one_or_none()
+    if sos is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="SOS request not found",
+        )
+
+    if current_user.role == UserRole.PATIENT:
+        if sos.patient_id != current_user.patient_id:
+            # Don't leak existence of other patients' SOS
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="SOS request not found",
+            )
+    elif current_user.role not in DEPARTMENT_ADMIN_ROLES and current_user.role != UserRole.SUPER_ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to view this conversation",
+        )
+
+    messages = [
+        m for m in (sos.triage_transcript or [])
+        if isinstance(m, dict) and m.get("role") in ("ai", "user")
+    ]
+
+    await log_audit(
+        action="read",
+        resource="sos_conversation",
+        resource_id=str(sos_id),
+        user_id=current_user.id,
+        details=f"Viewed triage conversation ({len(messages)} messages)",
+        request=request,
+        db=db,
+    )
+
+    return ConversationTranscriptResponse(
+        sos_id=sos_id,
+        mode_available="llm" if triage_conversation.is_llm_available() else "scripted",
+        messages=messages,
+        message_count=len(messages),
+    )

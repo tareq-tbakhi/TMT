@@ -20,6 +20,7 @@ class AidCategory(str, enum.Enum):
     EQUIPMENT = "equipment"
     PERSONNEL = "personnel"
     SUPPLIES = "supplies"
+    VOLUNTEER = "volunteer"
     OTHER = "other"
 
 
@@ -35,6 +36,7 @@ class AidRequestStatus(str, enum.Enum):
     RESPONDING = "responding"
     FULFILLED = "fulfilled"
     CANCELLED = "cancelled"
+    EXPIRED = "expired"
 
 
 class AidResponseStatus(str, enum.Enum):
@@ -61,6 +63,8 @@ class AidRequest(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     fulfilled_at = Column(DateTime, nullable=True)
+    # Optional expiry — requests auto-expire once this passes (computed on read).
+    expires_at = Column(DateTime, nullable=True)
 
     responses = relationship("AidResponse", back_populates="aid_request", lazy="selectin")
 
@@ -70,10 +74,15 @@ class AidResponse(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     aid_request_id = Column(UUID(as_uuid=True), ForeignKey("aid_requests.id"), nullable=False)
-    responding_hospital_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), nullable=False)
+    # Nullable so citizen/volunteer responders (mobile) can respond without a facility.
+    responding_hospital_id = Column(UUID(as_uuid=True), ForeignKey("hospitals.id"), nullable=True)
     message = Column(Text, nullable=True)
     eta_hours = Column(Float, nullable=True)
     status = Column(Enum(AidResponseStatus), default=AidResponseStatus.COMMITTED)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Responder attribution (citizen mobile support) — all optional/additive.
+    responder_user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    responder_name = Column(String, nullable=True)
+    responder_phone = Column(String, nullable=True)
 
     aid_request = relationship("AidRequest", back_populates="responses")
