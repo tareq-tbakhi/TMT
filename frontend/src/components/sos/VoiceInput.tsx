@@ -3,6 +3,7 @@
  */
 
 import { useEffect, useState } from "react";
+import { Mic, Square, TriangleAlert } from "lucide-react";
 import type { VoiceState } from "../../types/sosTypes";
 
 interface VoiceInputProps {
@@ -32,8 +33,9 @@ export function VoiceInput({ voiceState, isSupported, onToggle }: VoiceInputProp
 
   if (!isSupported) {
     return (
-      <div className="bg-amber-50 rounded-2xl p-4 mx-4 text-center border border-amber-200">
-        <p className="text-amber-700 text-sm">
+      <div className="mx-4 flex items-center gap-2.5 rounded-lg border border-warning/30 bg-warning-soft p-4">
+        <TriangleAlert aria-hidden="true" className="h-5 w-5 shrink-0 text-on-warning-soft" />
+        <p className="text-sm font-medium text-on-warning-soft">
           Voice input not supported. Please use text or quick responses.
         </p>
       </div>
@@ -42,88 +44,92 @@ export function VoiceInput({ voiceState, isSupported, onToggle }: VoiceInputProp
 
   return (
     <div
-      className={`rounded-2xl mx-4 transition-all duration-300 ${
+      className={`mx-4 rounded-lg border-2 transition-colors duration-300 ${
         isListening
-          ? "bg-gradient-to-r from-blue-50 to-blue-100 border-2 border-blue-300 shadow-lg"
-          : "bg-white border-2 border-gray-200 hover:border-blue-300 hover:shadow-md"
+          ? "border-danger bg-danger-soft shadow-2"
+          : "border-edge-strong bg-surface hover:border-accent"
       }`}
     >
       <button
+        type="button"
         onClick={onToggle}
-        className="w-full p-4 flex items-center gap-4"
         aria-label={isListening ? "Stop listening" : "Start listening"}
+        aria-pressed={isListening}
+        className="flex min-h-14 w-full items-center gap-4 rounded-lg p-4 focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
       >
         {/* Microphone button */}
-        <div
-          className={`w-16 h-16 rounded-full flex items-center justify-center transition-all duration-300 shrink-0 ${
+        <span
+          aria-hidden="true"
+          className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full transition-colors duration-300 ${
             isListening
-              ? "bg-blue-600 text-white shadow-lg shadow-blue-300 scale-105"
-              : "bg-gray-100 text-gray-500 hover:bg-blue-50 hover:text-blue-600"
+              ? "bg-danger text-white shadow-2"
+              : "bg-accent-soft text-on-accent-soft"
           }`}
         >
           {isListening ? (
             // Stop icon when listening
-            <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-              <rect x="6" y="6" width="12" height="12" rx="2" />
-            </svg>
+            <Square className="h-7 w-7 fill-current" />
           ) : (
             // Microphone icon when idle
-            <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V22h-2v-6.07z" />
-            </svg>
+            <Mic className="h-7 w-7" />
           )}
-        </div>
+        </span>
 
         {/* Center content - Waveform or instruction */}
-        <div className="flex-1 min-w-0">
+        <span className="min-w-0 flex-1">
           {isListening ? (
-            <div className="space-y-2">
+            <span className="flex flex-col gap-2">
               {/* Waveform animation */}
-              <div className="flex items-end justify-center gap-1 h-10">
+              <span aria-hidden="true" className="flex h-10 items-end justify-center gap-1">
                 {bars.map((height, i) => (
-                  <div
+                  <span
                     key={i}
-                    className="w-1.5 bg-blue-500 rounded-full transition-all duration-75"
+                    className="w-1.5 rounded-full bg-danger transition-all duration-75"
                     style={{ height: `${height * 100}%` }}
                   />
                 ))}
-              </div>
+              </span>
               {/* Transcript preview */}
               {transcript ? (
-                <p className="text-sm text-blue-700 truncate text-center font-medium">
+                <span className="block truncate text-center text-sm font-semibold text-on-danger-soft">
                   "{transcript}"
-                </p>
+                </span>
               ) : (
-                <p className="text-xs text-blue-600 text-center">
+                <span className="block text-center text-sm font-medium text-on-danger-soft">
                   Listening... speak now
-                </p>
+                </span>
               )}
-            </div>
+            </span>
           ) : (
-            <div className="text-center">
+            <span className="block text-center">
               {error ? (
-                <p className="text-red-500 text-sm">{error}</p>
+                <span className="text-sm font-medium text-danger">{error}</span>
               ) : (
                 <>
-                  <p className="text-gray-800 font-semibold text-base">
+                  <span className="block text-base font-bold text-ink">
                     Tap to speak
-                  </p>
-                  <p className="text-gray-500 text-xs mt-0.5">
+                  </span>
+                  <span className="mt-0.5 block text-sm text-ink-muted">
                     Or use quick responses below
-                  </p>
+                  </span>
                 </>
               )}
-            </div>
+            </span>
           )}
-        </div>
+        </span>
 
-        {/* Right side - Status indicator */}
-        <div className={`shrink-0 transition-all duration-300 ${isListening ? "opacity-100" : "opacity-0"}`}>
-          <div className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-full">
-            <span className="w-2 h-2 bg-white rounded-full animate-pulse" />
-            <span className="text-xs font-semibold">LIVE</span>
-          </div>
-        </div>
+        {/* Right side - Recording status indicator */}
+        <span
+          className={`shrink-0 transition-opacity duration-300 ${
+            isListening ? "opacity-100" : "opacity-0"
+          }`}
+          aria-hidden={!isListening}
+        >
+          <span className="flex items-center gap-2 rounded-full bg-danger px-3 py-1.5 text-white">
+            <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-white" />
+            <span className="text-xs font-bold tracking-wide">REC</span>
+          </span>
+        </span>
       </button>
     </div>
   );

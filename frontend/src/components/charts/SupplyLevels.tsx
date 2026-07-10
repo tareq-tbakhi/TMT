@@ -6,10 +6,11 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   Cell,
 } from 'recharts';
+import { Package } from 'lucide-react';
+import { Card, CardHeader } from '../ui';
 
 interface SupplyData {
   name: string;
@@ -23,30 +24,60 @@ interface SupplyLevelsProps {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  high: '#22c55e',
-  medium: '#eab308',
-  low: '#f97316',
-  critical: '#ef4444',
+  high: 'var(--t-success)',
+  medium: 'var(--t-sev-medium)',
+  low: 'var(--t-sev-high)',
+  critical: 'var(--t-sev-critical)',
+};
+
+const AXIS_TICK = { fontSize: 12, fill: 'var(--t-ink-muted)' };
+
+const TOOLTIP_STYLE: React.CSSProperties = {
+  backgroundColor: 'var(--t-surface)',
+  border: '1px solid var(--t-border)',
+  borderRadius: 'var(--t-radius-sm)',
+  boxShadow: 'var(--t-shadow-2)',
+  color: 'var(--t-ink)',
 };
 
 const SupplyLevels: React.FC<SupplyLevelsProps> = ({ data, height = 300 }) => {
   return (
-    <div className="rounded-lg border bg-white p-4">
-      <h3 className="mb-4 text-sm font-semibold text-gray-700">Supply Levels</h3>
+    <Card>
+      <CardHeader title="Supply Levels" icon={<Package />} />
       <ResponsiveContainer width="100%" height={height}>
         <BarChart data={data} layout="vertical">
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 12 }} />
-          <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} width={100} />
-          <Tooltip />
-          <Bar dataKey="level" name="Level %">
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--t-border)" />
+          <XAxis
+            type="number"
+            domain={[0, 100]}
+            tick={AXIS_TICK}
+            stroke="var(--t-border-strong)"
+            tickLine={{ stroke: 'var(--t-border-strong)' }}
+          />
+          <YAxis
+            type="category"
+            dataKey="name"
+            tick={AXIS_TICK}
+            width={100}
+            stroke="var(--t-border-strong)"
+            tickLine={{ stroke: 'var(--t-border-strong)' }}
+          />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            labelStyle={{ color: 'var(--t-ink)', fontWeight: 600 }}
+            cursor={{ fill: 'var(--t-surface-2)' }}
+          />
+          <Bar dataKey="level" name="Level %" radius={[0, 4, 4, 0]}>
             {data.map((entry, index) => (
-              <Cell key={index} fill={STATUS_COLORS[entry.status] || '#6b7280'} />
+              <Cell
+                key={index}
+                fill={STATUS_COLORS[entry.status] || 'var(--t-ink-faint)'}
+              />
             ))}
           </Bar>
         </BarChart>
       </ResponsiveContainer>
-    </div>
+    </Card>
   );
 };
 

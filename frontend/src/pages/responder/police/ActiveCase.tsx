@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { useResponderStore } from "../../../store/responderStore";
 import {
   ActiveCaseCard,
+  AIRecommendationBanner,
   CaseStatusButton,
   NoCaseView,
 } from "../../../components/responder";
@@ -43,7 +44,7 @@ export default function PoliceActiveCase() {
   }
 
   return (
-    <div className="p-4 space-y-4 pb-24">
+    <div className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-28">
       {/* Active Case Card */}
       <ActiveCaseCard
         caseData={activeCase}
@@ -51,8 +52,11 @@ export default function PoliceActiveCase() {
         onNavigate={handleNavigate}
       />
 
-      {/* Status Action Button */}
-      <div className="fixed bottom-20 left-4 right-4 max-w-lg mx-auto">
+      {/* AI Recommendations */}
+      <AIRecommendationBanner recommendations={activeCase.aiRecommendations ?? []} />
+
+      {/* Status Action Button — pinned above the tab bar */}
+      <div className="fixed inset-x-4 bottom-24 z-40 mx-auto max-w-lg">
         <CaseStatusButton
           currentStatus={activeCase.status}
           responderType="police"

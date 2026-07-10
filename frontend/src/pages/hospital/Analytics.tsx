@@ -16,6 +16,22 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { MapContainer, TileLayer } from "react-leaflet";
+import {
+  Activity,
+  BarChart3,
+  HeartPulse,
+  Map as MapIcon,
+  MessageSquare,
+  Package,
+  SlidersHorizontal,
+} from "lucide-react";
+import {
+  Card,
+  CardHeader,
+  LoadingState,
+  PageHeader,
+  Select,
+} from "../../components/ui";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -45,15 +61,33 @@ interface ComplaintCount {
 }
 
 const CHART_COLORS = [
-  "#3b82f6",
-  "#ef4444",
-  "#f59e0b",
-  "#10b981",
-  "#8b5cf6",
-  "#ec4899",
-  "#06b6d4",
-  "#f97316",
+  "var(--t-accent)",
+  "var(--t-sev-critical)",
+  "var(--t-sev-medium)",
+  "var(--t-success)",
+  "var(--t-sev-high)",
+  "var(--t-info)",
+  "var(--t-ink-faint)",
+  "var(--t-warning)",
 ];
+
+const AXIS_TICK = { fontSize: 12, fill: "var(--t-ink-muted)" };
+const AXIS_TICK_SM = { fontSize: 11, fill: "var(--t-ink-muted)" };
+
+const TOOLTIP_STYLE: React.CSSProperties = {
+  backgroundColor: "var(--t-surface)",
+  border: "1px solid var(--t-border)",
+  borderRadius: "var(--t-radius-sm)",
+  boxShadow: "var(--t-shadow-2)",
+  color: "var(--t-ink)",
+};
+
+const TOOLTIP_LABEL_STYLE: React.CSSProperties = {
+  color: "var(--t-ink)",
+  fontWeight: 600,
+};
+
+const LEGEND_STYLE: React.CSSProperties = { color: "var(--t-ink-muted)" };
 
 const TIME_RANGE_OPTIONS = [
   { value: "24h", label: "Last 24 Hours" },
@@ -192,26 +226,26 @@ const Analytics: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          {t("nav.analytics")}
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Comprehensive crisis analytics and visualizations
-        </p>
-      </div>
+      <PageHeader
+        icon={<BarChart3 />}
+        title={t("nav.analytics")}
+        description="Comprehensive crisis analytics and visualizations"
+      />
 
       {/* Filter Controls */}
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">
-            Region
-          </label>
-          <select
+      <Card>
+        <div className="flex flex-wrap items-end gap-3">
+          <span
+            aria-hidden="true"
+            className="mb-2.5 hidden text-ink-faint sm:block"
+          >
+            <SlidersHorizontal className="h-5 w-5" />
+          </span>
+          <Select
+            label="Region"
             value={region}
             onChange={(e) => setRegion(e.target.value)}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            className="w-full sm:w-44"
           >
             <option value="">All Regions</option>
             <option value="north">North Gaza</option>
@@ -219,110 +253,128 @@ const Analytics: React.FC = () => {
             <option value="central">Central</option>
             <option value="khan_younis">Khan Younis</option>
             <option value="rafah">Rafah</option>
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">
-            Time Range
-          </label>
-          <select
+          </Select>
+          <Select
+            label="Time Range"
             value={timeRange}
             onChange={(e) => setTimeRange(e.target.value)}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            className="w-full sm:w-44"
           >
             {TIME_RANGE_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
             ))}
-          </select>
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-gray-500">
-            Crisis Type
-          </label>
-          <select
+          </Select>
+          <Select
+            label="Crisis Type"
             value={crisisType}
             onChange={(e) => setCrisisType(e.target.value)}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+            className="w-full sm:w-44"
           >
             {CRISIS_TYPES.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
             ))}
-          </select>
+          </Select>
         </div>
-      </div>
+      </Card>
 
       {/* Loading */}
-      {loading && (
-        <div className="flex h-32 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
-        </div>
-      )}
+      {loading && <LoadingState label="Loading analytics" />}
 
       {!loading && (
         <>
           {/* Charts Grid */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {/* Casualties Over Time */}
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h3 className="mb-4 text-sm font-semibold text-gray-900">
-                Casualties Over Time
-              </h3>
+            <Card>
+              <CardHeader
+                icon={<Activity />}
+                title="Casualties Over Time"
+              />
               <ResponsiveContainer width="100%" height={280}>
                 <LineChart data={casualtiesData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} />
-                  <Tooltip />
-                  <Legend />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--t-border)" />
+                  <XAxis
+                    dataKey="date"
+                    tick={AXIS_TICK}
+                    stroke="var(--t-border-strong)"
+                    tickLine={{ stroke: "var(--t-border-strong)" }}
+                  />
+                  <YAxis
+                    tick={AXIS_TICK}
+                    stroke="var(--t-border-strong)"
+                    tickLine={{ stroke: "var(--t-border-strong)" }}
+                  />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                    cursor={{ stroke: "var(--t-border-strong)" }}
+                  />
+                  <Legend wrapperStyle={LEGEND_STYLE} />
                   <Line
                     type="monotone"
                     dataKey="casualties"
-                    stroke="#ef4444"
+                    stroke="var(--t-sev-critical)"
                     strokeWidth={2}
-                    dot={{ r: 4 }}
+                    dot={{ r: 4, fill: "var(--t-sev-critical)" }}
                     name="Casualties"
                   />
                   <Line
                     type="monotone"
                     dataKey="injuries"
-                    stroke="#f59e0b"
+                    stroke="var(--t-sev-high)"
                     strokeWidth={2}
-                    dot={{ r: 4 }}
+                    dot={{ r: 4, fill: "var(--t-sev-high)" }}
                     name="Injuries"
                   />
                 </LineChart>
               </ResponsiveContainer>
-            </div>
+            </Card>
 
             {/* Supply Levels by Hospital */}
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h3 className="mb-4 text-sm font-semibold text-gray-900">
-                Supply Levels by Hospital (%)
-              </h3>
+            <Card>
+              <CardHeader
+                icon={<Package />}
+                title="Supply Levels by Hospital (%)"
+              />
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={supplyData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="hospital" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 12 }} domain={[0, 100]} />
-                  <Tooltip />
-                  <Legend />
-                  <Bar dataKey="medical" fill="#3b82f6" name="Medical" />
-                  <Bar dataKey="surgical" fill="#ef4444" name="Surgical" />
-                  <Bar dataKey="blood" fill="#f59e0b" name="Blood" />
-                  <Bar dataKey="medication" fill="#10b981" name="Medication" />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--t-border)" />
+                  <XAxis
+                    dataKey="hospital"
+                    tick={AXIS_TICK_SM}
+                    stroke="var(--t-border-strong)"
+                    tickLine={{ stroke: "var(--t-border-strong)" }}
+                  />
+                  <YAxis
+                    tick={AXIS_TICK}
+                    domain={[0, 100]}
+                    stroke="var(--t-border-strong)"
+                    tickLine={{ stroke: "var(--t-border-strong)" }}
+                  />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                    cursor={{ fill: "var(--t-surface-2)" }}
+                  />
+                  <Legend wrapperStyle={LEGEND_STYLE} />
+                  <Bar dataKey="medical" fill="var(--t-accent)" name="Medical" />
+                  <Bar dataKey="surgical" fill="var(--t-sev-critical)" name="Surgical" />
+                  <Bar dataKey="blood" fill="var(--t-sev-high)" name="Blood" />
+                  <Bar dataKey="medication" fill="var(--t-success)" name="Medication" />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
+            </Card>
 
             {/* Most Common Conditions */}
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h3 className="mb-4 text-sm font-semibold text-gray-900">
-                Most Common Conditions
-              </h3>
+            <Card>
+              <CardHeader
+                icon={<HeartPulse />}
+                title="Most Common Conditions"
+              />
               <ResponsiveContainer width="100%" height={280}>
                 <PieChart>
                   <Pie
@@ -335,7 +387,8 @@ const Analytics: React.FC = () => {
                     label={({ name, percent }) =>
                       `${name} ${(percent * 100).toFixed(0)}%`
                     }
-                    labelLine
+                    labelLine={{ stroke: "var(--t-border-strong)" }}
+                    stroke="var(--t-surface)"
                   >
                     {conditionsData.map((_entry, index) => (
                       <Cell
@@ -344,40 +397,58 @@ const Analytics: React.FC = () => {
                       />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                  />
                 </PieChart>
               </ResponsiveContainer>
-            </div>
+            </Card>
 
             {/* Top Complaints */}
-            <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-              <h3 className="mb-4 text-sm font-semibold text-gray-900">
-                Top Complaints
-              </h3>
+            <Card>
+              <CardHeader
+                icon={<MessageSquare />}
+                title="Top Complaints"
+              />
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={complaintsData} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis type="number" tick={{ fontSize: 12 }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--t-border)" />
+                  <XAxis
+                    type="number"
+                    tick={AXIS_TICK}
+                    stroke="var(--t-border-strong)"
+                    tickLine={{ stroke: "var(--t-border-strong)" }}
+                  />
                   <YAxis
                     type="category"
                     dataKey="complaint"
-                    tick={{ fontSize: 11 }}
+                    tick={AXIS_TICK_SM}
                     width={130}
+                    stroke="var(--t-border-strong)"
+                    tickLine={{ stroke: "var(--t-border-strong)" }}
                   />
-                  <Tooltip />
-                  <Bar dataKey="count" fill="#8b5cf6" name="Count" radius={[0, 4, 4, 0]} />
+                  <Tooltip
+                    contentStyle={TOOLTIP_STYLE}
+                    labelStyle={TOOLTIP_LABEL_STYLE}
+                    cursor={{ fill: "var(--t-surface-2)" }}
+                  />
+                  <Bar dataKey="count" fill="var(--t-accent)" name="Count" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
-            </div>
+            </Card>
           </div>
 
           {/* Heatmap Section */}
-          <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
-            <div className="border-b border-gray-100 px-5 py-3">
-              <h3 className="text-sm font-semibold text-gray-900">
-                Activity Heatmap
-              </h3>
-              <p className="text-xs text-gray-500">
+          <Card flush className="overflow-hidden">
+            <div className="border-b border-edge px-5 py-3">
+              <div className="flex items-center gap-2">
+                <MapIcon aria-hidden="true" className="h-4 w-4 text-ink-muted" />
+                <h3 className="text-sm font-semibold text-ink">
+                  Activity Heatmap
+                </h3>
+              </div>
+              <p className="mt-0.5 text-xs text-ink-muted">
                 Geographic distribution of crisis events. Heatmap layer loads
                 from analytics/heatmap endpoint.
               </p>
@@ -401,7 +472,7 @@ const Analytics: React.FC = () => {
                 */}
               </MapContainer>
             </div>
-          </div>
+          </Card>
         </>
       )}
     </div>

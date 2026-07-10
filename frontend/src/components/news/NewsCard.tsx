@@ -2,8 +2,10 @@
  * News Card - Individual news item display
  */
 
-import type { NewsArticle } from '../../types/newsTypes';
-import { CATEGORY_CONFIG, SEVERITY_STYLES } from '../../types/newsTypes';
+import { Clock, Eye, Info, MapPin, Megaphone, Siren, TriangleAlert, type LucideIcon } from 'lucide-react';
+import type { NewsArticle, NewsCategory } from '../../types/newsTypes';
+import { CATEGORY_CONFIG } from '../../types/newsTypes';
+import { Badge, Card, severityTone } from '../ui';
 import { TrustScoreBadge } from './TrustScoreBadge';
 import { SourceBadge } from './SourceBadge';
 
@@ -11,6 +13,14 @@ interface NewsCardProps {
   article: NewsArticle;
   onPress?: (article: NewsArticle) => void;
 }
+
+/** Category → lucide icon (replaces emoji glyphs). */
+const CATEGORY_ICONS: Record<NewsCategory, LucideIcon> = {
+  threat: TriangleAlert,
+  warning: Siren,
+  update: Megaphone,
+  info: Info,
+};
 
 /**
  * Format relative time (e.g., "2 hours ago")
@@ -41,15 +51,24 @@ function formatEngagement(count: number): string {
 
 export function NewsCard({ article, onPress }: NewsCardProps) {
   const categoryConfig = CATEGORY_CONFIG[article.category];
-  const severityStyle = SEVERITY_STYLES[article.severity];
+  const CategoryIcon = CATEGORY_ICONS[article.category];
 
   return (
-    <div
+    <Card
+      interactive
+      role="button"
+      tabIndex={0}
       onClick={() => onPress?.(article)}
-      className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow cursor-pointer active:bg-gray-50"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onPress?.(article);
+        }
+      }}
+      aria-label={article.title}
     >
       {/* Header: Source + Trust Score */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="mb-3 flex items-center justify-between gap-2">
         <SourceBadge
           platform={article.source_platform}
           author={article.source_author}
@@ -59,55 +78,53 @@ export function NewsCard({ article, onPress }: NewsCardProps) {
       </div>
 
       {/* Title */}
-      <h3 className="font-semibold text-gray-900 text-base leading-snug mb-2">
+      <h3 className="mb-2 text-base font-bold leading-snug text-ink">
         {article.title}
       </h3>
 
       {/* Summary */}
-      <p className="text-gray-600 text-sm leading-relaxed mb-3 line-clamp-2">
+      <p className="mb-3 line-clamp-2 text-base leading-relaxed text-ink-muted">
         {article.summary}
       </p>
 
       {/* Tags: Category + Severity */}
-      <div className="flex items-center gap-2 mb-3">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         {/* Category tag */}
-        <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 rounded-full text-xs font-medium text-gray-700">
-          {categoryConfig.icon} {categoryConfig.label}
-        </span>
+        <Badge tone="neutral" size="sm" icon={<CategoryIcon />}>
+          {categoryConfig.label}
+        </Badge>
 
         {/* Severity tag */}
-        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${severityStyle.bg} ${severityStyle.text}`}>
+        <Badge tone={severityTone(article.severity)} size="sm">
           {article.severity.charAt(0).toUpperCase() + article.severity.slice(1)}
-        </span>
+        </Badge>
       </div>
 
       {/* Footer: Location, Time, Engagement */}
-      <div className="flex items-center justify-between text-xs text-gray-500">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between gap-2 text-sm text-ink-muted">
+        <div className="flex min-w-0 items-center gap-3">
           {/* Distance */}
           {article.distance_km !== undefined && (
-            <span className="flex items-center gap-1">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+            <span className="flex shrink-0 items-center gap-1">
+              <MapPin aria-hidden="true" className="h-4 w-4" />
               {article.distance_km.toFixed(1)} km
             </span>
           )}
 
           {/* Time */}
-          <span>{formatRelativeTime(article.published_at)}</span>
+          <span className="flex min-w-0 items-center gap-1">
+            <Clock aria-hidden="true" className="h-4 w-4 shrink-0" />
+            <span className="truncate">{formatRelativeTime(article.published_at)}</span>
+          </span>
         </div>
 
         {/* Engagement */}
-        <span className="flex items-center gap-1">
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-          </svg>
+        <span className="flex shrink-0 items-center gap-1">
+          <Eye aria-hidden="true" className="h-4 w-4" />
           {formatEngagement(article.engagement_count)}
+          <span className="sr-only">views</span>
         </span>
       </div>
-    </div>
+    </Card>
   );
 }

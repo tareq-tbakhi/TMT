@@ -4,25 +4,26 @@
 
 export function TypingIndicator() {
   return (
-    <div className="flex justify-start mb-3">
-      <div className="bg-blue-50 rounded-2xl rounded-tl-sm px-4 py-3">
-        <div className="text-xs font-medium text-blue-600 mb-1">
+    <div className="mb-3 flex justify-start" role="status">
+      <div className="rounded-xl rounded-ss-md border border-edge bg-surface-2 px-4 py-3">
+        <div className="mb-1 text-xs font-semibold text-ink-muted">
           AI Assistant
         </div>
-        <div className="flex gap-1 items-center h-5">
+        <div className="flex h-5 items-center gap-1" aria-hidden="true">
           <span
-            className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"
+            className="h-2 w-2 animate-bounce rounded-full bg-accent"
             style={{ animationDelay: "0ms" }}
           />
           <span
-            className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"
+            className="h-2 w-2 animate-bounce rounded-full bg-accent"
             style={{ animationDelay: "150ms" }}
           />
           <span
-            className="w-2 h-2 bg-blue-400 rounded-full animate-bounce"
+            className="h-2 w-2 animate-bounce rounded-full bg-accent"
             style={{ animationDelay: "300ms" }}
           />
         </div>
+        <span className="sr-only">AI Assistant is typing</span>
       </div>
     </div>
   );

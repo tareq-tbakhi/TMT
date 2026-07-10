@@ -2,8 +2,8 @@
  * Source Badge - Shows platform icon and author
  */
 
+import { BadgeCheck, Bird, Camera, Globe, Send, Users, type LucideIcon } from 'lucide-react';
 import type { SourcePlatform } from '../../types/newsTypes';
-import { SOURCE_PLATFORM_ICONS } from '../../types/newsTypes';
 
 interface SourceBadgeProps {
   platform: SourcePlatform;
@@ -11,19 +11,26 @@ interface SourceBadgeProps {
   verified?: boolean;
 }
 
+/** Platform → lucide icon (replaces emoji glyphs). */
+const PLATFORM_ICONS: Record<SourcePlatform, LucideIcon> = {
+  twitter: Bird,
+  telegram: Send,
+  facebook: Users,
+  instagram: Camera,
+  other: Globe,
+};
+
 export function SourceBadge({ platform, author, verified }: SourceBadgeProps) {
-  const icon = SOURCE_PLATFORM_ICONS[platform];
+  const Icon = PLATFORM_ICONS[platform];
 
   return (
-    <div className="flex items-center gap-1.5 text-sm text-gray-600">
-      <span>{icon}</span>
+    <div className="flex items-center gap-1.5 text-sm text-ink-muted">
+      <Icon aria-label={platform} className="h-4 w-4 shrink-0" />
       {author && (
-        <span className="font-medium truncate max-w-[120px]">@{author}</span>
+        <span className="max-w-[120px] truncate font-semibold text-ink">@{author}</span>
       )}
       {verified && (
-        <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
-        </svg>
+        <BadgeCheck aria-label="Verified source" className="h-4 w-4 shrink-0 text-info" />
       )}
     </div>
   );

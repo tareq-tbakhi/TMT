@@ -1,5 +1,27 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  Building2,
+  CircleAlert,
+  CircleCheck,
+  Plus,
+  SquarePen,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  LoadingState,
+  Modal,
+  PageHeader,
+  Select,
+  statusTone,
+  type BadgeTone,
+} from "../../components/ui";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -74,17 +96,10 @@ function getAuthHeaders(): Record<string, string> {
   };
 }
 
-const statusColors: Record<string, string> = {
-  operational: "bg-green-100 text-green-800",
-  limited: "bg-yellow-100 text-yellow-800",
-  full: "bg-red-100 text-red-800",
-  destroyed: "bg-gray-100 text-gray-800",
-};
-
-const deptColors: Record<string, string> = {
-  hospital: "bg-blue-50 text-blue-700",
-  police: "bg-indigo-50 text-indigo-700",
-  civil_defense: "bg-orange-50 text-orange-700",
+const deptTones: Record<string, BadgeTone> = {
+  hospital: "info",
+  police: "accent",
+  civil_defense: "warning",
 };
 
 const deptLabels: Record<string, string> = {
@@ -333,81 +348,77 @@ const HospitalManagement: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="text-center">
-          <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600" />
-          <p className="text-sm text-gray-500">{t("common.loading")}</p>
-        </div>
-      </div>
-    );
+    return <LoadingState label={t("common.loading")} />;
   }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center">
-        <p className="text-red-700">{error}</p>
-      </div>
+      <Card className="border-danger bg-danger-soft text-center">
+        <TriangleAlert
+          aria-hidden="true"
+          className="mx-auto mb-3 h-8 w-8 text-danger"
+        />
+        <p className="text-base font-semibold text-on-danger-soft">{error}</p>
+        <Button
+          variant="danger"
+          className="mt-4"
+          onClick={() => window.location.reload()}
+        >
+          {t("admin.retry")}
+        </Button>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl">
       {/* Notification */}
       {notification && (
         <div
-          className={`fixed top-4 end-4 z-50 rounded-lg px-4 py-3 shadow-lg transition-all ${
+          role="status"
+          className={`fixed top-4 end-4 z-50 flex items-center gap-2.5 rounded-md border px-4 py-3 shadow-2 ${
             notification.type === "success"
-              ? "bg-green-50 border border-green-200 text-green-800"
-              : "bg-red-50 border border-red-200 text-red-800"
+              ? "border-success bg-success-soft text-on-success-soft"
+              : "border-danger bg-danger-soft text-on-danger-soft"
           }`}
         >
-          <div className="flex items-center gap-2">
-            {notification.type === "success" ? (
-              <svg className="h-5 w-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <svg className="h-5 w-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            )}
-            <span className="text-sm font-medium">{notification.message}</span>
-          </div>
+          {notification.type === "success" ? (
+            <CircleCheck aria-hidden="true" className="h-5 w-5 shrink-0 text-success" />
+          ) : (
+            <CircleAlert aria-hidden="true" className="h-5 w-5 shrink-0 text-danger" />
+          )}
+          <span className="text-sm font-semibold">{notification.message}</span>
         </div>
       )}
 
       {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            Facility Management
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Manage hospitals, police stations, and civil defense centers
-          </p>
-        </div>
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-700"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Facility
-        </button>
-      </div>
+      <PageHeader
+        title="Facility Management"
+        description="Manage hospitals, police stations, and civil defense centers"
+        icon={<Building2 />}
+        actions={
+          <Button icon={<Plus />} onClick={openCreateModal}>
+            Add Facility
+          </Button>
+        }
+      />
 
       {/* Department filter */}
-      <div className="flex items-center gap-2">
+      <div
+        role="group"
+        aria-label="Type"
+        className="mb-4 flex flex-wrap items-center gap-2"
+      >
         {["", "hospital", "police", "civil_defense"].map((d) => (
           <button
             key={d}
+            type="button"
             onClick={() => setDeptFilter(d)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            aria-pressed={deptFilter === d}
+            className={`min-h-11 rounded-md px-4 text-sm font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
               deptFilter === d
-                ? "bg-purple-600 text-white"
-                : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                ? "bg-accent text-on-accent shadow-1"
+                : "border border-edge-strong bg-surface text-ink-muted hover:bg-surface-2 hover:text-ink"
             }`}
           >
             {d === "" ? "All" : deptLabels[d] ?? d}
@@ -416,105 +427,110 @@ const HospitalManagement: React.FC = () => {
       </div>
 
       {/* Table */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <Card flush className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+          <table className="min-w-full">
+            <thead className="bg-surface-2">
               <tr>
-                <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
                   {t("admin.hospitals.name")}
                 </th>
-                <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
                   Type
                 </th>
-                <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
                   {t("admin.hospitals.status")}
                 </th>
-                <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
                   Capacity
                 </th>
-                <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
                   {t("admin.hospitals.icu")}
                 </th>
-                <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
                   {t("admin.hospitals.available")}
                 </th>
-                <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
                   {t("admin.hospitals.phone")}
                 </th>
-                <th className="px-4 py-3 text-start text-xs font-medium uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
                   {t("admin.hospitals.actions")}
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-edge">
               {hospitals.length === 0 ? (
                 <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-8 text-center text-sm text-gray-400"
-                  >
-                    {t("admin.hospitals.noHospitals")}
+                  <td colSpan={8} className="p-6">
+                    <EmptyState
+                      icon={<Building2 />}
+                      title={t("admin.hospitals.noHospitals")}
+                      className="border-0"
+                    />
                   </td>
                 </tr>
               ) : (
                 hospitals.map((hospital) => (
                   <tr
                     key={hospital.id}
-                    className="transition-colors hover:bg-gray-50"
+                    className="transition-colors hover:bg-surface-2"
                   >
-                    <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900">
+                    <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-ink">
                       {hospital.name}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${deptColors[hospital.department_type] ?? "bg-gray-100 text-gray-700"}`}>
+                      <Badge
+                        tone={deptTones[hospital.department_type] ?? "neutral"}
+                        size="sm"
+                      >
                         {deptLabels[hospital.department_type] ?? hospital.department_type ?? "Hospital"}
-                      </span>
+                      </Badge>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          statusColors[hospital.status] ?? "bg-gray-100 text-gray-800"
-                        }`}
+                      <Badge
+                        tone={statusTone(hospital.status)}
+                        size="sm"
+                        dot
+                        className="capitalize"
                       >
                         {hospital.status}
-                      </span>
+                      </Badge>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-ink-muted">
                       {hospital.department_type === "police"
                         ? `${hospital.available_units ?? 0}/${hospital.patrol_units ?? 0} units`
                         : hospital.department_type === "civil_defense"
                         ? `${hospital.available_teams ?? 0}/${hospital.rescue_teams ?? 0} teams`
                         : `${hospital.available_beds}/${hospital.bed_capacity} beds`}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                      {hospital.department_type === "hospital" ? hospital.icu_beds : hospital.department_type === "civil_defense" ? `${hospital.shelter_capacity} shelter` : "\u2014"}
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-ink-muted">
+                      {hospital.department_type === "hospital" ? hospital.icu_beds : hospital.department_type === "civil_defense" ? `${hospital.shelter_capacity} shelter` : "—"}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                      {hospital.department_type === "hospital" ? hospital.available_beds : "\u2014"}
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-ink-muted">
+                      {hospital.department_type === "hospital" ? hospital.available_beds : "—"}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-ink-muted">
                       {hospital.phone || "—"}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      <div className="flex items-center gap-2">
+                    <td className="whitespace-nowrap px-4 py-2 text-sm">
+                      <div className="flex items-center gap-1">
                         <button
+                          type="button"
                           onClick={() => openEditModal(hospital)}
-                          className="rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-blue-50 hover:text-blue-600"
+                          aria-label={t("common.edit")}
                           title={t("common.edit")}
+                          className="flex h-11 w-11 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-accent-soft hover:text-on-accent-soft focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
                         >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
+                          <SquarePen aria-hidden="true" className="h-4 w-4" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => setDeleteConfirm(hospital.id)}
-                          className="rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-red-50 hover:text-red-600"
+                          aria-label={t("common.delete")}
                           title={t("common.delete")}
+                          className="flex h-11 w-11 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-danger-soft hover:text-danger focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
                         >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
+                          <Trash2 aria-hidden="true" className="h-4 w-4" />
                         </button>
                       </div>
                     </td>
@@ -524,391 +540,267 @@ const HospitalManagement: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
+      </Card>
 
       {/* Delete confirmation dialog */}
       {deleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-              <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-semibold text-gray-900">
-              {t("admin.hospitals.confirmDelete")}
-            </h3>
-            <p className="mt-2 text-sm text-gray-500">
-              {t("admin.hospitals.confirmDeleteMessage")}
-            </p>
-            <div className="mt-5 flex justify-end gap-3">
-              <button
+        <Modal
+          open
+          onClose={() => setDeleteConfirm(null)}
+          title={t("admin.hospitals.confirmDelete")}
+          size="sm"
+          dismissible={false}
+          footer={
+            <>
+              <Button
+                variant="secondary"
                 onClick={() => setDeleteConfirm(null)}
                 disabled={deleting}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
               >
                 {t("common.cancel")}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="danger"
+                icon={<Trash2 />}
+                loading={deleting}
                 onClick={() => handleDelete(deleteConfirm)}
-                disabled={deleting}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
               >
-                {deleting ? t("common.loading") : t("common.delete")}
-              </button>
-            </div>
+                {t("common.delete")}
+              </Button>
+            </>
+          }
+        >
+          <div className="flex items-start gap-3">
+            <span
+              aria-hidden="true"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-danger-soft text-danger"
+            >
+              <TriangleAlert className="h-5 w-5" />
+            </span>
+            <p className="text-sm text-ink-muted">
+              {t("admin.hospitals.confirmDeleteMessage")}
+            </p>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* Create/Edit modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4">
-          <div className="my-8 w-full max-w-lg rounded-xl bg-white shadow-xl">
-            {/* Modal header */}
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {editingHospital
-                  ? t("admin.hospitals.edit")
-                  : t("admin.hospitals.create")}
-              </h3>
-              <button
+        <Modal
+          open
+          onClose={() => setModalOpen(false)}
+          title={
+            editingHospital
+              ? t("admin.hospitals.edit")
+              : t("admin.hospitals.create")
+          }
+          size="lg"
+          footer={
+            <>
+              <Button
+                variant="secondary"
                 onClick={() => setModalOpen(false)}
-                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+                disabled={saving}
               >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+                {t("common.cancel")}
+              </Button>
+              <Button type="submit" form="facility-form" loading={saving}>
+                {editingHospital
+                  ? t("common.save")
+                  : t("admin.hospitals.create")}
+              </Button>
+            </>
+          }
+        >
+          <form id="facility-form" onSubmit={handleSubmit} noValidate>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {/* Name */}
+              <Input
+                label={t("admin.hospitals.name")}
+                required
+                value={formData.name}
+                onChange={(e) => updateField("name", e.target.value)}
+                error={formErrors.name}
+                placeholder={t("admin.hospitals.namePlaceholder")}
+              />
 
-            {/* Modal body */}
-            <form onSubmit={handleSubmit} className="p-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {/* Name */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    {t("admin.hospitals.name")} *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => updateField("name", e.target.value)}
-                    className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                      formErrors.name ? "border-red-300" : "border-gray-300"
-                    }`}
-                    placeholder={t("admin.hospitals.namePlaceholder")}
-                  />
-                  {formErrors.name && (
-                    <p className="mt-1 text-xs text-red-600">{formErrors.name}</p>
-                  )}
-                </div>
+              {/* Department Type */}
+              <Select
+                label="Department Type"
+                required
+                value={formData.department_type}
+                onChange={(e) => updateField("department_type", e.target.value)}
+              >
+                <option value="hospital">Hospital</option>
+                <option value="police">Police Station</option>
+                <option value="civil_defense">Civil Defense Center</option>
+              </Select>
 
-                {/* Department Type */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    Department Type *
-                  </label>
-                  <select
-                    value={formData.department_type}
-                    onChange={(e) => updateField("department_type", e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  >
-                    <option value="hospital">Hospital</option>
-                    <option value="police">Police Station</option>
-                    <option value="civil_defense">Civil Defense Center</option>
-                  </select>
-                </div>
+              {/* Latitude */}
+              <Input
+                label={t("admin.hospitals.latitude")}
+                required
+                value={formData.latitude}
+                onChange={(e) => updateField("latitude", e.target.value)}
+                error={formErrors.latitude}
+                placeholder="31.5"
+              />
 
-                {/* Latitude */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    {t("admin.hospitals.latitude")} *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.latitude}
-                    onChange={(e) => updateField("latitude", e.target.value)}
-                    className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                      formErrors.latitude ? "border-red-300" : "border-gray-300"
-                    }`}
-                    placeholder="31.5"
-                  />
-                  {formErrors.latitude && (
-                    <p className="mt-1 text-xs text-red-600">{formErrors.latitude}</p>
-                  )}
-                </div>
+              {/* Longitude */}
+              <Input
+                label={t("admin.hospitals.longitude")}
+                required
+                value={formData.longitude}
+                onChange={(e) => updateField("longitude", e.target.value)}
+                error={formErrors.longitude}
+                placeholder="34.47"
+              />
 
-                {/* Longitude */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    {t("admin.hospitals.longitude")} *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.longitude}
-                    onChange={(e) => updateField("longitude", e.target.value)}
-                    className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                      formErrors.longitude ? "border-red-300" : "border-gray-300"
-                    }`}
-                    placeholder="34.47"
-                  />
-                  {formErrors.longitude && (
-                    <p className="mt-1 text-xs text-red-600">{formErrors.longitude}</p>
-                  )}
-                </div>
-
-                {/* Hospital-specific: Bed Capacity, ICU Beds, Available Beds */}
-                {formData.department_type === "hospital" && (
-                  <>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        {t("admin.hospitals.bedCapacity")} *
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.bed_capacity}
-                        onChange={(e) => updateField("bed_capacity", e.target.value)}
-                        className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                          formErrors.bed_capacity ? "border-red-300" : "border-gray-300"
-                        }`}
-                        min="0"
-                      />
-                      {formErrors.bed_capacity && (
-                        <p className="mt-1 text-xs text-red-600">{formErrors.bed_capacity}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        {t("admin.hospitals.icuBeds")} *
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.icu_beds}
-                        onChange={(e) => updateField("icu_beds", e.target.value)}
-                        className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                          formErrors.icu_beds ? "border-red-300" : "border-gray-300"
-                        }`}
-                        min="0"
-                      />
-                      {formErrors.icu_beds && (
-                        <p className="mt-1 text-xs text-red-600">{formErrors.icu_beds}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        {t("admin.hospitals.availableBeds")} *
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.available_beds}
-                        onChange={(e) => updateField("available_beds", e.target.value)}
-                        className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                          formErrors.available_beds ? "border-red-300" : "border-gray-300"
-                        }`}
-                        min="0"
-                      />
-                      {formErrors.available_beds && (
-                        <p className="mt-1 text-xs text-red-600">{formErrors.available_beds}</p>
-                      )}
-                    </div>
-                  </>
-                )}
-
-                {/* Police-specific: Patrol Units, Available Units */}
-                {formData.department_type === "police" && (
-                  <>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Total Patrol Units *
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.patrol_units}
-                        onChange={(e) => updateField("patrol_units", e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        min="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Available Units *
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.available_units}
-                        onChange={(e) => updateField("available_units", e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        min="0"
-                      />
-                    </div>
-                  </>
-                )}
-
-                {/* Civil Defense-specific: Rescue Teams, Available Teams, Shelter Capacity */}
-                {formData.department_type === "civil_defense" && (
-                  <>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Total Rescue Teams *
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.rescue_teams}
-                        onChange={(e) => updateField("rescue_teams", e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        min="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Available Teams *
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.available_teams}
-                        onChange={(e) => updateField("available_teams", e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        min="0"
-                      />
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        Shelter Capacity
-                      </label>
-                      <input
-                        type="number"
-                        value={formData.shelter_capacity}
-                        onChange={(e) => updateField("shelter_capacity", e.target.value)}
-                        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
-                        min="0"
-                      />
-                    </div>
-                  </>
-                )}
-
-                {/* Coverage Radius */}
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    {t("admin.hospitals.coverageRadius")}
-                  </label>
-                  <input
+              {/* Hospital-specific: Bed Capacity, ICU Beds, Available Beds */}
+              {formData.department_type === "hospital" && (
+                <>
+                  <Input
+                    label={t("admin.hospitals.bedCapacity")}
+                    required
                     type="number"
-                    value={formData.coverage_radius_km}
-                    onChange={(e) => updateField("coverage_radius_km", e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
                     min="0"
-                    step="0.1"
+                    value={formData.bed_capacity}
+                    onChange={(e) => updateField("bed_capacity", e.target.value)}
+                    error={formErrors.bed_capacity}
                   />
-                </div>
+                  <Input
+                    label={t("admin.hospitals.icuBeds")}
+                    required
+                    type="number"
+                    min="0"
+                    value={formData.icu_beds}
+                    onChange={(e) => updateField("icu_beds", e.target.value)}
+                    error={formErrors.icu_beds}
+                  />
+                  <Input
+                    label={t("admin.hospitals.availableBeds")}
+                    required
+                    type="number"
+                    min="0"
+                    value={formData.available_beds}
+                    onChange={(e) => updateField("available_beds", e.target.value)}
+                    error={formErrors.available_beds}
+                  />
+                </>
+              )}
 
-                {/* Phone - full width */}
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    {t("admin.hospitals.phone")}
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.phone}
-                    onChange={(e) => updateField("phone", e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
+              {/* Police-specific: Patrol Units, Available Units */}
+              {formData.department_type === "police" && (
+                <>
+                  <Input
+                    label="Total Patrol Units"
+                    required
+                    type="number"
+                    min="0"
+                    value={formData.patrol_units}
+                    onChange={(e) => updateField("patrol_units", e.target.value)}
+                  />
+                  <Input
+                    label="Available Units"
+                    required
+                    type="number"
+                    min="0"
+                    value={formData.available_units}
+                    onChange={(e) => updateField("available_units", e.target.value)}
+                  />
+                </>
+              )}
+
+              {/* Civil Defense-specific: Rescue Teams, Available Teams, Shelter Capacity */}
+              {formData.department_type === "civil_defense" && (
+                <>
+                  <Input
+                    label="Total Rescue Teams"
+                    required
+                    type="number"
+                    min="0"
+                    value={formData.rescue_teams}
+                    onChange={(e) => updateField("rescue_teams", e.target.value)}
+                  />
+                  <Input
+                    label="Available Teams"
+                    required
+                    type="number"
+                    min="0"
+                    value={formData.available_teams}
+                    onChange={(e) => updateField("available_teams", e.target.value)}
+                  />
+                  <Input
+                    label="Shelter Capacity"
+                    type="number"
+                    min="0"
+                    value={formData.shelter_capacity}
+                    onChange={(e) => updateField("shelter_capacity", e.target.value)}
+                  />
+                </>
+              )}
+
+              {/* Coverage Radius */}
+              <Input
+                label={t("admin.hospitals.coverageRadius")}
+                type="number"
+                min="0"
+                step="0.1"
+                value={formData.coverage_radius_km}
+                onChange={(e) => updateField("coverage_radius_km", e.target.value)}
+              />
+
+              {/* Phone - full width */}
+              <Input
+                className="sm:col-span-2"
+                label={t("admin.hospitals.phone")}
+                value={formData.phone}
+                onChange={(e) => updateField("phone", e.target.value)}
+                placeholder="+970..."
+              />
+
+              {/* Specialties - full width */}
+              <Input
+                className="sm:col-span-2"
+                label={t("admin.hospitals.specialties")}
+                value={formData.specialties}
+                onChange={(e) => updateField("specialties", e.target.value)}
+                placeholder={t("admin.hospitals.specialtiesPlaceholder")}
+              />
+
+              {/* Supply levels - full width */}
+              <Input
+                className="sm:col-span-2"
+                label={t("admin.hospitals.supplyLevels")}
+                value={formData.supply_levels}
+                onChange={(e) => updateField("supply_levels", e.target.value)}
+                placeholder='{"blood": 80, "oxygen": 60}'
+              />
+
+              {/* Admin fields - only for create */}
+              {!editingHospital && (
+                <>
+                  <Input
+                    label={t("admin.hospitals.adminPhone")}
+                    required
+                    value={formData.admin_phone}
+                    onChange={(e) => updateField("admin_phone", e.target.value)}
+                    error={formErrors.admin_phone}
                     placeholder="+970..."
                   />
-                </div>
-
-                {/* Specialties - full width */}
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    {t("admin.hospitals.specialties")}
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.specialties}
-                    onChange={(e) => updateField("specialties", e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder={t("admin.hospitals.specialtiesPlaceholder")}
+                  <Input
+                    label={t("admin.hospitals.adminPassword")}
+                    required
+                    type="password"
+                    value={formData.admin_password}
+                    onChange={(e) => updateField("admin_password", e.target.value)}
+                    error={formErrors.admin_password}
                   />
-                </div>
-
-                {/* Supply levels - full width */}
-                <div className="sm:col-span-2">
-                  <label className="mb-1 block text-sm font-medium text-gray-700">
-                    {t("admin.hospitals.supplyLevels")}
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.supply_levels}
-                    onChange={(e) => updateField("supply_levels", e.target.value)}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500"
-                    placeholder='{"blood": 80, "oxygen": 60}'
-                  />
-                </div>
-
-                {/* Admin fields - only for create */}
-                {!editingHospital && (
-                  <>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        {t("admin.hospitals.adminPhone")} *
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.admin_phone}
-                        onChange={(e) => updateField("admin_phone", e.target.value)}
-                        className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                          formErrors.admin_phone ? "border-red-300" : "border-gray-300"
-                        }`}
-                        placeholder="+970..."
-                      />
-                      {formErrors.admin_phone && (
-                        <p className="mt-1 text-xs text-red-600">{formErrors.admin_phone}</p>
-                      )}
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium text-gray-700">
-                        {t("admin.hospitals.adminPassword")} *
-                      </label>
-                      <input
-                        type="password"
-                        value={formData.admin_password}
-                        onChange={(e) => updateField("admin_password", e.target.value)}
-                        className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 ${
-                          formErrors.admin_password ? "border-red-300" : "border-gray-300"
-                        }`}
-                      />
-                      {formErrors.admin_password && (
-                        <p className="mt-1 text-xs text-red-600">{formErrors.admin_password}</p>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Modal footer */}
-              <div className="mt-6 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setModalOpen(false)}
-                  disabled={saving}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-                >
-                  {t("common.cancel")}
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-purple-700 disabled:opacity-50"
-                >
-                  {saving
-                    ? t("common.loading")
-                    : editingHospital
-                      ? t("common.save")
-                      : t("admin.hospitals.create")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+                </>
+              )}
+            </div>
+          </form>
+        </Modal>
       )}
     </div>
   );

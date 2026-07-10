@@ -6,7 +6,17 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import { ClipboardList, Plus, TriangleAlert, X } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  LoadingState,
+  Textarea,
+} from "../../components/ui";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -283,12 +293,12 @@ export default function MedicalRecords() {
     const pct = (step / TOTAL_STEPS) * 100;
     return (
       <div className="mb-6">
-        <p className="text-lg font-semibold text-gray-700 mb-2">
+        <p className="mb-2 text-lg font-bold text-ink">
           {t("records.step", { current: step, total: TOTAL_STEPS })}
         </p>
-        <div className="w-full bg-gray-200 rounded-full h-3">
+        <div className="h-3 w-full rounded-full bg-surface-3" aria-hidden="true">
           <div
-            className="bg-blue-600 h-3 rounded-full transition-all duration-300"
+            className="h-3 rounded-full bg-accent transition-all duration-300"
             style={{ width: `${pct}%` }}
           />
         </div>
@@ -310,18 +320,18 @@ export default function MedicalRecords() {
     danger?: boolean;
   }) {
     const baseClasses =
-      "py-4 px-6 text-lg font-semibold rounded-xl border-2 transition-all duration-200 text-center";
+      "min-h-14 rounded-lg border-2 px-4 py-3 text-center text-lg font-semibold transition-colors duration-200 focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2";
 
     let colorClasses: string;
     if (selected && danger) {
       colorClasses =
-        "bg-red-600 border-red-600 text-white shadow-lg scale-[1.02]";
+        "border-danger bg-danger text-white shadow-1";
     } else if (selected) {
       colorClasses =
-        "bg-blue-600 border-blue-600 text-white shadow-lg scale-[1.02]";
+        "border-accent bg-accent text-on-accent shadow-1";
     } else {
       colorClasses =
-        "bg-white border-gray-300 text-gray-700 hover:border-blue-400 hover:bg-blue-50";
+        "border-edge-strong bg-surface text-ink hover:border-accent hover:bg-accent-soft hover:text-on-accent-soft";
     }
 
     return (
@@ -346,17 +356,17 @@ export default function MedicalRecords() {
     onRemove: () => void;
   }) {
     return (
-      <span className="inline-flex items-center gap-2 bg-blue-100 text-blue-800 text-base font-medium px-4 py-2 rounded-full">
+      <Badge tone="accent" className="py-1.5 ps-3 text-base">
         {label}
         <button
           type="button"
           onClick={onRemove}
-          className="text-blue-600 hover:text-blue-900 text-xl leading-none font-bold"
           aria-label={`${t("common.delete")} ${label}`}
+          className="-me-1.5 flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-accent/15 focus-visible:outline-3 focus-visible:outline-focus"
         >
-          &times;
+          <X aria-hidden="true" className="h-4 w-4" />
         </button>
-      </span>
+      </Badge>
     );
   }
 
@@ -365,10 +375,10 @@ export default function MedicalRecords() {
   function renderStep1() {
     return (
       <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">
+        <h3 className="mb-2 text-xl font-bold text-ink">
           {t("records.conditions")}
-        </h2>
-        <p className="text-lg text-gray-600 mb-6">
+        </h3>
+        <p className="mb-6 text-lg text-ink-muted">
           {t("records.conditionsHint")}
         </p>
         <div className="grid grid-cols-2 gap-3">
@@ -388,15 +398,15 @@ export default function MedicalRecords() {
   function renderStep2() {
     return (
       <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">
+        <h3 className="mb-2 text-xl font-bold text-ink">
           {t("records.medications")}
-        </h2>
-        <p className="text-lg text-gray-600 mb-6">
+        </h3>
+        <p className="mb-6 text-lg text-ink-muted">
           {t("records.medicationsHint")}
         </p>
 
         {/* Preset buttons */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
+        <div className="mb-6 grid grid-cols-2 gap-3">
           {MEDICATION_PRESETS.map((med) => (
             <ToggleButton
               key={med}
@@ -408,8 +418,10 @@ export default function MedicalRecords() {
         </div>
 
         {/* Custom input */}
-        <div className="flex gap-2 mb-4">
-          <input
+        <div className="mb-4 flex items-end gap-2">
+          <Input
+            label={t("records.addCustom")}
+            hideLabel
             type="text"
             value={customMedication}
             onChange={(e) => setCustomMedication(e.target.value)}
@@ -420,17 +432,19 @@ export default function MedicalRecords() {
               }
             }}
             placeholder={t("records.addCustom")}
-            className="flex-1 py-3 px-4 text-lg border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none"
+            className="flex-1"
           />
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="lg"
+            icon={<Plus />}
             onClick={() =>
               addCustom(customMedication, medications, setMedications, setCustomMedication)
             }
-            className="py-3 px-6 text-lg font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
           >
             {t("records.add")}
-          </button>
+          </Button>
         </div>
 
         {/* Selected tags */}
@@ -452,15 +466,15 @@ export default function MedicalRecords() {
   function renderStep3() {
     return (
       <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">
+        <h3 className="mb-2 text-xl font-bold text-ink">
           {t("records.allergies")}
-        </h2>
-        <p className="text-lg text-gray-600 mb-6">
+        </h3>
+        <p className="mb-6 text-lg text-ink-muted">
           {t("records.allergiesHint")}
         </p>
 
         {/* Preset buttons */}
-        <div className="grid grid-cols-2 gap-3 mb-6">
+        <div className="mb-6 grid grid-cols-2 gap-3">
           {ALLERGY_PRESETS.map((allergy) => (
             <ToggleButton
               key={allergy}
@@ -473,8 +487,10 @@ export default function MedicalRecords() {
         </div>
 
         {/* Custom input */}
-        <div className="flex gap-2 mb-4">
-          <input
+        <div className="mb-4 flex items-end gap-2">
+          <Input
+            label={t("records.addCustom")}
+            hideLabel
             type="text"
             value={customAllergy}
             onChange={(e) => setCustomAllergy(e.target.value)}
@@ -485,17 +501,19 @@ export default function MedicalRecords() {
               }
             }}
             placeholder={t("records.addCustom")}
-            className="flex-1 py-3 px-4 text-lg border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none"
+            className="flex-1"
           />
-          <button
+          <Button
             type="button"
+            variant="secondary"
+            size="lg"
+            icon={<Plus />}
             onClick={() =>
               addCustom(customAllergy, allergies, setAllergies, setCustomAllergy)
             }
-            className="py-3 px-6 text-lg font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
           >
             {t("records.add")}
-          </button>
+          </Button>
         </div>
 
         {/* Selected tags */}
@@ -517,15 +535,15 @@ export default function MedicalRecords() {
   function renderStep4() {
     return (
       <div>
-        <h2 className="text-xl font-bold text-gray-900 mb-4">
+        <h3 className="mb-2 text-xl font-bold text-ink">
           {t("records.equipment")}
-        </h2>
-        <p className="text-lg text-gray-600 mb-6">
+        </h3>
+        <p className="mb-6 text-lg text-ink-muted">
           {t("records.equipmentHint")}
         </p>
 
         {/* Equipment toggles */}
-        <div className="grid grid-cols-2 gap-3 mb-8">
+        <div className="mb-8 grid grid-cols-2 gap-3">
           {EQUIPMENT_PRESETS.map((eq) => (
             <ToggleButton
               key={eq}
@@ -538,19 +556,12 @@ export default function MedicalRecords() {
 
         {/* Notes textarea */}
         <div className="mb-4">
-          <label
-            htmlFor="medical-notes"
-            className="block text-xl font-bold text-gray-900 mb-3"
-          >
-            {t("records.notes")}
-          </label>
-          <textarea
-            id="medical-notes"
+          <Textarea
+            label={t("records.notes")}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
             rows={5}
             placeholder={t("records.notesPlaceholder")}
-            className="w-full py-4 px-4 text-lg border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none resize-y"
           />
         </div>
       </div>
@@ -561,21 +572,18 @@ export default function MedicalRecords() {
 
   function RecordCard({ record }: { record: MedicalRecord }) {
     return (
-      <div className="bg-white rounded-2xl border-2 border-gray-200 p-5 shadow-sm">
+      <Card as="article">
         {/* Conditions */}
         {record.conditions.length > 0 && (
           <div className="mb-4">
-            <h4 className="text-base font-bold text-gray-700 mb-2">
+            <h4 className="mb-2 text-base font-bold text-ink">
               {t("records.conditions")}
             </h4>
             <div className="flex flex-wrap gap-2">
               {record.conditions.map((c) => (
-                <span
-                  key={c}
-                  className="bg-orange-100 text-orange-800 px-3 py-1 rounded-full text-sm font-medium"
-                >
+                <Badge key={c} tone="warning">
                   {c}
-                </span>
+                </Badge>
               ))}
             </div>
           </div>
@@ -584,17 +592,14 @@ export default function MedicalRecords() {
         {/* Medications */}
         {record.medications.length > 0 && (
           <div className="mb-4">
-            <h4 className="text-base font-bold text-gray-700 mb-2">
+            <h4 className="mb-2 text-base font-bold text-ink">
               {t("records.medications")}
             </h4>
             <div className="flex flex-wrap gap-2">
               {record.medications.map((m) => (
-                <span
-                  key={m}
-                  className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm font-medium"
-                >
+                <Badge key={m} tone="success">
                   {m}
-                </span>
+                </Badge>
               ))}
             </div>
           </div>
@@ -603,17 +608,14 @@ export default function MedicalRecords() {
         {/* Allergies */}
         {record.allergies.length > 0 && (
           <div className="mb-4">
-            <h4 className="text-base font-bold text-gray-700 mb-2">
+            <h4 className="mb-2 text-base font-bold text-ink">
               {t("records.allergies")}
             </h4>
             <div className="flex flex-wrap gap-2">
               {record.allergies.map((a) => (
-                <span
-                  key={a}
-                  className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-sm font-medium"
-                >
+                <Badge key={a} tone="danger">
                   {a}
-                </span>
+                </Badge>
               ))}
             </div>
           </div>
@@ -622,17 +624,14 @@ export default function MedicalRecords() {
         {/* Equipment */}
         {record.special_equipment.length > 0 && (
           <div className="mb-4">
-            <h4 className="text-base font-bold text-gray-700 mb-2">
+            <h4 className="mb-2 text-base font-bold text-ink">
               {t("records.equipment")}
             </h4>
             <div className="flex flex-wrap gap-2">
               {record.special_equipment.map((e) => (
-                <span
-                  key={e}
-                  className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm font-medium"
-                >
+                <Badge key={e} tone="accent">
                   {e}
-                </span>
+                </Badge>
               ))}
             </div>
           </div>
@@ -641,24 +640,26 @@ export default function MedicalRecords() {
         {/* Notes */}
         {record.notes && (
           <div className="mb-4">
-            <h4 className="text-base font-bold text-gray-700 mb-2">
+            <h4 className="mb-2 text-base font-bold text-ink">
               {t("records.notes")}
             </h4>
-            <p className="text-gray-600 text-base whitespace-pre-wrap">
+            <p className="whitespace-pre-wrap text-base text-ink-muted">
               {record.notes}
             </p>
           </div>
         )}
 
         {/* Edit button */}
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="lg"
+          fullWidth
           onClick={() => startEdit(record)}
-          className="w-full py-3 px-6 text-lg font-semibold bg-gray-100 text-gray-700 rounded-xl border-2 border-gray-300 hover:bg-gray-200 transition-colors"
         >
           {t("records.edit")}
-        </button>
-      </div>
+        </Button>
+      </Card>
     );
   }
 
@@ -666,34 +667,38 @@ export default function MedicalRecords() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <p className="text-xl text-gray-500">{t("common.loading")}</p>
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <LoadingState label={t("common.loading")} />
       </div>
     );
   }
 
   return (
-    <div className="max-w-lg mx-auto px-4 py-6">
+    <div className="mx-auto max-w-lg px-4 py-6">
       {/* Page title */}
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">
+      <h2 className="mb-6 text-2xl font-bold tracking-tight text-ink">
         {t("records.title")}
-      </h1>
+      </h2>
 
       {/* Error message */}
       {error && (
         <div
-          className="bg-red-50 border-2 border-red-200 text-red-700 px-4 py-3 rounded-xl mb-4 text-lg"
           role="alert"
+          className="mb-4 flex flex-wrap items-center gap-3 rounded-lg border border-danger/30 bg-danger-soft p-4"
         >
-          {error}
+          <TriangleAlert aria-hidden="true" className="h-5 w-5 shrink-0 text-on-danger-soft" />
+          <p className="min-w-0 flex-1 text-base font-medium text-on-danger-soft">{error}</p>
+          <Button variant="danger" size="sm" onClick={loadRecords}>
+            {t("admin.retry")}
+          </Button>
         </div>
       )}
 
       {/* Success message */}
       {successMsg && (
         <div
-          className="bg-green-50 border-2 border-green-200 text-green-700 px-4 py-3 rounded-xl mb-4 text-lg"
           role="status"
+          className="mb-4 rounded-lg border border-success/30 bg-success-soft p-4 text-base font-semibold text-on-success-soft"
         >
           {successMsg}
         </div>
@@ -701,7 +706,7 @@ export default function MedicalRecords() {
 
       {/* Wizard view */}
       {showWizard ? (
-        <div className="bg-white rounded-2xl border-2 border-gray-200 p-5 shadow-sm">
+        <Card>
           <ProgressBar />
 
           {/* Step content */}
@@ -713,82 +718,75 @@ export default function MedicalRecords() {
           </div>
 
           {/* Navigation buttons */}
-          <div className="flex gap-3 mt-8">
+          <div className="mt-8 flex gap-3">
             {step > 1 && (
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="xl"
                 onClick={goBack}
-                className="flex-1 py-4 px-6 text-lg font-semibold bg-gray-100 text-gray-700 rounded-xl border-2 border-gray-300 hover:bg-gray-200 transition-colors"
+                className="flex-1"
               >
                 {t("records.back")}
-              </button>
+              </Button>
             )}
 
             {step < TOTAL_STEPS ? (
-              <button
+              <Button
                 type="button"
+                size="xl"
                 onClick={goNext}
-                className="flex-1 py-4 px-6 text-lg font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
+                className="flex-1"
               >
                 {t("records.next")}
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
+                variant="success"
+                size="xl"
                 onClick={handleSave}
-                disabled={saving}
-                className="flex-1 py-4 px-6 text-lg font-semibold bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                loading={saving}
+                className="flex-1"
               >
                 {saving ? t("common.loading") : t("records.save")}
-              </button>
+              </Button>
             )}
           </div>
 
           {/* Cancel / go back to list */}
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            fullWidth
             onClick={() => setShowWizard(false)}
-            className="w-full mt-3 py-3 text-base text-gray-500 hover:text-gray-700 transition-colors"
+            className="mt-3"
           >
             {t("common.cancel")}
-          </button>
-        </div>
+          </Button>
+        </Card>
       ) : (
         /* Records list view */
         <div>
           {/* Add new button */}
-          <button
+          <Button
             type="button"
+            size="xl"
+            fullWidth
+            icon={<Plus />}
             onClick={startNew}
-            className="w-full py-4 px-6 text-lg font-semibold bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors mb-6"
+            className="mb-6"
           >
             {t("records.addNew")}
-          </button>
+          </Button>
 
           {records.length === 0 ? (
-            <div className="text-center py-12">
-              <svg
-                className="mx-auto mb-4"
-                width="64"
-                height="64"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
-                <rect x="8" y="2" width="8" height="4" rx="1" ry="1" />
-                <path d="M12 11v6M9 14h6" />
-              </svg>
-              <p className="text-xl text-gray-500">
-                {t("records.noRecords")}
-              </p>
-            </div>
+            <EmptyState
+              icon={<ClipboardList />}
+              title={t("records.noRecords")}
+            />
           ) : (
-            <div className="space-y-4">
+            <div className="flex flex-col gap-4">
               {records.map((record) => (
                 <RecordCard key={record.id} record={record} />
               ))}

@@ -1,5 +1,16 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
+import {
+  Hospital as HospitalIcon,
+  MapPin,
+  Shield,
+  Siren,
+  TriangleAlert,
+  Truck,
+  UserRound,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useMapStore } from "../../store/mapStore";
 import {
   getPatient,
@@ -20,19 +31,20 @@ import type {
 import { timeAgo, eventTypeLabels } from "../../utils/formatting";
 import StatusBadge from "../common/StatusBadge";
 import LoadingSpinner from "../common/LoadingSpinner";
+import { Badge, type BadgeTone } from "../ui";
 
 // ─── Helpers ──────────────────────────────────────────────
 
 const severityLabel = (sev: number): string =>
   sev >= 4 ? "critical" : sev >= 3 ? "high" : sev >= 2 ? "medium" : "low";
 
-const layerIcon: Record<string, string> = {
-  sos: "🚨",
-  crisis: "⚠️",
-  patient: "🧑",
-  hospital: "🏥",
-  police_station: "🚔",
-  civil_defense: "🚒",
+const layerIcon: Record<string, LucideIcon> = {
+  sos: Siren,
+  crisis: TriangleAlert,
+  patient: UserRound,
+  hospital: HospitalIcon,
+  police_station: Shield,
+  civil_defense: Truck,
 };
 
 const mobilityLabels: Record<string, string> = {
@@ -41,6 +53,9 @@ const mobilityLabels: Record<string, string> = {
   bedridden: "Bedridden",
   other: "Other",
 };
+
+const sosStatusTone = (status: string): BadgeTone =>
+  status === "RESOLVED" ? "success" : status === "PENDING" ? "danger" : "warning";
 
 // ─── Component ────────────────────────────────────────────
 
@@ -158,48 +173,56 @@ const MapDetailPanel: React.FC = () => {
   const patientStatus = event.metadata?.patient_status as string | undefined;
   const eventLabel =
     eventTypeLabels[event.event_type]?.en ?? event.event_type;
+  const HeaderIcon = layerIcon[event.layer] ?? MapPin;
 
   return (
     <div
       ref={panelRef}
-      className="detail-panel-slide fixed top-0 end-0 z-[1100] h-full w-full max-w-md overflow-y-auto border-s border-gray-200 bg-white shadow-2xl"
+      role="dialog"
+      aria-label={`${event.title ?? eventLabel} details`}
+      className="detail-panel-slide fixed end-0 top-0 z-[1100] h-full w-full max-w-md overflow-y-auto border-s border-edge bg-surface shadow-3"
     >
       {/* ─── Header ─────────────────────────────────── */}
-      <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-5 py-4">
-        <div className="flex items-center gap-3">
-          <span className="text-2xl">
-            {layerIcon[event.layer] ?? "📍"}
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-edge bg-surface px-5 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span
+            aria-hidden="true"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent-soft text-on-accent-soft"
+          >
+            <HeaderIcon className="h-5 w-5" />
           </span>
-          <div>
-            <h2 className="text-base font-bold text-gray-900">
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-bold text-ink">
               {event.title ?? eventLabel}
             </h2>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-ink-muted">
               {timeAgo(event.created_at)}
             </p>
           </div>
         </div>
         <button
+          type="button"
           onClick={close}
-          className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          aria-label="Close details panel"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
         >
-          ✕
+          <X aria-hidden="true" className="h-5 w-5" />
         </button>
       </div>
 
-      <div className="space-y-0 divide-y divide-gray-100">
+      <div className="space-y-0 divide-y divide-edge">
         {/* ─── Event Summary ────────────────────────── */}
         <Section title="Event Summary">
-          <div className="flex flex-wrap items-center gap-2 mb-3">
+          <div className="mb-3 flex flex-wrap items-center gap-2">
             <StatusBadge severity={severityLabel(event.severity)} size="sm" />
             {patientStatus && (
-              <span className="rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-700">
+              <Badge tone="high" size="sm">
                 {patientStatus}
-              </span>
+              </Badge>
             )}
-            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-600">
+            <Badge tone="neutral" size="sm">
               {event.layer}
-            </span>
+            </Badge>
           </div>
           <InfoRow label="Type" value={eventLabel} />
           <InfoRow label="Source" value={event.source} />
@@ -208,7 +231,7 @@ const MapDetailPanel: React.FC = () => {
             value={`${event.latitude.toFixed(4)}, ${event.longitude.toFixed(4)}`}
           />
           {event.details && (
-            <p className="mt-2 text-xs text-gray-600 leading-relaxed">
+            <p className="mt-2 text-xs leading-relaxed text-ink-muted">
               {event.details}
             </p>
           )}
@@ -217,7 +240,7 @@ const MapDetailPanel: React.FC = () => {
         {/* ─── Related Alerts ───────────────────────── */}
         <Section title="Related Alerts">
           {loadingAlerts ? (
-            <LoadingSpinner size="sm" />
+            <LoadingSpinner size="sm" text="Loading related alerts" />
           ) : relatedAlerts.length === 0 ? (
             <Empty text="No related alerts nearby" />
           ) : (
@@ -225,19 +248,19 @@ const MapDetailPanel: React.FC = () => {
               {relatedAlerts.map((a) => (
                 <div
                   key={a.id}
-                  className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+                  className="rounded-lg border border-edge bg-surface-2 px-3 py-2"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-gray-800">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-xs font-semibold text-ink">
                       {a.title}
                     </span>
                     <StatusBadge severity={a.severity} size="sm" />
                   </div>
-                  <p className="mt-0.5 text-xs text-gray-500">
+                  <p className="mt-0.5 text-xs text-ink-muted">
                     {timeAgo(a.created_at)} · {a.source ?? "system"}
                   </p>
                   {a.details && (
-                    <p className="mt-1 text-xs text-gray-500 line-clamp-2">
+                    <p className="mt-1 text-xs text-ink-muted line-clamp-2">
                       {a.details}
                     </p>
                   )}
@@ -251,24 +274,27 @@ const MapDetailPanel: React.FC = () => {
         {(patientId || info) && (
           <Section title="Patient Profile">
             {loadingPatient && !info ? (
-              <LoadingSpinner size="sm" />
+              <LoadingSpinner size="sm" text="Loading patient" />
             ) : (
               <>
                 {/* Identity */}
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
+                <div className="mb-3 flex items-center gap-3">
+                  <div
+                    aria-hidden="true"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-bold text-on-accent-soft"
+                  >
                     {(patient?.name ?? info?.name ?? "?")
                       .charAt(0)
                       .toUpperCase()}
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900">
+                    <p className="font-semibold text-ink">
                       {patient?.name ?? info?.name ?? "Unknown"}
                     </p>
                     {(patient?.phone ?? info?.phone) && (
                       <a
                         href={`tel:${patient?.phone ?? info?.phone}`}
-                        className="text-xs text-blue-600 hover:underline"
+                        className="rounded-sm text-xs text-link underline-offset-2 hover:underline focus-visible:outline-3 focus-visible:outline-focus"
                         dir="ltr"
                       >
                         {patient?.phone ?? info?.phone}
@@ -278,73 +304,70 @@ const MapDetailPanel: React.FC = () => {
                 </div>
 
                 {/* Quick badges */}
-                <div className="flex flex-wrap gap-1.5 mb-3">
+                <div className="mb-3 flex flex-wrap gap-1.5">
                   {(patient?.blood_type ?? info?.blood_type) && (
-                    <Badge
-                      bg="bg-red-50"
-                      text="text-red-700"
-                      label={patient?.blood_type ?? info?.blood_type ?? ""}
-                    />
+                    <Badge tone="danger" size="sm">
+                      {patient?.blood_type ?? info?.blood_type ?? ""}
+                    </Badge>
                   )}
                   {(patient?.gender ?? info?.gender) && (
-                    <Badge
-                      bg="bg-gray-100"
-                      text="text-gray-600"
-                      label={patient?.gender ?? info?.gender ?? ""}
-                    />
+                    <Badge tone="neutral" size="sm">
+                      {patient?.gender ?? info?.gender ?? ""}
+                    </Badge>
                   )}
                   {(patient?.mobility ?? info?.mobility) && (
-                    <Badge
-                      bg="bg-orange-50"
-                      text="text-orange-700"
-                      label={
-                        mobilityLabels[
-                          patient?.mobility ?? info?.mobility ?? ""
-                        ] ??
+                    <Badge tone="high" size="sm">
+                      {mobilityLabels[
+                        patient?.mobility ?? info?.mobility ?? ""
+                      ] ??
                         patient?.mobility ??
                         info?.mobility ??
-                        ""
-                      }
-                    />
+                        ""}
+                    </Badge>
                   )}
                   {patient?.date_of_birth && (
-                    <Badge
-                      bg="bg-gray-100"
-                      text="text-gray-600"
-                      label={`DOB: ${patient.date_of_birth}`}
-                    />
+                    <Badge tone="neutral" size="sm">
+                      {`DOB: ${patient.date_of_birth}`}
+                    </Badge>
                   )}
                   {patient?.national_id && (
-                    <Badge
-                      bg="bg-gray-100"
-                      text="text-gray-600"
-                      label={`ID: ${patient.national_id}`}
-                    />
+                    <Badge tone="neutral" size="sm">
+                      {`ID: ${patient.national_id}`}
+                    </Badge>
                   )}
                 </div>
 
                 {/* Trust score */}
                 {(patient?.trust_score ?? info?.trust_score) != null && (
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xs text-gray-400">Trust</span>
-                    <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                  <div className="mb-3 flex items-center gap-2">
+                    <span className="text-xs text-ink-faint">Trust</span>
+                    <div
+                      role="meter"
+                      aria-label="Trust score"
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                      aria-valuenow={Math.round(
+                        (patient?.trust_score ?? info?.trust_score ?? 1) * 100
+                      )}
+                      className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2"
+                    >
                       <div
                         className={`h-full rounded-full ${
                           (patient?.trust_score ?? info?.trust_score ?? 1) >=
                           0.7
-                            ? "bg-green-500"
+                            ? "bg-success"
                             : (patient?.trust_score ??
                                   info?.trust_score ??
                                   1) >= 0.4
-                              ? "bg-yellow-500"
-                              : "bg-red-500"
+                              ? "bg-warning"
+                              : "bg-danger"
                         }`}
                         style={{
                           width: `${(patient?.trust_score ?? info?.trust_score ?? 1) * 100}%`,
                         }}
                       />
                     </div>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-ink-muted">
                       {(
                         (patient?.trust_score ?? info?.trust_score ?? 1) *
                         100
@@ -356,16 +379,16 @@ const MapDetailPanel: React.FC = () => {
 
                 {/* SOS stats */}
                 {patient && (
-                  <div className="flex gap-4 text-xs text-gray-500">
+                  <div className="flex gap-4 text-xs text-ink-muted">
                     <span>
                       Total SOS:{" "}
-                      <strong className="text-gray-700">
+                      <strong className="text-ink">
                         {patient.total_sos_count}
                       </strong>
                     </span>
                     <span>
                       False alarms:{" "}
-                      <strong className="text-gray-700">
+                      <strong className="text-ink">
                         {patient.false_alarm_count}
                       </strong>
                     </span>
@@ -380,7 +403,7 @@ const MapDetailPanel: React.FC = () => {
         {(patientId || info) && (
           <Section title="Medical Info">
             {loadingPatient && !info ? (
-              <LoadingSpinner size="sm" />
+              <LoadingSpinner size="sm" text="Loading medical info" />
             ) : (
               <div className="space-y-2">
                 <TagList
@@ -390,14 +413,12 @@ const MapDetailPanel: React.FC = () => {
                     info?.chronic_conditions ??
                     []
                   }
-                  bg="bg-red-50"
-                  text="text-red-700"
+                  tone="danger"
                 />
                 <TagList
                   label="Allergies"
                   items={patient?.allergies ?? info?.allergies ?? []}
-                  bg="bg-yellow-50"
-                  text="text-yellow-700"
+                  tone="warning"
                 />
                 <TagList
                   label="Medications"
@@ -406,8 +427,7 @@ const MapDetailPanel: React.FC = () => {
                     info?.current_medications ??
                     []
                   }
-                  bg="bg-blue-50"
-                  text="text-blue-700"
+                  tone="info"
                 />
                 <TagList
                   label="Special Equipment"
@@ -416,15 +436,14 @@ const MapDetailPanel: React.FC = () => {
                     info?.special_equipment ??
                     []
                   }
-                  bg="bg-purple-50"
-                  text="text-purple-700"
+                  tone="accent"
                 />
                 {patient?.notes && (
                   <div>
-                    <span className="text-xs font-medium text-gray-500">
+                    <span className="text-xs font-semibold text-ink-muted">
                       Notes:{" "}
                     </span>
-                    <span className="text-xs text-gray-600">
+                    <span className="text-xs text-ink-muted">
                       {patient.notes}
                     </span>
                   </div>
@@ -442,19 +461,19 @@ const MapDetailPanel: React.FC = () => {
               (c, i) => (
                 <div
                   key={i}
-                  className="flex items-center justify-between py-1.5"
+                  className="flex min-h-11 items-center justify-between gap-2 py-1.5"
                 >
-                  <div>
-                    <span className="text-sm text-gray-800">{c.name}</span>
+                  <div className="min-w-0">
+                    <span className="text-sm text-ink">{c.name}</span>
                     {(c as { relationship?: string }).relationship && (
-                      <span className="ml-1 text-xs text-gray-400">
+                      <span className="ms-1 text-xs text-ink-faint">
                         ({(c as { relationship?: string }).relationship})
                       </span>
                     )}
                   </div>
                   <a
                     href={`tel:${c.phone}`}
-                    className="text-sm font-medium text-blue-600 hover:underline"
+                    className="rounded-sm text-sm font-semibold text-link underline-offset-2 hover:underline focus-visible:outline-3 focus-visible:outline-focus"
                     dir="ltr"
                   >
                     {c.phone}
@@ -469,7 +488,7 @@ const MapDetailPanel: React.FC = () => {
         {patientId && (
           <Section title="SOS History">
             {loadingPatient ? (
-              <LoadingSpinner size="sm" />
+              <LoadingSpinner size="sm" text="Loading SOS history" />
             ) : sosHistory.length === 0 ? (
               <Empty text="No SOS history" />
             ) : (
@@ -477,36 +496,28 @@ const MapDetailPanel: React.FC = () => {
                 {sosHistory.map((s) => (
                   <div
                     key={s.id}
-                    className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+                    className="rounded-lg border border-edge bg-surface-2 px-3 py-2"
                   >
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         <StatusBadge
                           severity={severityLabel(s.severity)}
                           size="sm"
                         />
-                        <span className="text-xs font-medium text-gray-600">
+                        <span className="text-xs font-semibold text-ink-muted">
                           {s.patient_status}
                         </span>
                       </div>
-                      <span
-                        className={`text-xs font-medium ${
-                          s.status === "RESOLVED"
-                            ? "text-green-600"
-                            : s.status === "PENDING"
-                              ? "text-red-600"
-                              : "text-yellow-600"
-                        }`}
-                      >
+                      <Badge tone={sosStatusTone(s.status)} size="sm" dot>
                         {s.status}
-                      </span>
+                      </Badge>
                     </div>
-                    <p className="mt-1 text-xs text-gray-400">
+                    <p className="mt-1 text-xs text-ink-faint">
                       {timeAgo(s.created_at)} · {s.source}
                       {s.auto_resolved && " · Auto-resolved"}
                     </p>
                     {s.details && (
-                      <p className="mt-1 text-xs text-gray-500 line-clamp-2">
+                      <p className="mt-1 text-xs text-ink-muted line-clamp-2">
                         {s.details}
                       </p>
                     )}
@@ -520,25 +531,25 @@ const MapDetailPanel: React.FC = () => {
         {/* ─── Nearest Hospital ─────────────────────── */}
         {patientId && nearestHospital?.hospital && (
           <Section title="Nearest Hospital">
-            <div className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-semibold text-gray-800">
+            <div className="rounded-lg border border-edge bg-surface-2 px-3 py-3">
+              <div className="mb-1 flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-ink">
                   {nearestHospital.hospital.name}
                 </span>
-                <span className="text-xs font-medium text-blue-600">
+                <span className="text-xs font-semibold text-on-accent-soft">
                   {nearestHospital.hospital.distance_km.toFixed(1)} km
                 </span>
               </div>
-              <div className="flex items-center gap-3 text-xs text-gray-500">
+              <div className="flex items-center gap-3 text-xs text-ink-muted">
                 <span>
                   Status:{" "}
-                  <strong className="text-gray-700">
+                  <strong className="text-ink">
                     {nearestHospital.hospital.status}
                   </strong>
                 </span>
                 <span>
                   Beds:{" "}
-                  <strong className="text-gray-700">
+                  <strong className="text-ink">
                     {nearestHospital.hospital.available_beds}
                   </strong>
                 </span>
@@ -546,7 +557,7 @@ const MapDetailPanel: React.FC = () => {
               {nearestHospital.hospital.phone && (
                 <a
                   href={`tel:${nearestHospital.hospital.phone}`}
-                  className="mt-1 block text-xs text-blue-600 hover:underline"
+                  className="mt-1 block rounded-sm text-xs text-link underline-offset-2 hover:underline focus-visible:outline-3 focus-visible:outline-focus"
                   dir="ltr"
                 >
                   {nearestHospital.hospital.phone}
@@ -563,25 +574,25 @@ const MapDetailPanel: React.FC = () => {
               {records.map((r) => (
                 <div
                   key={r.id}
-                  className="rounded-lg border border-gray-100 bg-gray-50 px-3 py-2"
+                  className="rounded-lg border border-edge bg-surface-2 px-3 py-2"
                 >
-                  <p className="text-xs text-gray-400 mb-1">
+                  <p className="mb-1 text-xs text-ink-faint">
                     {timeAgo(r.created_at)}
                   </p>
                   {r.conditions?.length > 0 && (
-                    <p className="text-xs text-gray-600">
-                      <strong className="text-gray-700">Conditions:</strong>{" "}
+                    <p className="text-xs text-ink-muted">
+                      <strong className="text-ink">Conditions:</strong>{" "}
                       {r.conditions.join(", ")}
                     </p>
                   )}
                   {r.medications?.length > 0 && (
-                    <p className="text-xs text-gray-600">
-                      <strong className="text-gray-700">Medications:</strong>{" "}
+                    <p className="text-xs text-ink-muted">
+                      <strong className="text-ink">Medications:</strong>{" "}
                       {r.medications.join(", ")}
                     </p>
                   )}
                   {r.notes && (
-                    <p className="mt-1 text-xs text-gray-500 italic">
+                    <p className="mt-1 text-xs italic text-ink-muted">
                       {r.notes}
                     </p>
                   )}
@@ -605,7 +616,7 @@ const Section: React.FC<{
   children: React.ReactNode;
 }> = ({ title, children }) => (
   <div className="px-5 py-4">
-    <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-gray-400">
+    <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-ink-faint">
       {title}
     </h3>
     {children}
@@ -617,36 +628,25 @@ const InfoRow: React.FC<{ label: string; value: string }> = ({
   value,
 }) => (
   <div className="flex items-center justify-between py-0.5 text-xs">
-    <span className="text-gray-400">{label}</span>
-    <span className="font-medium text-gray-700">{value}</span>
+    <span className="text-ink-faint">{label}</span>
+    <span className="font-semibold text-ink">{value}</span>
   </div>
-);
-
-const Badge: React.FC<{ bg: string; text: string; label: string }> = ({
-  bg,
-  text,
-  label,
-}) => (
-  <span
-    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${bg} ${text}`}
-  >
-    {label}
-  </span>
 );
 
 const TagList: React.FC<{
   label: string;
   items: string[];
-  bg: string;
-  text: string;
-}> = ({ label, items, bg, text }) => {
+  tone: BadgeTone;
+}> = ({ label, items, tone }) => {
   if (items.length === 0) return null;
   return (
     <div>
-      <span className="text-xs font-medium text-gray-500">{label}</span>
+      <span className="text-xs font-semibold text-ink-muted">{label}</span>
       <div className="mt-1 flex flex-wrap gap-1">
         {items.map((item, i) => (
-          <Badge key={i} bg={bg} text={text} label={item} />
+          <Badge key={i} tone={tone} size="sm">
+            {item}
+          </Badge>
         ))}
       </div>
     </div>
@@ -654,7 +654,7 @@ const TagList: React.FC<{
 };
 
 const Empty: React.FC<{ text: string }> = ({ text }) => (
-  <p className="text-xs text-gray-400 italic">{text}</p>
+  <p className="text-xs italic text-ink-faint">{text}</p>
 );
 
 export default MapDetailPanel;

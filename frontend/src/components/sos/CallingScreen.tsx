@@ -3,6 +3,8 @@
  */
 
 import { useEffect } from "react";
+import { PhoneCall } from "lucide-react";
+import { Button } from "../ui";
 
 // Emergency operator number (placeholder)
 const EMERGENCY_NUMBER = "0599837967";
@@ -30,26 +32,21 @@ export function CallingScreen({ onEndCall }: CallingScreenProps) {
   }, [onEndCall]);
 
   return (
-    <div className="min-h-full bg-gray-900 flex flex-col items-center justify-center p-4">
-      <div className="relative mb-8">
-        <div className="w-24 h-24 bg-green-500 rounded-full flex items-center justify-center animate-pulse">
-          <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M6.62 10.79c1.44 2.83 3.76 5.15 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
-          </svg>
+    <div className="flex min-h-full flex-col items-center justify-center p-4">
+      <div className="relative mb-8" aria-hidden="true">
+        <div className="flex h-24 w-24 animate-pulse items-center justify-center rounded-full bg-success text-white shadow-2">
+          <PhoneCall className="h-12 w-12" />
         </div>
-        <div className="absolute inset-0 w-24 h-24 rounded-full border-4 border-green-500/50 animate-ping" />
+        <div className="absolute inset-0 h-24 w-24 animate-ping rounded-full border-4 border-success/50" />
       </div>
 
-      <h2 className="text-2xl font-bold text-white mb-2">Calling...</h2>
-      <p className="text-green-400 text-lg mb-2">Emergency Operator</p>
-      <p className="text-gray-400 text-lg font-mono mb-8">{EMERGENCY_NUMBER}</p>
+      <h2 className="mb-2 text-2xl font-bold text-ink">Calling...</h2>
+      <p className="mb-2 text-lg font-semibold text-success">Emergency Operator</p>
+      <p className="mb-8 font-mono text-lg text-ink-muted" dir="ltr">{EMERGENCY_NUMBER}</p>
 
-      <button
-        onClick={onEndCall}
-        className="px-6 py-3 bg-gray-700 text-white rounded-xl font-medium hover:bg-gray-600 transition-colors"
-      >
+      <Button variant="secondary" size="lg" onClick={onEndCall}>
         Back to Chat
-      </button>
+      </Button>
     </div>
   );
 }

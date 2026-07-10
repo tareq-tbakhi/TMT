@@ -1,8 +1,17 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+/** Resolve a CSS custom property at runtime (Leaflet SVG attrs can't take var()). */
+function cssVar(name: string, fallback: string): string {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return fallback;
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+  return value || fallback;
+}
 
 // Custom marker icons by type
 const createIcon = (color: string) =>
@@ -13,29 +22,57 @@ const createIcon = (color: string) =>
     iconAnchor: [8, 8],
   });
 
-const SEVERITY_COLORS: Record<number, string> = {
-  1: '#3b82f6', // blue
-  2: '#eab308', // yellow
-  3: '#f97316', // orange
-  4: '#ef4444', // red
-  5: '#7f1d1d', // dark red
-};
+/** Numeric severity (1–5) → severity token. */
+function severityColor(severity: number): string | undefined {
+  switch (severity) {
+    case 1:
+      return cssVar('--t-sev-low', '#1d4ed8');
+    case 2:
+      return cssVar('--t-sev-medium', '#855c00');
+    case 3:
+      return cssVar('--t-sev-high', '#b03a06');
+    case 4:
+      return cssVar('--t-sev-critical', '#c11f2f');
+    case 5:
+      return cssVar('--t-sev-critical', '#7f1d1d');
+    default:
+      return undefined;
+  }
+}
 
-const HOSPITAL_STATUS_COLORS: Record<string, string> = {
-  operational: '#22c55e',
-  limited: '#eab308',
-  full: '#ef4444',
-  destroyed: '#1f2937',
-};
+function hospitalStatusColor(status: string | undefined): string | undefined {
+  switch (status) {
+    case 'operational':
+      return cssVar('--t-success', '#157138');
+    case 'limited':
+      return cssVar('--t-warning', '#92400e');
+    case 'full':
+      return cssVar('--t-danger', '#c11f2f');
+    case 'destroyed':
+      return cssVar('--t-ink', '#1f2937');
+    default:
+      return undefined;
+  }
+}
 
-const LAYER_COLORS: Record<string, string> = {
-  sos: '#ef4444',
-  crisis: '#f97316',
-  hospital: '#22c55e',
-  sms_activity: '#a855f7',
-  patient_density: '#3b82f6',
-  telegram_intel: '#06b6d4',
-};
+function layerColor(layer: string): string | undefined {
+  switch (layer) {
+    case 'sos':
+      return cssVar('--t-sev-critical', '#c11f2f');
+    case 'crisis':
+      return cssVar('--t-sev-high', '#b03a06');
+    case 'hospital':
+      return cssVar('--t-success', '#157138');
+    case 'sms_activity':
+      return cssVar('--t-accent', '#2050c8');
+    case 'patient_density':
+      return cssVar('--t-link', '#1d4ed8');
+    case 'telegram_intel':
+      return cssVar('--t-info', '#1d4ed8');
+    default:
+      return undefined;
+  }
+}
 
 interface MapEvent {
   id: string;
@@ -100,8 +137,11 @@ const LiveMapView: React.FC<LiveMapViewProps> = ({
       {filteredEvents.map((event) => {
         const color =
           event.layer === 'hospital'
-            ? HOSPITAL_STATUS_COLORS[event.metadata?.status as string] || '#22c55e'
-            : SEVERITY_COLORS[event.severity] || LAYER_COLORS[event.layer] || '#6b7280';
+            ? hospitalStatusColor(event.metadata?.status as string) ||
+              cssVar('--t-success', '#157138')
+            : severityColor(event.severity) ||
+              layerColor(event.layer) ||
+              cssVar('--t-ink-faint', '#64748b');
 
         return (
           <React.Fragment key={event.id}>
@@ -114,13 +154,13 @@ const LiveMapView: React.FC<LiveMapViewProps> = ({
             >
               <Popup>
                 <div className="text-sm">
-                  <div className="font-bold">{event.title || event.event_type}</div>
-                  <div className="text-gray-600">{event.details}</div>
-                  <div className="mt-1 text-xs text-gray-400">
+                  <div className="font-bold text-ink">{event.title || event.event_type}</div>
+                  <div className="text-ink-muted">{event.details}</div>
+                  <div className="mt-1 text-xs text-ink-faint">
                     {event.source} | Severity: {event.severity}
                   </div>
                   {event.created_at && (
-                    <div className="text-xs text-gray-400">
+                    <div className="text-xs text-ink-faint">
                       {new Date(event.created_at).toLocaleString()}
                     </div>
                   )}

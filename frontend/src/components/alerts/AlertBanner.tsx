@@ -1,4 +1,5 @@
 import React from 'react';
+import { CircleAlert, Info, OctagonAlert, TriangleAlert, X, type LucideIcon } from 'lucide-react';
 
 interface AlertBannerProps {
   severity: 'critical' | 'high' | 'medium' | 'low';
@@ -8,66 +9,60 @@ interface AlertBannerProps {
   onView?: () => void;
 }
 
-const SEVERITY_STYLES: Record<string, { bg: string; border: string; text: string; icon: string }> = {
+const SEVERITY_STYLES: Record<string, { container: string; icon: LucideIcon }> = {
   critical: {
-    bg: 'bg-red-50',
-    border: 'border-red-500',
-    text: 'text-red-800',
-    icon: '!!',
+    container: 'border-sev-critical bg-sev-critical-soft text-on-sev-critical-soft',
+    icon: OctagonAlert,
   },
   high: {
-    bg: 'bg-orange-50',
-    border: 'border-orange-500',
-    text: 'text-orange-800',
-    icon: '!',
+    container: 'border-sev-high bg-sev-high-soft text-on-sev-high-soft',
+    icon: TriangleAlert,
   },
   medium: {
-    bg: 'bg-yellow-50',
-    border: 'border-yellow-500',
-    text: 'text-yellow-800',
-    icon: '!',
+    container: 'border-sev-medium bg-sev-medium-soft text-on-sev-medium-soft',
+    icon: CircleAlert,
   },
   low: {
-    bg: 'bg-blue-50',
-    border: 'border-blue-500',
-    text: 'text-blue-800',
-    icon: 'i',
+    container: 'border-sev-low bg-sev-low-soft text-on-sev-low-soft',
+    icon: Info,
   },
 };
 
 const AlertBanner: React.FC<AlertBannerProps> = ({ severity, title, message, onDismiss, onView }) => {
   const style = SEVERITY_STYLES[severity] || SEVERITY_STYLES.low;
+  const Icon = style.icon;
 
   return (
-    <div className={`${style.bg} ${style.border} border-s-4 p-4 rounded-e-lg mb-3`} role="alert">
-      <div className="flex items-start justify-between">
+    <div
+      className={`${style.container} mb-3 rounded-e-lg border-s-4 p-4 shadow-1`}
+      role="alert"
+    >
+      <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div
-            className={`${style.text} flex h-6 w-6 items-center justify-center rounded-full bg-current/10 text-xs font-bold shrink-0 mt-0.5`}
-          >
-            {style.icon}
-          </div>
+          <Icon aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0" />
           <div>
-            <h4 className={`${style.text} font-semibold text-sm`}>{title}</h4>
-            <p className={`${style.text} text-sm mt-0.5 opacity-80`}>{message}</p>
+            <h4 className="text-sm font-bold">{title}</h4>
+            <p className="mt-0.5 text-sm opacity-90">{message}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex shrink-0 items-center gap-1">
           {onView && (
             <button
+              type="button"
               onClick={onView}
-              className={`${style.text} text-xs font-medium underline hover:no-underline`}
+              className="min-h-11 rounded-md px-3 text-sm font-semibold underline underline-offset-2 hover:no-underline focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
             >
               View
             </button>
           )}
           {onDismiss && (
             <button
+              type="button"
               onClick={onDismiss}
-              className={`${style.text} text-lg leading-none hover:opacity-70`}
               aria-label="Dismiss"
+              className="flex h-11 w-11 items-center justify-center rounded-md hover:opacity-70 focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
             >
-              ×
+              <X aria-hidden="true" className="h-4 w-4" />
             </button>
           )}
         </div>

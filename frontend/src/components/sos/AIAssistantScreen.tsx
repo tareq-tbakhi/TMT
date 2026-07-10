@@ -3,12 +3,17 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import { Bot, Camera, Mic, PhoneCall, Square } from "lucide-react";
 import { useAIAssistantStore } from "../../store/aiAssistantStore";
+import { useAuthStore } from "../../store/authStore";
 import { useVoiceInput } from "../../hooks/useVoiceInput";
 import { useConversationTimer } from "../../hooks/useConversationTimer";
-import { AI_CONVERSATION_FLOW, URGENCY_KEYWORDS, AI_RESPONSES } from "../../config/conversationFlow";
+import { AI_CONVERSATION_FLOW, URGENCY_KEYWORDS } from "../../config/conversationFlow";
 import { SOS_CONFIG } from "../../config/sosConfig";
+import { getPatientSOS } from "../../services/api";
 import type { ConversationMessage, TriageData, QuickOption } from "../../types/sosTypes";
+import { Button } from "../ui";
 
 import { ConversationArea } from "./ConversationArea";
 import { QuickResponses } from "./QuickResponses";
@@ -17,12 +22,39 @@ import { UrgentCallButton } from "./UrgentCallButton";
 import { TimeoutOverlay } from "./TimeoutOverlay";
 import { CameraCapture } from "./CameraCapture";
 
+// Statuses for which the triage conversation may still attach to an SOS
+const OPEN_SOS_STATUSES = ["pending", "acknowledged", "dispatched"];
+const MAX_SOS_AGE_MS = 30 * 60 * 1000; // never bind the chat to a stale SOS
+
+/**
+ * Resolve the active SOS id for the current patient when it wasn't passed
+ * as a prop (the SOS is created on button press, before this screen opens).
+ * Returns null when offline or nothing recent is found — the conversation
+ * then simply runs in the local scripted mode.
+ */
+async function resolveActiveSosId(): Promise<string | null> {
+  try {
+    const patientId = useAuthStore.getState().user?.patientId;
+    if (!patientId) return null;
+    const history = await getPatientSOS(patientId); // ordered newest-first
+    const recent = history.find((s) => OPEN_SOS_STATUSES.includes(s.status));
+    if (!recent) return null;
+    const ageMs = Date.now() - new Date(recent.created_at).getTime();
+    if (!Number.isFinite(ageMs) || ageMs > MAX_SOS_AGE_MS) return null;
+    return recent.id;
+  } catch {
+    return null;
+  }
+}
+
 interface AIAssistantScreenProps {
   onSendSOS: (triageData: TriageData) => void;
   onUrgentCall: () => void;
   onCancel: () => void;
   latitude: number | null;
   longitude: number | null;
+  /** Active SOS id — enables the server-driven (LLM) conversation mode. */
+  sosId?: string | null;
 }
 
 export function AIAssistantScreen({
@@ -31,8 +63,10 @@ export function AIAssistantScreen({
   onCancel,
   latitude,
   longitude,
+  sosId = null,
 }: AIAssistantScreenProps) {
   const store = useAIAssistantStore();
+  const { t } = useTranslation();
 
   // Local state
   const [showCamera, setShowCamera] = useState(false);
@@ -43,12 +77,29 @@ export function AIAssistantScreen({
   // Track if we've started the conversation
   const hasStartedRef = useRef(false);
 
+  // Set the instant an urgent send/auto-send fires — a late LLM reply must
+  // never resume the conversation after that point.
+  const sendFiredRef = useRef(false);
+
+  // Guards async continuations after unmount (e.g. user cancelled)
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   // Get current question
   const currentQuestion = AI_CONVERSATION_FLOW[store.currentQuestionIndex];
   const maxQuestions = AI_CONVERSATION_FLOW.length;
 
   // Check if user has started chatting (sent at least one message)
   const hasUserStartedChatting = store.messages.some((msg) => msg.role === "user");
+
+  // Quick replies: server-suggested in LLM mode, scripted options offline
+  const activeQuickOptions: QuickOption[] =
+    store.mode === "llm" ? store.serverQuickReplies : currentQuestion?.options ?? [];
 
   // Voice input hook
   const { voiceState, isSupported, startListening, stopListening, resetTranscript } = useVoiceInput({
@@ -131,10 +182,21 @@ export function AIAssistantScreen({
     if (hasStartedRef.current) return;
     hasStartedRef.current = true;
 
-    // Show first question immediately (no greeting)
+    // Show first question immediately (no greeting). The scripted opener is
+    // always instant — if the backend LLM is available it takes over from
+    // the next turn, so a slow network can never delay the conversation.
     if (currentQuestion) {
       addAIMessage(currentQuestion.question, currentQuestion.id, currentQuestion.options);
     }
+
+    // Handshake with the backend conversation (fire-and-forget). On any
+    // failure the store stays in "scripted" mode and the local flow runs.
+    void (async () => {
+      const activeSosId = sosId ?? (await resolveActiveSosId());
+      if (activeSosId && mountedRef.current && !sendFiredRef.current) {
+        void useAIAssistantStore.getState().startConversation(activeSosId);
+      }
+    })();
   }, []);
 
   // Check for urgency keywords
@@ -152,11 +214,12 @@ export function AIAssistantScreen({
     // Add user message
     addUserMessage(text, currentQuestion?.id, selectedOption, imageUrl);
 
-    // Check for urgency keywords
+    // Check for urgency keywords — this always short-circuits locally,
+    // no LLM round-trip can ever delay an urgent send.
     if (containsUrgencyKeyword(text)) {
       setIsProcessing(true);
       setTimeout(() => {
-        addAIMessage(AI_RESPONSES.sendingNow);
+        addAIMessage(t("sos.ai.sendingNow"));
         setTimeout(() => {
           handleSendSOS();
         }, 500);
@@ -164,23 +227,36 @@ export function AIAssistantScreen({
       return;
     }
 
-    // Update triage data based on current question
+    // LLM mode: the backend generates the next question, quick replies and
+    // structured triage extraction. Falls back to the scripted flow inside
+    // handleLLMTurn if the server is unreachable or degraded.
+    if (useAIAssistantStore.getState().mode === "llm") {
+      setIsProcessing(true);
+      void handleLLMTurn(text);
+      return;
+    }
+
+    // Scripted (offline) mode — the original hardcoded flow
     if (currentQuestion) {
       updateTriageData(currentQuestion.id, selectedOption || text);
     }
+    advanceScriptedFlow();
+  }, [currentQuestion, resetResponseTimer, resetTranscript, addUserMessage, addAIMessage, t]);
 
-    // Move to next question
+  // Advance the hardcoded question flow (offline path — always available)
+  function advanceScriptedFlow() {
     setIsProcessing(true);
     setTimeout(() => {
       // Acknowledgment
-      addAIMessage(AI_RESPONSES.understood);
+      addAIMessage(t("sos.ai.understood"));
 
       setTimeout(() => {
-        const nextIndex = store.currentQuestionIndex + 1;
+        if (sendFiredRef.current || !mountedRef.current) return;
+        const nextIndex = useAIAssistantStore.getState().currentQuestionIndex + 1;
 
         // Check if we should end (max questions reached or all questions answered)
         if (nextIndex >= maxQuestions || nextIndex >= AI_CONVERSATION_FLOW.length) {
-          addAIMessage(AI_RESPONSES.sendingNow);
+          addAIMessage(t("sos.ai.sendingNow"));
           setTimeout(() => {
             handleSendSOS();
           }, 500);
@@ -195,7 +271,51 @@ export function AIAssistantScreen({
         setIsProcessing(false);
       }, 800);
     }, 300);
-  }, [currentQuestion, store.currentQuestionIndex, maxQuestions, resetResponseTimer, resetTranscript, addUserMessage, addAIMessage]);
+  }
+
+  // One server-driven conversation turn. The unresponsive/auto-send timers
+  // keep running while we await the LLM; the pending call is abandoned the
+  // moment an urgent send fires.
+  async function handleLLMTurn(text: string) {
+    const turn = await useAIAssistantStore.getState().sendMessageToAI(text);
+
+    // Urgent auto-send fired (or screen unmounted) while awaiting the LLM —
+    // never resume the conversation past that point.
+    if (sendFiredRef.current || !mountedRef.current) return;
+
+    if (!turn) {
+      // If the store still reports "llm", this call was merely superseded by
+      // a newer message (e.g. rapid voice input) — the newer turn drives.
+      if (useAIAssistantStore.getState().mode === "llm") return;
+      // Genuine failure (timeout/offline/degraded): continue seamlessly with
+      // the offline scripted flow from the current position.
+      advanceScriptedFlow();
+      return;
+    }
+
+    // Hard cap: never let the conversation run past MAX_QUESTIONS answers
+    const answeredCount = useAIAssistantStore
+      .getState()
+      .messages.filter((m) => m.role === "user").length;
+    const forceComplete = answeredCount >= SOS_CONFIG.MAX_QUESTIONS;
+
+    if (turn.urgencyDetected || turn.conversationComplete || forceComplete) {
+      addAIMessage(turn.reply?.content || t("sos.ai.sendingNow"));
+      setTimeout(() => {
+        handleSendSOS();
+      }, 600);
+      return;
+    }
+
+    if (turn.reply) {
+      addAIMessage(turn.reply.content, undefined, turn.reply.quickReplies);
+      // Keep the scripted index roughly in step so a mid-conversation
+      // fallback resumes from a sensible position, and low-battery/urgency
+      // partial submissions behave the same in both modes.
+      store.nextQuestion();
+    }
+    setIsProcessing(false);
+  }
 
   // Update triage data
   const updateTriageData = (questionId: string, value: string) => {
@@ -258,6 +378,9 @@ export function AIAssistantScreen({
 
   // Handle auto-send (timeout) - User unresponsive = URGENT, auto-call operator
   function handleAutoSend() {
+    sendFiredRef.current = true;
+    // Abandon any in-flight LLM call — it must never delay the urgent path
+    useAIAssistantStore.getState().abandonPendingLLM();
     setShowTimeoutOverlay(false);
     stopListening();
     // User didn't respond - this is urgent! Auto-trigger the call
@@ -266,9 +389,12 @@ export function AIAssistantScreen({
 
   // Handle send SOS
   const handleSendSOS = () => {
+    sendFiredRef.current = true;
+    useAIAssistantStore.getState().abandonPendingLLM();
     store.setState("sending");
     stopListening();
-    onSendSOS(store.triageData);
+    // Read the freshest triage data (LLM extraction may have just landed)
+    onSendSOS(useAIAssistantStore.getState().triageData);
   };
 
   // Handle timeout tap (user is still there)
@@ -279,104 +405,106 @@ export function AIAssistantScreen({
 
 
   return (
-    <div className="min-h-full bg-gray-50 flex flex-col">
+    <div className="flex min-h-full flex-col">
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-4 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-200">
-              <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-3 12H7v-2h10v2zm0-3H7V9h10v2zm0-3H7V6h10v2z"/>
-              </svg>
-            </div>
-            <div>
-              <h1 className="font-bold text-gray-900 text-lg">AI Assistant</h1>
-            </div>
+      <header className="border-b border-edge bg-surface px-4 py-3">
+        <div className="mx-auto flex max-w-lg items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-accent text-on-accent shadow-1"
+            >
+              <Bot className="h-6 w-6" />
+            </span>
+            <h2 className="truncate text-lg font-bold text-ink">AI Assistant</h2>
           </div>
 
           {/* Urgent Call Icon Button - only shows after user starts chatting */}
           {hasUserStartedChatting && (
             <button
+              type="button"
               onClick={onUrgentCall}
-              className="flex items-center gap-2 bg-gradient-to-br from-red-500 to-red-600 rounded-xl px-3 py-2 shadow-lg shadow-red-200 hover:from-red-600 hover:to-red-700 active:scale-95 transition-all"
               aria-label="Urgent call to operator - 101"
+              className="flex min-h-12 shrink-0 items-center gap-2 rounded-lg bg-sos px-3 py-2 text-on-sos shadow-2 transition-all hover:bg-sos-hover focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 active:scale-95"
             >
-              <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M6.62 10.79c1.44 2.83 3.76 5.15 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
-                </svg>
-              </div>
-              <span className="text-white font-bold text-lg pr-1">101</span>
+              <span
+                aria-hidden="true"
+                className="flex h-9 w-9 items-center justify-center rounded-md bg-on-sos/20"
+              >
+                <PhoneCall className="h-5 w-5" />
+              </span>
+              <span className="pe-1 text-lg font-bold">101</span>
             </button>
           )}
         </div>
-      </div>
+      </header>
 
-      {/* Conversation Area */}
-      <ConversationArea messages={store.messages} isTyping={isProcessing} />
+      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col">
+        {/* Conversation Area */}
+        <ConversationArea messages={store.messages} isTyping={isProcessing} />
 
-      {/* Quick Responses */}
-      {currentQuestion && currentQuestion.options.length > 0 && !isProcessing && (
-        <QuickResponses
-          options={currentQuestion.options}
-          onSelect={handleQuickSelect}
-          disabled={isProcessing}
-        />
-      )}
-
-      {/* Text Input — always visible so user can free-write at any time */}
-      <TextInput onSend={handleTextSend} onTyping={handleTypingActivity} disabled={isProcessing} placeholder="Describe what's happening..." />
-
-      {/* Voice & Camera Toggle Bar */}
-      <div className="flex items-center justify-center gap-3 py-3 px-4 bg-gray-50">
-        <button
-          onClick={() => {
-            if (voiceState.isListening) {
-              stopListening();
-            } else {
-              startListening();
-              handleTypingActivity(); // reset timer when starting voice
-            }
-          }}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 transition-all ${
-            voiceState.isListening
-              ? "bg-red-50 border-red-300 text-red-700 animate-pulse"
-              : "bg-white border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600"
-          }`}
-          aria-label={voiceState.isListening ? "Stop recording" : "Start voice input"}
-        >
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1 1.93c-3.94-.49-7-3.85-7-7.93h2c0 3.31 2.69 6 6 6s6-2.69 6-6h2c0 4.08-3.06 7.44-7 7.93V22h-2v-6.07z" />
-          </svg>
-          <span className="text-sm font-medium">{voiceState.isListening ? "Stop" : "Voice"}</span>
-        </button>
-
-        <button
-          onClick={() => setShowCamera(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-white rounded-xl border-2 border-gray-200 text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all"
-          aria-label="Attach photo"
-        >
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
-            <path fillRule="evenodd" d="M1.5 7.125c0-1.036.84-1.875 1.875-1.875h3.5l1.5-2h7.25l1.5 2h3.5c1.035 0 1.875.84 1.875 1.875v10.5c0 1.036-.84 1.875-1.875 1.875H3.375a1.875 1.875 0 01-1.875-1.875v-10.5zM12 16.5a4.5 4.5 0 100-9 4.5 4.5 0 000 9z" clipRule="evenodd" />
-          </svg>
-          <span className="text-sm font-medium">Photo</span>
-        </button>
-      </div>
-
-      {/* Bottom Actions */}
-      <div className="bg-white border-t border-gray-100 px-4 py-4 space-y-3">
-        {/* Urgent Call Button - shows at bottom before user starts chatting */}
-        {!hasUserStartedChatting && (
-          <UrgentCallButton onPress={onUrgentCall} />
+        {/* Quick Responses */}
+        {activeQuickOptions.length > 0 && !isProcessing && (
+          <QuickResponses
+            options={activeQuickOptions}
+            onSelect={handleQuickSelect}
+            disabled={isProcessing}
+          />
         )}
 
-        <button
-          onClick={onCancel}
-          className="w-full py-3 bg-gray-100 text-gray-600 font-medium rounded-xl hover:bg-gray-200 hover:text-gray-700 transition-colors"
-        >
-          Cancel SOS
-        </button>
+        {/* Text Input — always visible so user can free-write at any time */}
+        <TextInput onSend={handleTextSend} onTyping={handleTypingActivity} disabled={isProcessing} placeholder="Describe what's happening..." />
+
+        {/* Voice & Camera Toggle Bar */}
+        <div className="flex items-center justify-center gap-3 px-4 py-3">
+          <button
+            type="button"
+            onClick={() => {
+              if (voiceState.isListening) {
+                stopListening();
+              } else {
+                startListening();
+                handleTypingActivity(); // reset timer when starting voice
+              }
+            }}
+            aria-label={voiceState.isListening ? "Stop recording" : "Start voice input"}
+            aria-pressed={voiceState.isListening}
+            className={`flex min-h-12 items-center gap-2 rounded-lg border-2 px-4 py-2.5 transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
+              voiceState.isListening
+                ? "animate-pulse border-danger bg-danger text-white"
+                : "border-edge-strong bg-surface text-ink hover:border-accent hover:bg-accent-soft hover:text-on-accent-soft"
+            }`}
+          >
+            {voiceState.isListening ? (
+              <Square aria-hidden="true" className="h-5 w-5 fill-current" />
+            ) : (
+              <Mic aria-hidden="true" className="h-5 w-5" />
+            )}
+            <span className="text-base font-semibold">{voiceState.isListening ? "Stop" : "Voice"}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowCamera(true)}
+            aria-label="Attach photo"
+            className="flex min-h-12 items-center gap-2 rounded-lg border-2 border-edge-strong bg-surface px-4 py-2.5 text-ink transition-colors hover:border-accent hover:bg-accent-soft hover:text-on-accent-soft focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
+          >
+            <Camera aria-hidden="true" className="h-5 w-5" />
+            <span className="text-base font-semibold">Photo</span>
+          </button>
+        </div>
+
+        {/* Bottom Actions */}
+        <div className="flex flex-col gap-3 border-t border-edge bg-surface px-4 py-4">
+          {/* Urgent Call Button - shows at bottom before user starts chatting */}
+          {!hasUserStartedChatting && (
+            <UrgentCallButton onPress={onUrgentCall} />
+          )}
+
+          <Button variant="secondary" size="lg" fullWidth onClick={onCancel}>
+            Cancel SOS
+          </Button>
+        </div>
       </div>
 
       {/* Timeout Overlay */}

@@ -3,6 +3,8 @@
  */
 
 import { useRef } from "react";
+import { Camera } from "lucide-react";
+import { Button } from "../ui";
 
 interface CameraCaptureProps {
   onCapture: (imageDataUrl: string) => void;
@@ -30,12 +32,17 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl p-6 max-w-sm w-full">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="camera-capture-title"
+        className="w-full max-w-sm rounded-xl border border-edge bg-surface p-6 shadow-3"
+      >
+        <h3 id="camera-capture-title" className="mb-2 text-lg font-bold text-ink">
           Attach Photo
         </h3>
-        <p className="text-sm text-gray-500 mb-6">
+        <p className="mb-6 text-base text-ink-muted">
           Take a photo or select from your gallery to help describe your situation.
         </p>
 
@@ -48,30 +55,16 @@ export function CameraCapture({ onCapture, onClose }: CameraCaptureProps) {
           className="hidden"
         />
 
-        <div className="space-y-3">
+        <div className="flex flex-col gap-3">
           {/* Camera button */}
-          <button
-            onClick={handleCameraClick}
-            className="w-full flex items-center justify-center gap-3 px-4 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 15a3 3 0 100-6 3 3 0 000 6z" />
-              <path
-                fillRule="evenodd"
-                d="M1.5 7.125c0-1.036.84-1.875 1.875-1.875h3.5l1.5-2h7.25l1.5 2h3.5c1.035 0 1.875.84 1.875 1.875v10.5c0 1.036-.84 1.875-1.875 1.875H3.375a1.875 1.875 0 01-1.875-1.875v-10.5zM12 16.5a4.5 4.5 0 100-9 4.5 4.5 0 000 9z"
-                clipRule="evenodd"
-              />
-            </svg>
+          <Button size="lg" fullWidth icon={<Camera />} onClick={handleCameraClick}>
             Take Photo
-          </button>
+          </Button>
 
           {/* Cancel button */}
-          <button
-            onClick={onClose}
-            className="w-full px-4 py-3 text-gray-600 font-medium hover:bg-gray-50 rounded-xl transition-colors"
-          >
+          <Button variant="secondary" size="lg" fullWidth onClick={onClose}>
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
     </div>

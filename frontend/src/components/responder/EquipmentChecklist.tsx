@@ -1,9 +1,14 @@
 /**
- * EquipmentChecklist - Shows required equipment with checkboxes
- * Used by Civil Defense and Firefighter views
+ * EquipmentChecklist - Shows required equipment with large check rows
+ * Used by Civil Defense and Firefighter views.
+ * Checked state = icon + strikethrough + color (never color alone),
+ * rows are >=56px buttons with aria-pressed, progress exposed as a
+ * progressbar for screen readers.
  */
 
 import { useState } from "react";
+import { Check, CircleCheck, ListChecks } from "lucide-react";
+import { Badge } from "../ui";
 
 interface EquipmentChecklistProps {
   equipment: string[];
@@ -34,85 +39,92 @@ export default function EquipmentChecklist({
   if (!equipment || equipment.length === 0) return null;
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+    <div className="overflow-hidden rounded-lg border border-edge bg-surface shadow-1">
       {/* Header */}
-      <div className="bg-purple-50 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center">
-            <svg className="w-4 h-4 text-purple-600" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
-            </svg>
-          </div>
-          <span className="font-bold text-purple-800">{title}</span>
+      <div className="flex items-center justify-between gap-2 bg-accent-soft px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span
+            aria-hidden="true"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-surface text-on-accent-soft"
+          >
+            <ListChecks className="h-5 w-5" />
+          </span>
+          <span className="truncate text-base font-bold text-on-accent-soft">{title}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-purple-600 font-medium">
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="text-sm font-bold text-on-accent-soft">
             {checked.size}/{equipment.length}
           </span>
           {allChecked && (
-            <span className="bg-green-100 text-green-700 text-xs font-bold px-2 py-0.5 rounded-full">
+            <Badge tone="success" solid size="sm" icon={<Check />}>
               Ready
-            </span>
+            </Badge>
           )}
         </div>
       </div>
 
       {/* Progress Bar */}
-      <div className="h-1 bg-gray-100">
+      <div
+        role="progressbar"
+        aria-label="Equipment readiness"
+        aria-valuemin={0}
+        aria-valuemax={equipment.length}
+        aria-valuenow={checked.size}
+        className="h-1.5 bg-surface-3"
+      >
         <div
-          className={`h-full transition-all duration-300 ${allChecked ? "bg-green-500" : "bg-purple-500"}`}
+          className={`h-full transition-all duration-300 ${allChecked ? "bg-success" : "bg-accent"}`}
           style={{ width: `${progress}%` }}
         />
       </div>
 
       {/* Equipment List */}
-      <div className="p-2">
-        {equipment.map((item, index) => (
-          <button
-            key={index}
-            onClick={() => toggleItem(index)}
-            className={`w-full flex items-center gap-3 p-3 rounded-xl transition-colors text-left ${
-              checked.has(index)
-                ? "bg-green-50"
-                : "hover:bg-gray-50 active:bg-gray-100"
-            }`}
-          >
-            {/* Checkbox */}
-            <div
-              className={`w-7 h-7 rounded-lg border-2 flex items-center justify-center shrink-0 transition-colors ${
-                checked.has(index)
-                  ? "bg-green-500 border-green-500"
-                  : "border-gray-300"
-              }`}
-            >
-              {checked.has(index) && (
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth="3" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              )}
-            </div>
+      <ul className="p-2">
+        {equipment.map((item, index) => {
+          const isChecked = checked.has(index);
+          return (
+            <li key={index}>
+              {/* NOTE: bg-green-50 on the checked row (plus line-through on the
+                  text span) is pinned by EquipmentChecklist.test.tsx via
+                  toHaveClass — keep hardcoded. The row stays light in every
+                  theme, so the fixed dark green text keeps AA contrast. */}
+              <button
+                type="button"
+                onClick={() => toggleItem(index)}
+                aria-pressed={isChecked}
+                className={`flex min-h-14 w-full items-center gap-3 rounded-md px-3 py-2 text-start transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
+                  isChecked ? "bg-green-50" : "hover:bg-surface-2 active:bg-surface-3"
+                }`}
+              >
+                {/* Checkbox */}
+                <span
+                  aria-hidden="true"
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md border-2 transition-colors ${
+                    isChecked ? "border-green-600 bg-green-600" : "border-edge-strong bg-surface"
+                  }`}
+                >
+                  {isChecked && <Check className="h-4 w-4 text-white" strokeWidth={3} />}
+                </span>
 
-            {/* Item Text */}
-            <span
-              className={`text-base ${
-                checked.has(index)
-                  ? "text-green-700 line-through"
-                  : "text-gray-700"
-              }`}
-            >
-              {item}
-            </span>
-          </button>
-        ))}
-      </div>
+                {/* Item Text */}
+                <span
+                  className={`text-base font-semibold ${
+                    isChecked ? "text-green-800 line-through" : "text-ink"
+                  }`}
+                >
+                  {item}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
 
       {/* All Ready Banner */}
       {allChecked && (
-        <div className="bg-green-500 text-white px-4 py-3 flex items-center justify-center gap-2">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-          <span className="font-bold">All Equipment Ready</span>
+        <div className="flex items-center justify-center gap-2 bg-success px-4 py-3 text-white">
+          <CircleCheck aria-hidden="true" className="h-5 w-5 shrink-0" />
+          <span className="text-base font-bold">All Equipment Ready</span>
         </div>
       )}
     </div>

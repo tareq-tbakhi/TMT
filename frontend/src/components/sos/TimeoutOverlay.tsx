@@ -3,6 +3,9 @@
  * If user doesn't respond, auto-triggers urgent call
  */
 
+import { PhoneCall, TriangleAlert } from "lucide-react";
+import { Button } from "../ui";
+
 interface TimeoutOverlayProps {
   secondsRemaining: number;
   onTap: () => void;
@@ -16,63 +19,55 @@ export function TimeoutOverlay({
 }: TimeoutOverlayProps) {
   return (
     <div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"
       onClick={onTap}
     >
       <div
-        className="bg-white rounded-3xl p-6 max-w-sm w-full text-center shadow-2xl"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="timeout-overlay-title"
+        aria-describedby="timeout-overlay-desc"
+        className="w-full max-w-sm rounded-xl border border-edge bg-surface p-6 text-center shadow-3"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Pulsing warning icon */}
-        <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-5 animate-pulse">
-          <svg
-            className="w-10 h-10 text-red-600"
-            fill="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-          </svg>
-        </div>
+        <span
+          aria-hidden="true"
+          className="mx-auto mb-5 flex h-20 w-20 animate-pulse items-center justify-center rounded-full bg-danger-soft text-danger"
+        >
+          <TriangleAlert className="h-10 w-10" />
+        </span>
 
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">
+        <h2 id="timeout-overlay-title" className="mb-2 text-2xl font-bold text-ink">
           Are you there?
         </h2>
 
-        <p className="text-gray-600 mb-2">
+        <p id="timeout-overlay-desc" className="mb-2 text-base text-ink-muted">
           We haven't heard from you.
         </p>
 
-        <p className="text-red-600 font-semibold mb-4">
+        <p className="mb-4 text-base font-bold text-danger">
           Auto-calling operator in:
         </p>
 
         {/* Countdown */}
-        <div className="text-5xl font-bold text-red-600 mb-6">
+        <p className="mb-6 text-5xl font-black tabular-nums text-danger" role="timer">
           {secondsRemaining}s
-        </div>
+        </p>
 
         {/* Action buttons */}
-        <div className="space-y-3">
-          <button
-            onClick={onTap}
-            className="w-full bg-blue-600 text-white font-bold py-4 px-6 rounded-xl text-lg hover:bg-blue-700 active:bg-blue-800 transition-colors"
-          >
+        <div className="flex flex-col gap-3">
+          <Button size="xl" fullWidth onClick={onTap}>
             I'M HERE - Continue
-          </button>
+          </Button>
 
-          <button
-            onClick={onCallNow}
-            className="w-full bg-gradient-to-r from-red-600 to-red-700 text-white font-bold py-4 px-6 rounded-xl flex items-center justify-center gap-2 hover:from-red-700 hover:to-red-800 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M6.62 10.79c1.44 2.83 3.76 5.15 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z" />
-            </svg>
+          <Button size="xl" fullWidth variant="sos" icon={<PhoneCall />} onClick={onCallNow}>
             Call Operator Now
-          </button>
+          </Button>
         </div>
 
         {/* Tap anywhere hint */}
-        <p className="text-xs text-gray-400 mt-4">
+        <p className="mt-4 text-sm text-ink-muted">
           Tap anywhere on screen if you can't reach the button
         </p>
       </div>

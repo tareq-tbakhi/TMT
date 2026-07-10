@@ -1,11 +1,41 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import L from "leaflet";
+import {
+  Activity,
+  BedDouble,
+  Building2,
+  CircleAlert,
+  CircleCheck,
+  History,
+  LocateFixed,
+  Package,
+  Stethoscope,
+} from "lucide-react";
 import { useAuthStore, ROLE_TO_DEPARTMENT, DEPARTMENT_LABELS, type DepartmentType } from "../../store/authStore";
 import StatusBadge from "../../components/common/StatusBadge";
+import {
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  Input,
+  LoadingState,
+  PageHeader,
+  Spinner,
+} from "../../components/ui";
 import { timeAgo } from "../../utils/formatting";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+/** Resolve a CSS custom property at runtime (Leaflet SVG attrs can't take var()). */
+function cssVar(name: string, fallback: string): string {
+  if (typeof window === "undefined") return fallback;
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+  return value || fallback;
+}
 
 type HospitalStatusValue = "operational" | "limited" | "full" | "destroyed";
 
@@ -47,10 +77,10 @@ interface StatusChange {
 }
 
 const STATUS_OPTIONS: { value: HospitalStatusValue; label: string; color: string }[] = [
-  { value: "operational", label: "Operational", color: "bg-green-500" },
-  { value: "limited", label: "Limited Capacity", color: "bg-yellow-500" },
-  { value: "full", label: "Full / No Capacity", color: "bg-red-500" },
-  { value: "destroyed", label: "Destroyed / Non-functional", color: "bg-gray-700" },
+  { value: "operational", label: "Operational", color: "bg-success" },
+  { value: "limited", label: "Limited Capacity", color: "bg-warning" },
+  { value: "full", label: "Full / No Capacity", color: "bg-danger" },
+  { value: "destroyed", label: "Destroyed / Non-functional", color: "bg-ink-faint" },
 ];
 
 const SUPPLY_LEVELS = ["high", "medium", "low", "critical"];
@@ -71,10 +101,28 @@ const SPECIALTIES = [
 ];
 
 const supplyLevelColors: Record<string, string> = {
-  high: "bg-green-500",
-  medium: "bg-yellow-500",
-  low: "bg-orange-500",
-  critical: "bg-red-500",
+  high: "bg-success",
+  medium: "bg-sev-medium",
+  low: "bg-sev-high",
+  critical: "bg-sev-critical",
+};
+
+const supplyBtnClasses = (selected: boolean, level: string): string => {
+  const base =
+    "min-h-11 flex-1 rounded-md border py-1.5 text-xs font-semibold capitalize transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2";
+  if (!selected) {
+    return `${base} border-edge bg-surface text-ink-muted hover:border-edge-strong hover:text-ink`;
+  }
+  switch (level) {
+    case "critical":
+      return `${base} border-sev-critical bg-sev-critical-soft text-on-sev-critical-soft`;
+    case "low":
+      return `${base} border-sev-high bg-sev-high-soft text-on-sev-high-soft`;
+    case "medium":
+      return `${base} border-sev-medium bg-sev-medium-soft text-on-sev-medium-soft`;
+    default:
+      return `${base} border-success bg-success-soft text-on-success-soft`;
+  }
 };
 
 /* ------------------------------------------------------------------ */
@@ -144,10 +192,11 @@ const LocationMapPicker: React.FC<LocationMapPickerProps> = ({
         circleRef.current.setLatLng([lat, lng]);
         circleRef.current.setRadius(radius * 1000);
       } else {
+        const accent = cssVar("--t-accent", "#2050c8");
         circleRef.current = L.circle([lat, lng], {
           radius: radius * 1000,
-          color: "#6366f1",
-          fillColor: "#6366f1",
+          color: accent,
+          fillColor: accent,
           fillOpacity: 0.1,
           weight: 2,
           dashArray: "6 4",
@@ -229,48 +278,42 @@ const LocationMapPicker: React.FC<LocationMapPickerProps> = ({
     <div className="space-y-2">
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-3">
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
+          className="min-h-11"
+          icon={<LocateFixed />}
+          loading={locating}
           onClick={handleUseCurrentLocation}
-          disabled={locating}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 disabled:opacity-50"
         >
-          {locating ? (
-            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" />
-          ) : (
-            <svg
-              className="h-3.5 w-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <circle cx={12} cy={12} r={3} />
-              <path d="M12 2v4m0 12v4m10-10h-4M6 12H2" />
-            </svg>
-          )}
           Use Current Location
-        </button>
+        </Button>
 
         {latitude != null && longitude != null && (
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-ink-muted" dir="ltr">
             {latitude.toFixed(4)}, {longitude.toFixed(4)}
           </span>
         )}
 
-        <div className="ml-auto flex items-center gap-2">
-          <label className="text-xs font-medium text-gray-600">
+        <div className="ms-auto flex items-center gap-2">
+          <label
+            htmlFor="coverage-radius-slider"
+            className="text-xs font-semibold text-ink-muted"
+          >
             Coverage Radius
           </label>
           <input
+            id="coverage-radius-slider"
             type="range"
             min={1}
             max={50}
             value={coverageRadius}
             onChange={(e) => onRadiusChange(parseInt(e.target.value))}
-            className="h-1.5 w-24 cursor-pointer accent-indigo-600"
+            className="h-1.5 w-24 cursor-pointer accent-accent focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
+            aria-valuetext={`${coverageRadius} kilometers`}
           />
-          <span className="w-12 text-xs font-semibold text-indigo-600">
+          <span className="w-12 text-xs font-bold text-on-accent-soft">
             {coverageRadius} km
           </span>
         </div>
@@ -279,12 +322,12 @@ const LocationMapPicker: React.FC<LocationMapPickerProps> = ({
       {/* Map */}
       <div
         ref={mapRef}
-        className="h-64 w-full rounded-lg border border-gray-300 sm:h-72"
+        className="h-64 w-full rounded-lg border border-edge-strong sm:h-72"
         style={{ zIndex: 0 }}
       />
 
       {latitude == null && (
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-ink-faint">
           Click the map or use current location to set the hospital position
         </p>
       )}
@@ -556,110 +599,104 @@ const StatusUpdate: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
-      </div>
-    );
+    return <LoadingState label={t("common.loading")} />;
   }
 
-  const inputCls =
-    "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20";
+  /** Occupancy-style progress bar shared by all departments. */
+  const capacityBar = (used: number, totalCount: number, freeRatio: number, label: string) => (
+    <div className="mt-4">
+      <div className="mb-1 flex justify-between text-xs text-ink-muted">
+        <span>{label}</span>
+        <span>{Math.round((used / totalCount) * 100)}%</span>
+      </div>
+      <div
+        role="meter"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round((used / totalCount) * 100)}
+        className="h-3 w-full overflow-hidden rounded-full bg-surface-2"
+      >
+        <div
+          className={`h-full rounded-full transition-all ${
+            freeRatio > 0.3 ? "bg-success" : freeRatio > 0.1 ? "bg-warning" : "bg-danger"
+          }`}
+          style={{ width: `${Math.min(100, (used / totalCount) * 100)}%` }}
+        />
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          {deptLabel} Status
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Update your facility's profile, operational status, and capacity
-        </p>
-      </div>
+      <PageHeader
+        icon={<Activity />}
+        title={`${deptLabel} Status`}
+        description="Update your facility's profile, operational status, and capacity"
+      />
 
       {/* Success / Error messages */}
       {(saveSuccess || profileSuccess) && (
-        <div className="rounded-lg border border-green-200 bg-green-50 p-4 text-sm text-green-700">
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-lg border border-success bg-success-soft p-4 text-sm font-semibold text-on-success-soft"
+        >
+          <CircleCheck aria-hidden="true" className="h-5 w-5 shrink-0" />
           {profileSuccess ? "Profile saved successfully!" : "Status updated successfully!"}
         </div>
       )}
       {(saveError || profileError) && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+        <div
+          role="alert"
+          className="flex items-center gap-2 rounded-lg border border-danger bg-danger-soft p-4 text-sm font-semibold text-on-danger-soft"
+        >
+          <CircleAlert aria-hidden="true" className="h-5 w-5 shrink-0" />
           {saveError || profileError}
         </div>
       )}
 
       {/* Hospital Profile Information */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-lg font-semibold text-gray-900">
-          {t("hospital.profile")}
-        </h2>
+      <Card>
+        <CardHeader icon={<Building2 />} title={t("hospital.profile")} />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Facility Name
-            </label>
-            <input
-              type="text"
-              value={hospitalName}
-              onChange={(e) => setHospitalName(e.target.value)}
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Phone
-            </label>
-            <input
-              type="tel"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+970-XXX-XXXXXXX"
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="hospital@example.com"
-              className={inputCls}
-            />
-          </div>
-          <div className="sm:col-span-2">
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Address
-            </label>
-            <input
-              type="text"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder="Street address, city, area"
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Website
-            </label>
-            <input
-              type="url"
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              placeholder="https://..."
-              className={inputCls}
-            />
-          </div>
+          <Input
+            label="Facility Name"
+            type="text"
+            value={hospitalName}
+            onChange={(e) => setHospitalName(e.target.value)}
+          />
+          <Input
+            label="Phone"
+            type="tel"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="+970-XXX-XXXXXXX"
+          />
+          <Input
+            label="Email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="hospital@example.com"
+          />
+          <Input
+            label="Address"
+            type="text"
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="Street address, city, area"
+            className="sm:col-span-2"
+          />
+          <Input
+            label="Website"
+            type="url"
+            value={website}
+            onChange={(e) => setWebsite(e.target.value)}
+            placeholder="https://..."
+          />
           {/* Location Map Picker — spans full width */}
           <div className="sm:col-span-2 lg:col-span-3">
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Location
-            </label>
+            <p className="mb-1 text-sm font-semibold text-ink">Location</p>
             <LocationMapPicker
               latitude={latitude}
               longitude={longitude}
@@ -673,199 +710,147 @@ const StatusUpdate: React.FC = () => {
           </div>
         </div>
         <div className="mt-4">
-          <button
-            onClick={handleSaveProfile}
-            disabled={profileSaving}
-            className="rounded-lg bg-indigo-600 px-5 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-indigo-700 disabled:opacity-50"
-          >
+          <Button loading={profileSaving} onClick={handleSaveProfile}>
             {profileSaving ? t("common.loading") : "Save Profile"}
-          </button>
+          </Button>
         </div>
-      </div>
+      </Card>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Main Form */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           {/* Status Selector */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">
-              Operational Status
-            </h2>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Card>
+            <CardHeader icon={<Activity />} title="Operational Status" />
+            <div
+              className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+              role="group"
+              aria-label="Operational status"
+            >
               {STATUS_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
+                  type="button"
                   onClick={() => setStatus(opt.value)}
-                  className={`flex items-center gap-3 rounded-lg border-2 p-4 text-start transition-colors ${
+                  aria-pressed={status === opt.value}
+                  className={`flex min-h-12 items-center gap-3 rounded-lg border-2 p-4 text-start transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
                     status === opt.value
-                      ? "border-blue-500 bg-blue-50"
-                      : "border-gray-200 hover:border-gray-300"
+                      ? "border-accent bg-accent-soft"
+                      : "border-edge bg-surface hover:border-edge-strong"
                   }`}
                 >
                   <span
+                    aria-hidden="true"
                     className={`h-4 w-4 shrink-0 rounded-full ${opt.color}`}
                   />
-                  <span className="text-sm font-medium text-gray-900">
+                  <span className="text-sm font-semibold text-ink">
                     {opt.label}
                   </span>
+                  {status === opt.value && (
+                    <CircleCheck
+                      aria-hidden="true"
+                      className="ms-auto h-5 w-5 shrink-0 text-on-accent-soft"
+                    />
+                  )}
                 </button>
               ))}
             </div>
-          </div>
+          </Card>
 
           {/* Department-specific capacity */}
           {dept === "hospital" && (
-            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h2 className="mb-4 text-lg font-semibold text-gray-900">
-                Bed Capacity
-              </h2>
+            <Card>
+              <CardHeader icon={<BedDouble />} title="Bed Capacity" />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Total Beds</label>
-                  <input type="number" min={0} value={totalBeds} onChange={(e) => setTotalBeds(parseInt(e.target.value) || 0)} className={inputCls} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">ICU Beds</label>
-                  <input type="number" min={0} value={icuBeds} onChange={(e) => setIcuBeds(parseInt(e.target.value) || 0)} className={inputCls} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Available Beds</label>
-                  <input type="number" min={0} max={totalBeds} value={availableBeds} onChange={(e) => setAvailableBeds(parseInt(e.target.value) || 0)} className={inputCls} />
-                </div>
+                <Input label="Total Beds" type="number" min={0} value={totalBeds} onChange={(e) => setTotalBeds(parseInt(e.target.value) || 0)} />
+                <Input label="ICU Beds" type="number" min={0} value={icuBeds} onChange={(e) => setIcuBeds(parseInt(e.target.value) || 0)} />
+                <Input label="Available Beds" type="number" min={0} max={totalBeds} value={availableBeds} onChange={(e) => setAvailableBeds(parseInt(e.target.value) || 0)} />
               </div>
-              {totalBeds > 0 && (
-                <div className="mt-4">
-                  <div className="mb-1 flex justify-between text-xs text-gray-500">
-                    <span>Occupancy</span>
-                    <span>{Math.round(((totalBeds - availableBeds) / totalBeds) * 100)}%</span>
-                  </div>
-                  <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">
-                    <div
-                      className={`h-full rounded-full transition-all ${availableBeds / totalBeds > 0.3 ? "bg-green-500" : availableBeds / totalBeds > 0.1 ? "bg-yellow-500" : "bg-red-500"}`}
-                      style={{ width: `${Math.min(100, ((totalBeds - availableBeds) / totalBeds) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+              {totalBeds > 0 &&
+                capacityBar(totalBeds - availableBeds, totalBeds, availableBeds / totalBeds, "Occupancy")}
+            </Card>
           )}
 
           {dept === "police" && (
-            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h2 className="mb-4 text-lg font-semibold text-gray-900">Patrol Units</h2>
+            <Card>
+              <CardHeader icon={<Building2 />} title="Patrol Units" />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Total Patrol Units</label>
-                  <input type="number" min={0} value={patrolUnits} onChange={(e) => setPatrolUnits(parseInt(e.target.value) || 0)} className={inputCls} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Available Units</label>
-                  <input type="number" min={0} max={patrolUnits} value={availableUnits} onChange={(e) => setAvailableUnits(parseInt(e.target.value) || 0)} className={inputCls} />
-                </div>
+                <Input label="Total Patrol Units" type="number" min={0} value={patrolUnits} onChange={(e) => setPatrolUnits(parseInt(e.target.value) || 0)} />
+                <Input label="Available Units" type="number" min={0} max={patrolUnits} value={availableUnits} onChange={(e) => setAvailableUnits(parseInt(e.target.value) || 0)} />
               </div>
-              {patrolUnits > 0 && (
-                <div className="mt-4">
-                  <div className="mb-1 flex justify-between text-xs text-gray-500">
-                    <span>Deployment</span>
-                    <span>{Math.round(((patrolUnits - availableUnits) / patrolUnits) * 100)}%</span>
-                  </div>
-                  <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">
-                    <div
-                      className={`h-full rounded-full transition-all ${availableUnits / patrolUnits > 0.3 ? "bg-green-500" : availableUnits / patrolUnits > 0.1 ? "bg-yellow-500" : "bg-red-500"}`}
-                      style={{ width: `${Math.min(100, ((patrolUnits - availableUnits) / patrolUnits) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+              {patrolUnits > 0 &&
+                capacityBar(patrolUnits - availableUnits, patrolUnits, availableUnits / patrolUnits, "Deployment")}
+            </Card>
           )}
 
           {dept === "civil_defense" && (
-            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h2 className="mb-4 text-lg font-semibold text-gray-900">Rescue Teams & Shelter</h2>
+            <Card>
+              <CardHeader icon={<Building2 />} title="Rescue Teams & Shelter" />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Total Rescue Teams</label>
-                  <input type="number" min={0} value={rescueTeams} onChange={(e) => setRescueTeams(parseInt(e.target.value) || 0)} className={inputCls} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Available Teams</label>
-                  <input type="number" min={0} max={rescueTeams} value={availableTeams} onChange={(e) => setAvailableTeams(parseInt(e.target.value) || 0)} className={inputCls} />
-                </div>
-                <div>
-                  <label className="mb-1 block text-sm font-medium text-gray-700">Shelter Capacity</label>
-                  <input type="number" min={0} value={shelterCapacity} onChange={(e) => setShelterCapacity(parseInt(e.target.value) || 0)} className={inputCls} />
-                </div>
+                <Input label="Total Rescue Teams" type="number" min={0} value={rescueTeams} onChange={(e) => setRescueTeams(parseInt(e.target.value) || 0)} />
+                <Input label="Available Teams" type="number" min={0} max={rescueTeams} value={availableTeams} onChange={(e) => setAvailableTeams(parseInt(e.target.value) || 0)} />
+                <Input label="Shelter Capacity" type="number" min={0} value={shelterCapacity} onChange={(e) => setShelterCapacity(parseInt(e.target.value) || 0)} />
               </div>
-              {rescueTeams > 0 && (
-                <div className="mt-4">
-                  <div className="mb-1 flex justify-between text-xs text-gray-500">
-                    <span>Deployment</span>
-                    <span>{Math.round(((rescueTeams - availableTeams) / rescueTeams) * 100)}%</span>
-                  </div>
-                  <div className="h-3 w-full overflow-hidden rounded-full bg-gray-100">
-                    <div
-                      className={`h-full rounded-full transition-all ${availableTeams / rescueTeams > 0.3 ? "bg-green-500" : availableTeams / rescueTeams > 0.1 ? "bg-yellow-500" : "bg-red-500"}`}
-                      style={{ width: `${Math.min(100, ((rescueTeams - availableTeams) / rescueTeams) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
+              {rescueTeams > 0 &&
+                capacityBar(rescueTeams - availableTeams, rescueTeams, availableTeams / rescueTeams, "Deployment")}
+            </Card>
           )}
 
           {/* Specialties - hospital only */}
           {dept === "hospital" && (
-            <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h2 className="mb-4 text-lg font-semibold text-gray-900">
-                Specialties
-              </h2>
-              <div className="flex flex-wrap gap-2">
+            <Card>
+              <CardHeader icon={<Stethoscope />} title="Specialties" />
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Specialties">
                 {SPECIALTIES.map((specialty) => (
                   <button
                     key={specialty}
+                    type="button"
                     onClick={() => handleSpecialtyToggle(specialty)}
-                    className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                    aria-pressed={specialties.includes(specialty)}
+                    className={`min-h-11 rounded-full border px-4 text-sm font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
                       specialties.includes(specialty)
-                        ? "border-blue-500 bg-blue-50 text-blue-700"
-                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                        ? "border-accent bg-accent-soft text-on-accent-soft"
+                        : "border-edge-strong bg-surface text-ink-muted hover:border-edge-strong hover:bg-surface-2 hover:text-ink"
                     }`}
                   >
                     {specialty}
                   </button>
                 ))}
               </div>
-            </div>
+            </Card>
           )}
 
           {/* Supply Levels — department-specific */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">
-              {dept === "hospital" ? t("hospital.supplies") : dept === "police" ? "Equipment & Supplies" : "Rescue Supplies"}
-            </h2>
+          <Card>
+            <CardHeader
+              icon={<Package />}
+              title={dept === "hospital" ? t("hospital.supplies") : dept === "police" ? "Equipment & Supplies" : "Rescue Supplies"}
+            />
             <div className="space-y-4">
               {dept === "hospital" && (
                 Object.entries(supplies) as [keyof SupplyLevels, string][]
               ).map(([key, value]) => (
-                <div key={key}>
+                <div key={key} role="group" aria-label={key.replace(/_/g, " ")}>
                   <div className="mb-2 flex items-center justify-between">
-                    <label className="text-sm font-medium text-gray-700 capitalize">
+                    <span className="text-sm font-semibold capitalize text-ink">
                       {key.replace(/_/g, " ")}
-                    </label>
-                    <span className={`inline-flex h-3 w-3 rounded-full ${supplyLevelColors[value] ?? "bg-gray-300"}`} />
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className={`inline-flex h-3 w-3 rounded-full ${supplyLevelColors[value] ?? "bg-surface-3"}`}
+                    />
                   </div>
                   <div className="flex gap-2">
                     {SUPPLY_LEVELS.map((level) => (
-                      <button key={level} onClick={() => handleSupplyChange(key, level)}
-                        className={`flex-1 rounded-md border py-1.5 text-xs font-medium capitalize transition-colors ${
-                          value === level
-                            ? level === "critical" ? "border-red-500 bg-red-50 text-red-700"
-                              : level === "low" ? "border-orange-500 bg-orange-50 text-orange-700"
-                              : level === "medium" ? "border-yellow-500 bg-yellow-50 text-yellow-700"
-                              : "border-green-500 bg-green-50 text-green-700"
-                            : "border-gray-200 text-gray-500 hover:border-gray-300"
-                        }`}
-                      >{level}</button>
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => handleSupplyChange(key, level)}
+                        aria-pressed={value === level}
+                        className={supplyBtnClasses(value === level, level)}
+                      >
+                        {level}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -873,25 +858,27 @@ const StatusUpdate: React.FC = () => {
               {dept === "police" && (
                 Object.entries(policeSupplies) as [keyof PoliceSupplyLevels, string][]
               ).map(([key, value]) => (
-                <div key={key}>
+                <div key={key} role="group" aria-label={key.replace(/_/g, " ")}>
                   <div className="mb-2 flex items-center justify-between">
-                    <label className="text-sm font-medium text-gray-700 capitalize">
+                    <span className="text-sm font-semibold capitalize text-ink">
                       {key.replace(/_/g, " ")}
-                    </label>
-                    <span className={`inline-flex h-3 w-3 rounded-full ${supplyLevelColors[value] ?? "bg-gray-300"}`} />
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className={`inline-flex h-3 w-3 rounded-full ${supplyLevelColors[value] ?? "bg-surface-3"}`}
+                    />
                   </div>
                   <div className="flex gap-2">
                     {SUPPLY_LEVELS.map((level) => (
-                      <button key={level} onClick={() => setPoliceSupplies(prev => ({ ...prev, [key]: level }))}
-                        className={`flex-1 rounded-md border py-1.5 text-xs font-medium capitalize transition-colors ${
-                          value === level
-                            ? level === "critical" ? "border-red-500 bg-red-50 text-red-700"
-                              : level === "low" ? "border-orange-500 bg-orange-50 text-orange-700"
-                              : level === "medium" ? "border-yellow-500 bg-yellow-50 text-yellow-700"
-                              : "border-green-500 bg-green-50 text-green-700"
-                            : "border-gray-200 text-gray-500 hover:border-gray-300"
-                        }`}
-                      >{level}</button>
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => setPoliceSupplies(prev => ({ ...prev, [key]: level }))}
+                        aria-pressed={value === level}
+                        className={supplyBtnClasses(value === level, level)}
+                      >
+                        {level}
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -899,63 +886,59 @@ const StatusUpdate: React.FC = () => {
               {dept === "civil_defense" && (
                 Object.entries(cdSupplies) as [keyof CivilDefenseSupplyLevels, string][]
               ).map(([key, value]) => (
-                <div key={key}>
+                <div key={key} role="group" aria-label={key.replace(/_/g, " ")}>
                   <div className="mb-2 flex items-center justify-between">
-                    <label className="text-sm font-medium text-gray-700 capitalize">
+                    <span className="text-sm font-semibold capitalize text-ink">
                       {key.replace(/_/g, " ")}
-                    </label>
-                    <span className={`inline-flex h-3 w-3 rounded-full ${supplyLevelColors[value] ?? "bg-gray-300"}`} />
+                    </span>
+                    <span
+                      aria-hidden="true"
+                      className={`inline-flex h-3 w-3 rounded-full ${supplyLevelColors[value] ?? "bg-surface-3"}`}
+                    />
                   </div>
                   <div className="flex gap-2">
                     {SUPPLY_LEVELS.map((level) => (
-                      <button key={level} onClick={() => setCdSupplies(prev => ({ ...prev, [key]: level }))}
-                        className={`flex-1 rounded-md border py-1.5 text-xs font-medium capitalize transition-colors ${
-                          value === level
-                            ? level === "critical" ? "border-red-500 bg-red-50 text-red-700"
-                              : level === "low" ? "border-orange-500 bg-orange-50 text-orange-700"
-                              : level === "medium" ? "border-yellow-500 bg-yellow-50 text-yellow-700"
-                              : "border-green-500 bg-green-50 text-green-700"
-                            : "border-gray-200 text-gray-500 hover:border-gray-300"
-                        }`}
-                      >{level}</button>
+                      <button
+                        key={level}
+                        type="button"
+                        onClick={() => setCdSupplies(prev => ({ ...prev, [key]: level }))}
+                        aria-pressed={value === level}
+                        className={supplyBtnClasses(value === level, level)}
+                      >
+                        {level}
+                      </button>
                     ))}
                   </div>
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
 
           {/* Save Button */}
           <div className="flex items-center gap-4">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:opacity-50"
-            >
+            <Button size="lg" loading={saving} onClick={handleSave}>
               {saving ? t("common.loading") : t("common.save")}
-            </button>
+            </Button>
           </div>
         </div>
 
         {/* Status History Sidebar */}
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm h-fit">
-          <h2 className="mb-4 text-lg font-semibold text-gray-900">
-            Status History
-          </h2>
+        <Card className="h-fit">
+          <CardHeader icon={<History />} title="Status History" />
           {history.length > 0 ? (
             <div className="space-y-3">
               {history.slice(0, 10).map((change) => (
                 <div
                   key={change.id}
-                  className="rounded-lg border border-gray-100 bg-gray-50 p-3"
+                  className="rounded-lg border border-edge bg-surface-2 p-3"
                 >
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-2">
                     <StatusBadge status={change.status} size="sm" />
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-ink-muted">
                       {timeAgo(change.changed_at)}
                     </span>
                   </div>
-                  <p className="mt-1 text-xs text-gray-500">
+                  <p className="mt-1 text-xs text-ink-muted">
                     {dept === "hospital" ? `Beds available: ${change.available_beds}` :
                      dept === "police" ? "Status update" :
                      "Status update"}
@@ -964,9 +947,13 @@ const StatusUpdate: React.FC = () => {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-400">No status changes recorded</p>
+            <EmptyState
+              icon={<History />}
+              title="No status changes recorded"
+              className="py-8"
+            />
           )}
-        </div>
+        </Card>
       </div>
     </div>
   );

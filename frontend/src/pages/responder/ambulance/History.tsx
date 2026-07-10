@@ -1,9 +1,43 @@
 /**
  * History - Ambulance driver's completed cases history
+ * Summary KPIs + one card per completed case with severity badge.
  */
 
+import {
+  Biohazard,
+  CarFront,
+  ClipboardList,
+  Clock,
+  Flame,
+  HeartPulse,
+  History as HistoryIcon,
+  LifeBuoy,
+  MapPin,
+  Siren,
+  TriangleAlert,
+  type LucideIcon,
+} from "lucide-react";
 import { useResponderStore } from "../../../store/responderStore";
-import { PRIORITY_COLORS, CASE_TYPE_ICONS } from "../../../types/responderTypes";
+import type { CaseType, CasePriority } from "../../../types/responderTypes";
+import { Badge, Card, EmptyState, severityTone } from "../../../components/ui";
+
+/** Case type -> lucide icon (replaces the old emoji set). */
+const CASE_TYPE_LUCIDE: Record<CaseType, LucideIcon> = {
+  medical: HeartPulse,
+  security: Siren,
+  fire: Flame,
+  rescue: LifeBuoy,
+  hazmat: Biohazard,
+  accident: CarFront,
+};
+
+/** Priority -> severity-soft token classes for the entry icon chip. */
+const SEV_SOFT: Record<CasePriority, string> = {
+  critical: "bg-sev-critical-soft text-on-sev-critical-soft",
+  high: "bg-sev-high-soft text-on-sev-high-soft",
+  medium: "bg-sev-medium-soft text-on-sev-medium-soft",
+  low: "bg-sev-low-soft text-on-sev-low-soft",
+};
 
 function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -29,97 +63,117 @@ export default function AmbulanceHistory() {
 
   if (completedCases.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
-        <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-          <svg className="w-10 h-10 text-gray-400" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </div>
-        <h3 className="text-xl font-semibold text-gray-700 mb-2">No History Yet</h3>
-        <p className="text-gray-500">Completed cases will appear here</p>
+      <div className="mx-auto max-w-lg px-4 py-8">
+        <EmptyState
+          icon={<HistoryIcon />}
+          title="No History Yet"
+          description="Completed cases will appear here"
+        />
       </div>
     );
   }
 
+  const criticalCount = completedCases.filter((c) => c.priority === "critical").length;
+  const totalTime = formatDuration(completedCases.reduce((acc, c) => acc + c.duration, 0));
+
   return (
-    <div className="p-4 pb-24">
+    <div className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-8">
       {/* Stats Summary */}
-      <div className="bg-white rounded-2xl shadow p-4 mb-4">
-        <h2 className="text-gray-500 text-sm font-medium mb-3">Today's Summary</h2>
-        <div className="grid grid-cols-3 gap-4">
-          <div className="text-center">
-            <p className="text-2xl font-bold text-gray-900">{completedCases.length}</p>
-            <p className="text-xs text-gray-500">Cases</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-red-600">
-              {completedCases.filter((c) => c.priority === "critical").length}
-            </p>
-            <p className="text-xs text-gray-500">Critical</p>
-          </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-blue-600">
-              {formatDuration(completedCases.reduce((acc, c) => acc + c.duration, 0))}
-            </p>
-            <p className="text-xs text-gray-500">Total Time</p>
-          </div>
+      <section>
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-ink-muted">
+          Today's Summary
+        </h2>
+        <div className="grid grid-cols-3 gap-3">
+          <Card flush className="flex flex-col items-center gap-1 p-3 text-center">
+            <span
+              aria-hidden="true"
+              className="flex h-8 w-8 items-center justify-center rounded-md bg-accent-soft text-on-accent-soft"
+            >
+              <ClipboardList className="h-4 w-4" />
+            </span>
+            <p className="text-2xl font-bold text-ink">{completedCases.length}</p>
+            <p className="text-xs font-semibold text-ink-muted">Cases</p>
+          </Card>
+          <Card flush className="flex flex-col items-center gap-1 p-3 text-center">
+            <span
+              aria-hidden="true"
+              className="flex h-8 w-8 items-center justify-center rounded-md bg-sev-critical-soft text-on-sev-critical-soft"
+            >
+              <TriangleAlert className="h-4 w-4" />
+            </span>
+            <p className="text-2xl font-bold text-ink">{criticalCount}</p>
+            <p className="text-xs font-semibold text-ink-muted">Critical</p>
+          </Card>
+          <Card flush className="flex flex-col items-center gap-1 p-3 text-center">
+            <span
+              aria-hidden="true"
+              className="flex h-8 w-8 items-center justify-center rounded-md bg-info-soft text-on-info-soft"
+            >
+              <Clock className="h-4 w-4" />
+            </span>
+            <p className="text-2xl font-bold text-ink">{totalTime}</p>
+            <p className="text-xs font-semibold text-ink-muted">Total Time</p>
+          </Card>
         </div>
-      </div>
+      </section>
 
       {/* History List */}
-      <h2 className="text-gray-500 text-sm font-medium mb-3">Recent Cases</h2>
-      <div className="space-y-3">
-        {completedCases.map((entry) => {
-          const priorityColors = PRIORITY_COLORS[entry.priority];
-          const icon = CASE_TYPE_ICONS[entry.type];
+      <section>
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-ink-muted">
+          Recent Cases
+        </h2>
+        <ul className="space-y-3">
+          {completedCases.map((entry) => {
+            const TypeIcon = CASE_TYPE_LUCIDE[entry.type];
 
-          return (
-            <div
-              key={entry.id}
-              className="bg-white rounded-xl p-4 shadow-sm"
-            >
-              <div className="flex items-start gap-3">
-                {/* Icon */}
-                <div className={`w-10 h-10 ${priorityColors.bg} rounded-lg flex items-center justify-center shrink-0`}>
-                  <span className="text-xl">{icon}</span>
-                </div>
+            return (
+              <li key={entry.id}>
+                <Card>
+                  <div className="flex items-start gap-3">
+                    {/* Icon */}
+                    <span
+                      aria-hidden="true"
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-md ${SEV_SOFT[entry.priority]}`}
+                    >
+                      <TypeIcon className="h-5 w-5" />
+                    </span>
 
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm text-gray-500">{entry.caseNumber}</span>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${priorityColors.bg} ${priorityColors.text}`}>
-                      {entry.priority}
+                    {/* Content */}
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <span className="truncate text-sm font-semibold text-ink-muted">
+                          {entry.caseNumber}
+                        </span>
+                        <Badge tone={severityTone(entry.priority)} size="sm">
+                          {entry.priority}
+                        </Badge>
+                      </div>
+                      <p className="line-clamp-2 text-base font-bold text-ink">
+                        {entry.briefDescription}
+                      </p>
+                      {entry.destination && (
+                        <p className="mt-1 flex items-center gap-1 text-sm text-ink-muted">
+                          <MapPin aria-hidden="true" className="h-4 w-4 shrink-0" />
+                          {entry.destination}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="mt-3 flex items-center justify-between border-t border-edge pt-3">
+                    <span className="text-sm text-ink-muted">{formatDate(entry.completedAt)}</span>
+                    <span className="flex items-center gap-1 text-sm font-semibold text-ink-muted">
+                      <Clock aria-hidden="true" className="h-4 w-4 shrink-0" />
+                      {formatDuration(entry.duration)}
                     </span>
                   </div>
-                  <p className="font-medium text-gray-900 text-sm line-clamp-2">
-                    {entry.briefDescription}
-                  </p>
-                  {entry.destination && (
-                    <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path fillRule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clipRule="evenodd" />
-                      </svg>
-                      {entry.destination}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Footer */}
-              <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-100">
-                <span className="text-xs text-gray-400">{formatDate(entry.completedAt)}</span>
-                <span className="text-xs text-gray-500 flex items-center gap-1">
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  {formatDuration(entry.duration)}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                </Card>
+              </li>
+            );
+          })}
+        </ul>
+      </section>
     </div>
   );
 }

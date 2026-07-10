@@ -1,11 +1,25 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { createSOS, updateSOSTriage, getHospitals, type Hospital } from "../../services/api";
+import {
+  Bluetooth,
+  CheckCircle2,
+  Hospital,
+  Loader2,
+  MapPin,
+  MessageSquare,
+  Navigation,
+  ShieldAlert,
+  TriangleAlert,
+  WifiOff,
+  X,
+} from "lucide-react";
+import { createSOS, updateSOSTriage, getHospitals, type Hospital as HospitalType } from "../../services/api";
 import { buildSMSBody, sendViaSMS } from "../../services/smsService";
 import { useAuthStore } from "../../store/authStore";
 import { useAIAssistantStore } from "../../store/aiAssistantStore";
 import { getCurrentPosition } from "../../utils/locationCodec";
 import { patientStatusConfig } from "../../utils/formatting";
 import type { TriageData } from "../../types/sosTypes";
+import { Badge, Button, Card, EmptyState, Skeleton } from "../../components/ui";
 
 // SOSDispatcher with fallback chain (Internet → SMS → Bluetooth Mesh)
 import { SOSDispatcher } from "../../services/sosDispatcher";
@@ -15,18 +29,6 @@ import { useConnectionStatus, useConnectionIndicator } from "../../hooks/useConn
 // AI Assistant Components
 import { AIAssistantScreen } from "../../components/sos/AIAssistantScreen";
 import { CallingScreen } from "../../components/sos/CallingScreen";
-
-// ─── Heartbeat Animation CSS ─────────────────────────────────────
-
-const heartbeatStyle = `
-@keyframes heartbeat {
-  0% { transform: scale(1); }
-  14% { transform: scale(1.08); }
-  28% { transform: scale(1); }
-  42% { transform: scale(1.08); }
-  70% { transform: scale(1); }
-}
-`;
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -118,6 +120,16 @@ function haversineKm(
   return R * c;
 }
 
+// ─── Safety tips shown after an SOS is sent ─────────────────────
+
+const SAFETY_TIPS = [
+  "Stay where you are if it is safe to do so",
+  "Keep your phone charged and nearby",
+  "If you can, move to an open area away from buildings",
+  "Signal rescuers if you hear them approaching",
+  "Conserve water and food if available",
+];
+
 // ─── Main Component ─────────────────────────────────────────────
 
 export default function SOS() {
@@ -157,7 +169,7 @@ export default function SOS() {
 
   // Nearest hospitals (top 3)
   const [nearestHospitals, setNearestHospitals] = useState<
-    (Hospital & { distance: number })[]
+    (HospitalType & { distance: number })[]
   >([]);
   const [hospitalLoading, setHospitalLoading] = useState(false);
 
@@ -269,8 +281,8 @@ export default function SOS() {
       const hospitals = await getHospitals();
       // Calculate distance and sort by nearest
       const withDistance = hospitals
-        .filter((h: Hospital) => h.latitude != null && h.longitude != null)
-        .map((h: Hospital) => {
+        .filter((h: HospitalType) => h.latitude != null && h.longitude != null)
+        .map((h: HospitalType) => {
           const R = 6371;
           const hLat = h.latitude!;
           const hLon = h.longitude!;
@@ -602,47 +614,26 @@ export default function SOS() {
 
   if (sosState === "sent" || sosState === "sms_ready") {
     return (
-      <div className="min-h-full bg-gray-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full">
+      <div className="flex min-h-full items-center justify-center px-4 py-6">
+        <div className="w-full max-w-lg">
           {/* Success Card */}
-          <div className="bg-white rounded-2xl shadow-xl p-8 text-center mb-6">
-            <div
-              className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${
-                sosState === "sent" ? "bg-orange-100" : "bg-blue-100"
+          <Card className="mb-4 p-6 text-center shadow-2 sm:p-8">
+            <span
+              aria-hidden="true"
+              className={`mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full ${
+                sosState === "sent"
+                  ? "bg-success-soft text-on-success-soft"
+                  : "bg-info-soft text-on-info-soft"
               }`}
             >
               {sosState === "sent" ? (
-                <svg
-                  className="w-10 h-10 text-orange-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
+                <CheckCircle2 className="h-10 w-10" />
               ) : (
-                <svg
-                  className="w-10 h-10 text-blue-500"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                  />
-                </svg>
+                <MessageSquare className="h-10 w-10" />
               )}
-            </div>
+            </span>
 
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">
+            <h2 className="mb-6 text-2xl font-bold text-ink">
               {sosState === "sent"
                 ? "SOS Received"
                 : "SMS Ready to Send"}
@@ -650,96 +641,43 @@ export default function SOS() {
 
             {/* SMS Send Button */}
             {sosState === "sms_ready" && smsBody && (
-              <button
+              <Button
+                size="xl"
+                fullWidth
+                icon={<MessageSquare />}
                 onClick={openSMSApp}
-                className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-blue-600 text-white rounded-xl text-lg font-bold hover:bg-blue-700 transition"
               >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                  />
-                </svg>
                 Open SMS App to Send
-              </button>
+              </Button>
             )}
-          </div>
-
-          {/* Nearest Hospital Card - Commented out */}
-          {/* {nearestHospitals[0] && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-4">
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center shrink-0">
-                  <svg
-                    className="w-5 h-5 text-green-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                    />
-                  </svg>
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-gray-900">
-                    {nearestHospitals[0].name}
-                  </h3>
-                  <p className="text-sm text-gray-500">
-                    {nearestHospitals[0].distance.toFixed(1)} km away
-                  </p>
-                  <p className="text-sm text-green-600 font-medium">
-                    {nearestHospitals[0].status === "operational"
-                      ? "Operational"
-                      : nearestHospitals[0].status}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )} */}
+          </Card>
 
           {/* Safety Instructions */}
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-4">
-            <h3 className="font-semibold text-amber-800 mb-2 flex items-center gap-2">
-              <svg
-                className="w-5 h-5"
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                  clipRule="evenodd"
-                />
-              </svg>
+          <Card className="mb-4 border-warning/30! bg-warning-soft">
+            <h3 className="mb-3 flex items-center gap-2 text-base font-bold text-on-warning-soft">
+              <ShieldAlert aria-hidden="true" className="h-5 w-5 shrink-0" />
               Stay Safe
             </h3>
-            <ul className="text-sm text-amber-700 space-y-1.5">
-              <li>Stay where you are if it is safe to do so</li>
-              <li>Keep your phone charged and nearby</li>
-              <li>If you can, move to an open area away from buildings</li>
-              <li>Signal rescuers if you hear them approaching</li>
-              <li>Conserve water and food if available</li>
+            <ul className="flex flex-col gap-2">
+              {SAFETY_TIPS.map((tip) => (
+                <li
+                  key={tip}
+                  className="flex items-start gap-2.5 text-base text-on-warning-soft"
+                >
+                  <span
+                    aria-hidden="true"
+                    className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-current"
+                  />
+                  {tip}
+                </li>
+              ))}
             </ul>
-          </div>
+          </Card>
 
           {/* Action Button */}
-          <button
-            onClick={handleCancel}
-            className="w-full px-4 py-3 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition"
-          >
+          <Button variant="secondary" size="lg" fullWidth onClick={handleCancel}>
             Cancel SOS
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -749,26 +687,19 @@ export default function SOS() {
 
   if (sosState === "cancelled") {
     return (
-      <div className="min-h-full bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg
-              className="w-8 h-8 text-gray-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">SOS Cancelled</h2>
-          <p className="text-gray-500">Returning to SOS screen...</p>
-        </div>
+      <div className="flex min-h-full items-center justify-center px-4 py-6">
+        <Card className="w-full max-w-lg p-8 text-center shadow-2">
+          <span
+            aria-hidden="true"
+            className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-surface-2 text-ink-muted"
+          >
+            <X className="h-8 w-8" />
+          </span>
+          <h2 className="mb-2 text-xl font-bold text-ink">SOS Cancelled</h2>
+          <p className="text-base text-ink-muted" role="status">
+            Returning to SOS screen...
+          </p>
+        </Card>
       </div>
     );
   }
@@ -776,36 +707,30 @@ export default function SOS() {
   // ─── Render: Main SOS Screen ──────────────────────────────
 
   return (
-    <div className="h-full bg-gray-50 flex flex-col overflow-hidden">
-      {/* Inject heartbeat animation CSS */}
-      <style>{heartbeatStyle}</style>
-
+    <div className="flex h-full flex-col overflow-hidden">
       {/* Connection Status Banner */}
       {!isOnline && (
-        <div className={`px-4 py-2.5 text-center text-sm font-medium text-white ${
-          connectionStatus.hasBluetooth ? 'bg-blue-500' :
-          connectionStatus.hasSMS ? 'bg-amber-500' : 'bg-red-500'
-        }`}>
+        <div
+          role="status"
+          className={`px-4 py-2.5 text-center text-sm font-semibold text-white ${
+            connectionStatus.hasBluetooth ? 'bg-info' :
+            connectionStatus.hasSMS ? 'bg-warning' : 'bg-danger'
+          }`}
+        >
           <span className="flex items-center justify-center gap-2">
             {connectionStatus.hasBluetooth ? (
               <>
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd" />
-                </svg>
+                <Bluetooth aria-hidden="true" className="h-4 w-4 shrink-0" />
                 Bluetooth Mesh Mode ({connectionIndicator.description})
               </>
             ) : connectionStatus.hasSMS ? (
               <>
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
-                </svg>
+                <MessageSquare aria-hidden="true" className="h-4 w-4 shrink-0" />
                 No Internet - SMS Fallback Mode
               </>
             ) : (
               <>
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M3.707 2.293a1 1 0 00-1.414 1.414l6.921 6.922c.05.062.105.118.168.167l6.91 6.911a1 1 0 001.415-1.414l-.675-.675A9.001 9.001 0 0010 2H9.5a1 1 0 000 2H10a7 7 0 014.95 2.05l-1.414 1.414A5 5 0 0010 6a4.978 4.978 0 00-2.793.856L3.707 2.293z" clipRule="evenodd" />
-                </svg>
+                <WifiOff aria-hidden="true" className="h-4 w-4 shrink-0" />
                 No Connectivity - SOS will be queued
               </>
             )}
@@ -815,151 +740,127 @@ export default function SOS() {
 
       {/* Pending SOS Sync Badge */}
       {pendingCount > 0 && isOnline && (
-        <div className="px-4 py-2 bg-blue-50 text-center text-sm text-blue-700">
+        <div
+          role="status"
+          className="flex items-center justify-center gap-2 bg-info-soft px-4 py-2 text-center text-sm font-medium text-on-info-soft"
+        >
+          <Loader2 aria-hidden="true" className="h-4 w-4 shrink-0 animate-spin" />
           Syncing {pendingCount} pending SOS signal{pendingCount > 1 ? "s" : ""}...
         </div>
       )}
 
       {/* GPS Status - Compact */}
-      <div className="px-4 pt-4 pb-2 max-w-md mx-auto w-full">
+      <div className="mx-auto w-full max-w-lg px-4 pt-4 pb-2">
         <div
-          className={`rounded-xl p-3 ${
+          role="status"
+          className={`rounded-lg border p-3 ${
             latitude !== null && longitude !== null
-              ? "bg-green-50 border border-green-200"
+              ? "border-success/30 bg-success-soft"
               : gpsLoading
-                ? "bg-blue-50 border border-blue-200"
-                : "bg-red-50 border border-red-200"
+                ? "border-info/30 bg-info-soft"
+                : "border-danger/30 bg-danger-soft"
           }`}
         >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <svg
-                className={`w-5 h-5 ${
-                  latitude !== null
-                    ? "text-green-600"
-                    : gpsLoading
-                      ? "text-blue-600 animate-pulse"
-                      : "text-red-600"
+          <div className="flex items-center gap-2.5">
+            {gpsLoading ? (
+              <Loader2
+                aria-hidden="true"
+                className="h-5 w-5 shrink-0 animate-spin text-on-info-soft"
+              />
+            ) : (
+              <MapPin
+                aria-hidden="true"
+                className={`h-5 w-5 shrink-0 ${
+                  latitude !== null ? "text-on-success-soft" : "text-on-danger-soft"
                 }`}
-                fill="currentColor"
-                viewBox="0 0 20 20"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <div>
-                {gpsLoading ? (
-                  <p className="text-sm font-medium text-blue-700">
-                    Detecting location...
+              />
+            )}
+            <div className="min-w-0">
+              {gpsLoading ? (
+                <p className="text-sm font-semibold text-on-info-soft">
+                  Detecting location...
+                </p>
+              ) : latitude !== null && longitude !== null ? (
+                <>
+                  <p className="truncate text-sm font-semibold text-on-success-soft">
+                    {locationAddress || "Location detected"}
                   </p>
-                ) : latitude !== null && longitude !== null ? (
-                  <>
-                    <p className="text-sm font-medium text-green-700">
-                      {locationAddress || "Location detected"}
+                  {!locationAddress && (
+                    <p className="text-xs text-on-success-soft">
+                      {latitude.toFixed(6)}, {longitude.toFixed(6)}
                     </p>
-                    {!locationAddress && (
-                      <p className="text-xs text-green-600">
-                        {latitude.toFixed(6)}, {longitude.toFixed(6)}
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <p className="text-sm font-medium text-red-700">
-                    {gpsError || "Location not available"}
-                  </p>
-                )}
-              </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-sm font-semibold text-on-danger-soft">
+                  {gpsError || "Location not available"}
+                </p>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col pb-20 px-4">
+      <div className="mx-auto flex w-full max-w-lg flex-1 flex-col px-4 pb-20">
         {/* SOS BUTTON - Centered */}
-        <div className="flex-1 flex items-center justify-center py-6">
+        <div className="flex flex-1 items-center justify-center py-6">
           <div className="flex flex-col items-center">
             <button
               onClick={handleSOS}
               disabled={sosState === "sending" || (latitude === null && !gpsLoading)}
-              className={`relative w-64 h-64 rounded-full flex items-center justify-center text-white font-bold text-2xl transition-all duration-100 ${
+              aria-label={isOnline ? "Send SOS now" : "Send SOS via SMS"}
+              className={`relative flex h-64 w-64 items-center justify-center rounded-full text-on-sos shadow-3 transition-all duration-150 focus-visible:outline-4 focus-visible:outline-focus focus-visible:outline-offset-4 ${
                 sosState === "sending"
-                  ? "bg-gray-400 cursor-wait"
-                  : "bg-gradient-to-b from-red-500 to-red-700 active:from-red-600 active:to-red-800 active:translate-y-1 active:shadow-[0_2px_0_0_#991b1b,inset_0_1px_2px_rgba(0,0,0,0.2)]"
+                  ? "cursor-wait bg-ink-faint"
+                  : `bg-sos hover:bg-sos-hover active:scale-[0.97] ${
+                      latitude !== null ? "sos-button" : "opacity-70"
+                    }`
               }`}
-              style={{
-                boxShadow: sosState === "sending"
-                  ? "0 4px 0 0 #9ca3af, 0 6px 20px rgba(0,0,0,0.2)"
-                  : "0 6px 0 0 #991b1b, 0 8px 20px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.2)",
-                animation: sosState !== "sending" && latitude !== null ? "heartbeat 1.5s ease-in-out infinite" : "none",
-              }}
             >
               {sosState === "sending" ? (
-                <div className="flex flex-col items-center">
-                  <svg
-                    className="w-12 h-12 animate-spin mb-2"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  <span className="text-xl">Sending...</span>
-                </div>
+                <span className="flex flex-col items-center">
+                  <Loader2 aria-hidden="true" className="mb-2 h-12 w-12 animate-spin" />
+                  <span className="text-xl font-bold">Sending...</span>
+                </span>
               ) : (
-                <div className="flex flex-col items-center relative z-10">
-                  <span className="text-6xl font-black tracking-wider drop-shadow-lg">SOS</span>
-                  <span className="text-base font-medium mt-2 opacity-90">
+                <span className="relative z-10 flex flex-col items-center">
+                  <span className="text-6xl font-black tracking-wider">SOS</span>
+                  <span className="mt-2 text-base font-semibold opacity-90">
                     {isOnline ? "TAP TO SEND" : "TAP FOR SMS"}
                   </span>
-                </div>
+                </span>
               )}
             </button>
 
             {/* Offline SMS reminder */}
             {!isOnline && (
-              <p className="mt-2 text-center text-sm text-amber-600 max-w-xs">
+              <p className="mt-3 max-w-xs text-center text-sm font-medium text-warning">
                 Your SOS will be prepared as an encrypted SMS message.
               </p>
             )}
 
             {/* Error */}
             {sosError && (
-              <div className="mt-3 bg-red-50 border border-red-200 rounded-xl p-3 flex items-start gap-2 max-w-xs">
-                <svg
-                  className="w-4 h-4 text-red-500 mt-0.5 shrink-0"
-                  fill="currentColor"
-                  viewBox="0 0 20 20"
-                >
-                  <path
-                    fillRule="evenodd"
-                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                    clipRule="evenodd"
+              <div
+                role="alert"
+                className="mt-4 w-full max-w-xs rounded-lg border border-danger/30 bg-danger-soft p-3.5"
+              >
+                <div className="flex items-start gap-2.5">
+                  <TriangleAlert
+                    aria-hidden="true"
+                    className="mt-0.5 h-5 w-5 shrink-0 text-on-danger-soft"
                   />
-                </svg>
-                <div>
-                  <p className="text-red-700 text-xs font-medium">{sosError}</p>
-                  {!isOnline && (
-                    <button
-                      onClick={handleSOSOffline}
-                      className="mt-1 text-xs text-red-600 underline hover:text-red-700"
-                    >
-                      Try SMS Fallback
-                    </button>
-                  )}
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-on-danger-soft">{sosError}</p>
+                    {!isOnline && (
+                      <button
+                        onClick={handleSOSOffline}
+                        className="mt-1 min-h-11 rounded-md text-sm font-bold text-on-danger-soft underline transition-opacity hover:opacity-80 focus-visible:outline-3 focus-visible:outline-focus"
+                      >
+                        Try SMS Fallback
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -967,56 +868,78 @@ export default function SOS() {
         </div>
 
         {/* Nearest Hospitals */}
+        {hospitalLoading && (
+          <div className="mb-4 mt-8 flex flex-col gap-3" aria-hidden="true">
+            <Skeleton className="h-16" />
+            <Skeleton className="h-16" />
+          </div>
+        )}
+
         {nearestHospitals.length > 0 && !hospitalLoading && (
-          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4 mb-4 mt-8">
-            <p className="text-sm font-semibold text-gray-900 mb-3">Nearest Hospitals</p>
-            <div className="space-y-3">
-              {nearestHospitals.map((hospital: Hospital & { distance: number }, index: number) => {
+          <Card className="mb-4 mt-8">
+            <h2 className="mb-3 text-sm font-bold text-ink">Nearest Hospitals</h2>
+            <ul className="flex flex-col gap-2.5">
+              {nearestHospitals.map((hospital: HospitalType & { distance: number }, index: number) => {
                 const isAvailable = hospital.status === "operational";
                 const googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${latitude},${longitude}&destination=${hospital.latitude},${hospital.longitude}&travelmode=driving`;
                 return (
-                  <a
-                    key={hospital.id}
-                    href={googleMapsUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={`flex items-center gap-3 p-2.5 rounded-xl transition-colors ${!isAvailable ? "opacity-60 bg-gray-50" : "bg-gray-50 hover:bg-gray-100 active:bg-gray-200"}`}
-                  >
-                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                      !isAvailable ? "bg-gray-200" : index === 0 ? "bg-green-100" : "bg-blue-100"
-                    }`}>
-                      <svg
-                        className={`w-5 h-5 ${!isAvailable ? "text-gray-400" : index === 0 ? "text-green-600" : "text-blue-500"}`}
-                        fill="currentColor"
-                        viewBox="0 0 24 24"
+                  <li key={hospital.id}>
+                    <a
+                      href={googleMapsUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`flex min-h-14 items-center gap-3 rounded-lg bg-surface-2 p-2.5 transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
+                        !isAvailable ? "opacity-60" : "hover:bg-surface-3"
+                      }`}
+                    >
+                      <span
+                        aria-hidden="true"
+                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
+                          !isAvailable
+                            ? "bg-surface-3 text-ink-faint"
+                            : index === 0
+                              ? "bg-success-soft text-on-success-soft"
+                              : "bg-accent-soft text-on-accent-soft"
+                        }`}
                       >
-                        <path
-                          fillRule="evenodd"
-                          d="M11.54 22.351l.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742zM12 13.5a3 3 0 100-6 3 3 0 000 6z"
-                          clipRule="evenodd"
-                        />
-                      </svg>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-semibold truncate ${!isAvailable ? "text-gray-500" : index === 0 ? "text-gray-900" : "text-gray-700"}`}>
-                        {hospital.name}
-                      </p>
-                      <div className="flex items-center gap-2">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
-                          isAvailable ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
-                        }`}>
-                          {isAvailable ? "Available" : "Unavailable"}
+                        <Hospital className="h-5 w-5" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span
+                          className={`block truncate text-base font-semibold ${
+                            !isAvailable ? "text-ink-muted" : "text-ink"
+                          }`}
+                        >
+                          {hospital.name}
                         </span>
-                        <p className="text-xs text-gray-500">
-                          {hospital.distance.toFixed(1)} km away
-                        </p>
-                      </div>
-                    </div>
-                  </a>
+                        <span className="mt-0.5 flex items-center gap-2">
+                          <Badge size="sm" dot tone={isAvailable ? "success" : "danger"}>
+                            {isAvailable ? "Available" : "Unavailable"}
+                          </Badge>
+                          <span className="text-sm text-ink-muted">
+                            {hospital.distance.toFixed(1)} km away
+                          </span>
+                        </span>
+                      </span>
+                      <Navigation
+                        aria-hidden="true"
+                        className="h-4 w-4 shrink-0 text-ink-faint"
+                      />
+                    </a>
+                  </li>
                 );
               })}
-            </div>
-          </div>
+            </ul>
+          </Card>
+        )}
+
+        {!hospitalLoading && nearestHospitals.length === 0 && (
+          <EmptyState
+            className="mb-4 mt-8 py-8"
+            icon={<Hospital />}
+            title="No hospitals to show yet"
+            description="Nearby hospitals will appear here once your location is available."
+          />
         )}
       </div>
     </div>

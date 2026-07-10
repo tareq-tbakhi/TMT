@@ -1,6 +1,92 @@
 @import "tailwindcss";
+@import "./styles/theme.css";
 
-/* ─── Global styles ──────────────────────────────────────── */
+/**
+ * Tailwind 4 theme mapping — exposes design tokens as utilities.
+ * bg-canvas, bg-surface, text-ink, border-edge, bg-accent, text-sev-critical, …
+ */
+@theme inline {
+  /* Surfaces */
+  --color-canvas: var(--t-canvas);
+  --color-surface: var(--t-surface);
+  --color-surface-2: var(--t-surface-2);
+  --color-surface-3: var(--t-surface-3);
+  --color-edge: var(--t-border);
+  --color-edge-strong: var(--t-border-strong);
+
+  /* Text */
+  --color-ink: var(--t-ink);
+  --color-ink-muted: var(--t-ink-muted);
+  --color-ink-faint: var(--t-ink-faint);
+
+  /* Brand */
+  --color-primary: var(--t-primary);
+  --color-primary-hover: var(--t-primary-hover);
+  --color-primary-soft: var(--t-primary-soft);
+  --color-on-primary: var(--t-on-primary);
+  --color-link: var(--t-link);
+
+  /* Role accent */
+  --color-accent: var(--t-accent);
+  --color-accent-hover: var(--t-accent-hover);
+  --color-accent-soft: var(--t-accent-soft);
+  --color-on-accent: var(--t-on-accent);
+  --color-on-accent-soft: var(--t-on-accent-soft);
+
+  /* Semantic */
+  --color-success: var(--t-success);
+  --color-success-soft: var(--t-success-soft);
+  --color-on-success-soft: var(--t-on-success-soft);
+  --color-warning: var(--t-warning);
+  --color-warning-soft: var(--t-warning-soft);
+  --color-on-warning-soft: var(--t-on-warning-soft);
+  --color-danger: var(--t-danger);
+  --color-danger-hover: var(--t-danger-hover);
+  --color-danger-soft: var(--t-danger-soft);
+  --color-on-danger-soft: var(--t-on-danger-soft);
+  --color-info: var(--t-info);
+  --color-info-soft: var(--t-info-soft);
+  --color-on-info-soft: var(--t-on-info-soft);
+
+  /* SOS */
+  --color-sos: var(--t-sos);
+  --color-sos-hover: var(--t-sos-hover);
+  --color-on-sos: var(--t-on-sos);
+
+  /* Severity */
+  --color-sev-critical: var(--t-sev-critical);
+  --color-sev-critical-soft: var(--t-sev-critical-soft);
+  --color-on-sev-critical-soft: var(--t-on-sev-critical-soft);
+  --color-sev-high: var(--t-sev-high);
+  --color-sev-high-soft: var(--t-sev-high-soft);
+  --color-on-sev-high-soft: var(--t-on-sev-high-soft);
+  --color-sev-medium: var(--t-sev-medium);
+  --color-sev-medium-soft: var(--t-sev-medium-soft);
+  --color-on-sev-medium-soft: var(--t-on-sev-medium-soft);
+  --color-sev-low: var(--t-sev-low);
+  --color-sev-low-soft: var(--t-sev-low-soft);
+  --color-on-sev-low-soft: var(--t-on-sev-low-soft);
+
+  /* Focus */
+  --color-focus: var(--t-focus);
+
+  /* Typography */
+  --font-sans: "Inter Variable", "Noto Sans Arabic Variable", ui-sans-serif,
+    system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+
+  /* Radii */
+  --radius-sm: var(--t-radius-sm);
+  --radius-md: var(--t-radius-md);
+  --radius-lg: var(--t-radius-lg);
+  --radius-xl: var(--t-radius-xl);
+
+  /* Shadows */
+  --shadow-1: var(--t-shadow-1);
+  --shadow-2: var(--t-shadow-2);
+  --shadow-3: var(--t-shadow-3);
+}
+
+/* ─── Global base ────────────────────────────────────────── */
 
 html,
 body,
@@ -10,36 +96,114 @@ body,
   padding: 0;
 }
 
+body {
+  font-family: var(--font-sans);
+  background-color: var(--t-canvas);
+  color: var(--t-ink);
+  -webkit-font-smoothing: antialiased;
+  transition: background-color var(--t-dur) var(--t-ease),
+    color var(--t-dur) var(--t-ease);
+}
+
+/* Focus visibility — never remove, only style */
+:focus-visible {
+  outline: 3px solid var(--t-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+::selection {
+  background: var(--t-primary);
+  color: var(--t-on-primary);
+}
+
+/* Skip link (screen reader / keyboard users) */
+.skip-link {
+  position: absolute;
+  inset-inline-start: 0.75rem;
+  top: -100px;
+  z-index: 100;
+  padding: 0.75rem 1.25rem;
+  background: var(--t-primary);
+  color: var(--t-on-primary);
+  border-radius: var(--t-radius-md);
+  font-weight: 600;
+  transition: top var(--t-dur-fast) var(--t-ease);
+}
+.skip-link:focus {
+  top: 0.75rem;
+}
+
+/* Visually hidden but available to screen readers */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ─── Reduced motion (system preference OR user setting) ─── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+[data-motion="reduce"] *,
+[data-motion="reduce"] *::before,
+[data-motion="reduce"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
 /* ─── RTL support ────────────────────────────────────────── */
 
 [dir="rtl"] {
   text-align: right;
 }
 
-[dir="rtl"] .ml-auto {
-  margin-left: unset;
-  margin-right: auto;
-}
-
-[dir="rtl"] .mr-auto {
-  margin-right: unset;
-  margin-left: auto;
-}
-
-/* ─── Leaflet overrides ──────────────────────────────────── */
+/* ─── Leaflet overrides (theme-aware) ────────────────────── */
 
 .leaflet-container {
   font-family: inherit;
   z-index: 0;
+  background: var(--t-surface-2);
 }
 
 .leaflet-popup-content-wrapper {
-  border-radius: 0.75rem;
-  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  border-radius: var(--t-radius-md);
+  box-shadow: var(--t-shadow-2);
+  background: var(--t-surface);
+  color: var(--t-ink);
+  border: 1px solid var(--t-border);
+}
+
+.leaflet-popup-tip {
+  background: var(--t-surface);
 }
 
 .leaflet-popup-content {
   margin: 0.75rem;
+}
+
+[data-theme="dark"] .leaflet-layer,
+[data-theme="dark"] .leaflet-control-zoom-in,
+[data-theme="dark"] .leaflet-control-zoom-out,
+[data-theme="dark"] .leaflet-control-attribution {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.9);
 }
 
 /* ─── SOS pulse animation ────────────────────────────────── */
@@ -47,15 +211,15 @@ body,
 @keyframes sos-pulse {
   0% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+    box-shadow: 0 0 0 0 var(--t-sos-halo);
   }
   70% {
-    transform: scale(1.05);
-    box-shadow: 0 0 0 20px rgba(239, 68, 68, 0);
+    transform: scale(1.04);
+    box-shadow: 0 0 0 24px transparent;
   }
   100% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+    box-shadow: 0 0 0 0 transparent;
   }
 }
 
@@ -63,7 +227,7 @@ body,
   animation: sos-pulse 2s infinite;
 }
 
-/* ─── SOS map marker pulse animation ────────────────────── */
+/* ─── SOS map marker pulse ───────────────────────────────── */
 
 @keyframes sos-map-pulse {
   0% {
@@ -81,42 +245,40 @@ body,
   border: none !important;
 }
 
-/* ─── Severity badges ────────────────────────────────────── */
+/* ─── Legacy severity/status badge classes (kept for maps) ── */
 
 .severity-critical {
-  background-color: #ef4444;
-  color: white;
+  background-color: var(--t-sev-critical);
+  color: #ffffff;
 }
 .severity-high {
-  background-color: #f97316;
-  color: white;
+  background-color: var(--t-sev-high);
+  color: #ffffff;
 }
 .severity-medium {
-  background-color: #eab308;
-  color: black;
+  background-color: var(--t-sev-medium);
+  color: #ffffff;
 }
 .severity-low {
-  background-color: #3b82f6;
-  color: white;
+  background-color: var(--t-sev-low);
+  color: #ffffff;
 }
-
-/* ─── Hospital status badges ─────────────────────────────── */
 
 .status-operational {
-  background-color: #22c55e;
-  color: white;
+  background-color: var(--t-success);
+  color: #ffffff;
 }
 .status-limited {
-  background-color: #eab308;
-  color: black;
+  background-color: var(--t-warning);
+  color: #ffffff;
 }
 .status-full {
-  background-color: #ef4444;
-  color: white;
+  background-color: var(--t-danger);
+  color: #ffffff;
 }
 .status-destroyed {
   background-color: #1f2937;
-  color: white;
+  color: #ffffff;
 }
 
 /* ─── Loading skeleton ───────────────────────────────────── */
@@ -124,9 +286,9 @@ body,
 .loading-skeleton {
   background: linear-gradient(
     90deg,
-    #f1f5f9 25%,
-    #e2e8f0 50%,
-    #f1f5f9 75%
+    var(--t-surface-2) 25%,
+    var(--t-surface-3) 50%,
+    var(--t-surface-2) 75%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
@@ -141,10 +303,11 @@ body,
   }
 }
 
-/* ─── Scrollbar styling ──────────────────────────────────── */
+/* ─── Scrollbar ──────────────────────────────────────────── */
 
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
@@ -152,12 +315,13 @@ body,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
-  border-radius: 3px;
+  background: var(--t-border-strong);
+  border-radius: 5px;
+  border: 2px solid var(--t-canvas);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #9ca3af;
+  background: var(--t-ink-faint);
 }
 
 /* ─── Line clamp utility ─────────────────────────────────── */
@@ -172,19 +336,44 @@ body,
 /* ─── Detail panel slide-in ─────────────────────────────── */
 
 .detail-panel-slide {
-  animation: slide-in-from-end 0.3s ease-out;
+  animation: slide-in-from-end var(--t-dur-slow) var(--t-ease);
 }
 
 @keyframes slide-in-from-end {
-  from { transform: translateX(100%); }
-  to { transform: translateX(0); }
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
 }
 
 [dir="rtl"] .detail-panel-slide {
-  animation: slide-in-from-start 0.3s ease-out;
+  animation: slide-in-from-start var(--t-dur-slow) var(--t-ease);
 }
 
 @keyframes slide-in-from-start {
-  from { transform: translateX(-100%); }
-  to { transform: translateX(0); }
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+/* ─── Toast slide-up ─────────────────────────────────────── */
+
+@keyframes toast-in {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.toast-in {
+  animation: toast-in var(--t-dur) var(--t-ease);
 }

@@ -1,5 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { LocateFixed } from 'lucide-react';
+import { Button } from '../ui';
 
 interface LocationPickerProps {
   initialLat?: number;
@@ -52,15 +54,18 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
   return (
     <div>
       <div className="mb-2 flex items-center gap-2">
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
+          className="min-h-11"
+          icon={<LocateFixed />}
           onClick={handleGPS}
-          className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white hover:bg-blue-700"
         >
           Use My Location
-        </button>
+        </Button>
         {position && (
-          <span className="text-sm text-gray-500">
+          <span className="text-sm text-ink-muted" dir="ltr">
             {position[0].toFixed(4)}, {position[1].toFixed(4)}
           </span>
         )}
@@ -69,7 +74,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
         center={position || [initialLat, initialLng]}
         zoom={13}
         style={{ height, width: '100%' }}
-        className="rounded-lg border"
+        className="rounded-lg border border-edge"
       >
         <TileLayer
           attribution='&copy; OpenStreetMap'
@@ -78,7 +83,7 @@ const LocationPicker: React.FC<LocationPickerProps> = ({
         <ClickHandler onLocationSelect={handleClick} />
         {position && <Marker position={position} />}
       </MapContainer>
-      <p className="mt-1 text-xs text-gray-400">Click on the map to set your location</p>
+      <p className="mt-1 text-xs text-ink-faint">Click on the map to set your location</p>
     </div>
   );
 };

@@ -9,6 +9,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+import { Activity } from 'lucide-react';
+import { Card, CardHeader } from '../ui';
 
 interface TimelineDataPoint {
   date: string;
@@ -22,21 +24,44 @@ interface CrisisTimelineProps {
   height?: number;
 }
 
+const AXIS_TICK = { fontSize: 12, fill: 'var(--t-ink-muted)' };
+
+const TOOLTIP_STYLE: React.CSSProperties = {
+  backgroundColor: 'var(--t-surface)',
+  border: '1px solid var(--t-border)',
+  borderRadius: 'var(--t-radius-sm)',
+  boxShadow: 'var(--t-shadow-2)',
+  color: 'var(--t-ink)',
+};
+
 const CrisisTimeline: React.FC<CrisisTimelineProps> = ({ data, height = 300 }) => {
   return (
-    <div className="rounded-lg border bg-white p-4">
-      <h3 className="mb-4 text-sm font-semibold text-gray-700">Crisis Activity Timeline</h3>
+    <Card>
+      <CardHeader title="Crisis Activity Timeline" icon={<Activity />} />
       <ResponsiveContainer width="100%" height={height}>
         <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-          <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-          <YAxis tick={{ fontSize: 12 }} />
-          <Tooltip />
-          <Legend />
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--t-border)" />
+          <XAxis
+            dataKey="date"
+            tick={AXIS_TICK}
+            stroke="var(--t-border-strong)"
+            tickLine={{ stroke: 'var(--t-border-strong)' }}
+          />
+          <YAxis
+            tick={AXIS_TICK}
+            stroke="var(--t-border-strong)"
+            tickLine={{ stroke: 'var(--t-border-strong)' }}
+          />
+          <Tooltip
+            contentStyle={TOOLTIP_STYLE}
+            labelStyle={{ color: 'var(--t-ink)', fontWeight: 600 }}
+            cursor={{ stroke: 'var(--t-border-strong)' }}
+          />
+          <Legend wrapperStyle={{ color: 'var(--t-ink-muted)' }} />
           <Line
             type="monotone"
             dataKey="casualties"
-            stroke="#ef4444"
+            stroke="var(--t-sev-critical)"
             strokeWidth={2}
             dot={false}
             name="Casualties"
@@ -44,7 +69,7 @@ const CrisisTimeline: React.FC<CrisisTimelineProps> = ({ data, height = 300 }) =
           <Line
             type="monotone"
             dataKey="sos_requests"
-            stroke="#f97316"
+            stroke="var(--t-sev-high)"
             strokeWidth={2}
             dot={false}
             name="SOS Requests"
@@ -52,14 +77,14 @@ const CrisisTimeline: React.FC<CrisisTimelineProps> = ({ data, height = 300 }) =
           <Line
             type="monotone"
             dataKey="alerts"
-            stroke="#3b82f6"
+            stroke="var(--t-accent)"
             strokeWidth={2}
             dot={false}
             name="Alerts"
           />
         </LineChart>
       </ResponsiveContainer>
-    </div>
+    </Card>
   );
 };
 

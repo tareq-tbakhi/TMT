@@ -2,7 +2,9 @@
  * Trust Score Badge - Visual indicator of news source reliability
  */
 
-import { getTrustTier, TRUST_TIER_STYLES } from '../../types/newsTypes';
+import { ShieldCheck } from 'lucide-react';
+import { getTrustTier, TRUST_TIER_STYLES, type TrustTier } from '../../types/newsTypes';
+import { Badge, type BadgeTone } from '../ui';
 
 interface TrustScoreBadgeProps {
   score: number;
@@ -10,18 +12,28 @@ interface TrustScoreBadgeProps {
   size?: 'sm' | 'md';
 }
 
+/** Maps trust tiers to design-system badge tones. */
+const TIER_TONE: Record<TrustTier, BadgeTone> = {
+  high: 'success',
+  trusted: 'info',
+  moderate: 'warning',
+  low: 'high',
+  unverified: 'danger',
+};
+
 export function TrustScoreBadge({ score, showLabel = false, size = 'md' }: TrustScoreBadgeProps) {
   const tier = getTrustTier(score);
   const styles = TRUST_TIER_STYLES[tier];
 
-  const sizeClasses = size === 'sm'
-    ? 'px-1.5 py-0.5 text-xs'
-    : 'px-2 py-1 text-sm';
-
   return (
-    <div className={`inline-flex items-center gap-1 rounded-full font-medium ${styles.bg} ${styles.text} ${sizeClasses}`}>
+    <Badge
+      tone={TIER_TONE[tier]}
+      size={size}
+      icon={<ShieldCheck />}
+      aria-label={`Trust score ${score} out of 100 — ${styles.label}`}
+    >
       <span>{score}</span>
       {showLabel && <span className="hidden sm:inline">• {styles.label}</span>}
-    </div>
+    </Badge>
   );
 }

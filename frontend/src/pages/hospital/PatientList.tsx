@@ -1,6 +1,31 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import {
+  Accessibility,
+  BedDouble,
+  CircleHelp,
+  Footprints,
+  LayoutGrid,
+  MapPin,
+  Search,
+  SearchX,
+  Table2,
+  TriangleAlert,
+  Users,
+  type LucideIcon,
+} from "lucide-react";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  LoadingState,
+  PageHeader,
+  Select,
+  type BadgeTone,
+} from "../../components/ui";
 import StatusBadge from "../../components/common/StatusBadge";
 import { timeAgo } from "../../utils/formatting";
 
@@ -28,11 +53,14 @@ interface PatientRow {
 
 type ViewMode = "table" | "card";
 
-const mobilityConfig: Record<string, { label: string; border: string; bg: string }> = {
-  can_walk: { label: "Can Walk", border: "border-green-300", bg: "bg-green-50" },
-  wheelchair: { label: "Wheelchair", border: "border-orange-400", bg: "bg-orange-50" },
-  bedridden: { label: "Bedridden", border: "border-red-500", bg: "bg-red-50" },
-  other: { label: "Other", border: "border-yellow-400", bg: "bg-yellow-50" },
+const mobilityConfig: Record<
+  string,
+  { label: string; tone: BadgeTone; icon: LucideIcon; border: string }
+> = {
+  can_walk: { label: "Can Walk", tone: "success", icon: Footprints, border: "border-s-success" },
+  wheelchair: { label: "Wheelchair", tone: "high", icon: Accessibility, border: "border-s-sev-high" },
+  bedridden: { label: "Bedridden", tone: "critical", icon: BedDouble, border: "border-s-sev-critical" },
+  other: { label: "Other", tone: "medium", icon: CircleHelp, border: "border-s-sev-medium" },
 };
 
 const PatientList: React.FC = () => {
@@ -93,7 +121,12 @@ const PatientList: React.FC = () => {
     mobility === "bedridden" || mobility === "wheelchair" || mobility === "other";
 
   const getMobilityInfo = (mobility: string) =>
-    mobilityConfig[mobility] ?? { label: mobility, border: "border-gray-200", bg: "" };
+    mobilityConfig[mobility] ?? {
+      label: mobility,
+      tone: "neutral" as BadgeTone,
+      icon: CircleHelp,
+      border: "border-s-edge",
+    };
 
   const handleRowClick = (id: string) => {
     navigate(`/dashboard/patients/${id}`);
@@ -105,225 +138,234 @@ const PatientList: React.FC = () => {
     return `${p.latitude.toFixed(3)}, ${p.longitude.toFixed(3)}`;
   };
 
+  const viewToggleClasses = (active: boolean) =>
+    `inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
+      active ? "bg-surface text-ink shadow-1" : "text-ink-muted hover:text-ink"
+    }`;
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {t("patients.title")}
-          </h1>
-          <p className="mt-1 text-sm text-gray-500">
-            {patients.length} patients registered
-          </p>
-        </div>
-
-        {/* View toggle */}
-        <div className="flex rounded-lg bg-gray-100 p-1">
-          <button
-            onClick={() => setViewMode("table")}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              viewMode === "table"
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Table
-          </button>
-          <button
-            onClick={() => setViewMode("card")}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              viewMode === "card"
-                ? "bg-white text-gray-900 shadow-sm"
-                : "text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            Cards
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        icon={<Users />}
+        title={t("patients.title")}
+        description={`${patients.length} patients registered`}
+        actions={
+          <div className="flex rounded-lg bg-surface-2 p-1" role="group" aria-label="View mode">
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              aria-pressed={viewMode === "table"}
+              className={viewToggleClasses(viewMode === "table")}
+            >
+              <Table2 aria-hidden="true" className="h-4 w-4" />
+              Table
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("card")}
+              aria-pressed={viewMode === "card"}
+              className={viewToggleClasses(viewMode === "card")}
+            >
+              <LayoutGrid aria-hidden="true" className="h-4 w-4" />
+              Cards
+            </button>
+          </div>
+        }
+      />
 
       {/* Search and Filters */}
       <div className="flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
-          <svg
-            className="absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-          <input
+          <Search
+            aria-hidden="true"
+            className="pointer-events-none absolute start-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint"
+          />
+          <Input
+            label="Search patients"
+            hideLabel
             type="text"
             placeholder={t("patients.search")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 bg-white py-2 pe-4 ps-10 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            className="flex-1 [&_input]:ps-10"
           />
         </div>
-        <select
+        <Select
+          label="Mobility filter"
+          hideLabel
           value={mobilityFilter}
           onChange={(e) => setMobilityFilter(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none"
+          className="sm:w-48"
         >
           <option value="">All Mobility</option>
           <option value="can_walk">Can Walk</option>
           <option value="wheelchair">Wheelchair</option>
           <option value="bedridden">Bedridden</option>
           <option value="other">Other</option>
-        </select>
+        </Select>
       </div>
 
       {/* Loading */}
-      {loading && (
-        <div className="flex h-32 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-blue-200 border-t-blue-600" />
-        </div>
-      )}
+      {loading && <LoadingState label="Loading patients" />}
 
       {/* Error */}
       {error && !loading && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          {error}
-        </div>
+        <Card className="border-danger bg-danger-soft">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="flex items-center gap-2 text-sm font-semibold text-on-danger-soft">
+              <TriangleAlert aria-hidden="true" className="h-5 w-5 shrink-0" />
+              {error}
+            </p>
+            <Button variant="secondary" size="sm" onClick={fetchPatients}>
+              Retry
+            </Button>
+          </div>
+        </Card>
       )}
 
       {/* Table View */}
       {!loading && !error && viewMode === "table" && (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="px-4 py-3 text-start text-xs font-semibold uppercase text-gray-500">
-                  {t("patients.name")}
-                </th>
-                <th className="px-4 py-3 text-start text-xs font-semibold uppercase text-gray-500">
-                  {t("patients.location")}
-                </th>
-                <th className="px-4 py-3 text-start text-xs font-semibold uppercase text-gray-500">
-                  {t("patients.mobility")}
-                </th>
-                <th className="px-4 py-3 text-start text-xs font-semibold uppercase text-gray-500">
-                  Blood Type
-                </th>
-                <th className="px-4 py-3 text-start text-xs font-semibold uppercase text-gray-500">
-                  Last Updated
-                </th>
-                <th className="px-4 py-3 text-start text-xs font-semibold uppercase text-gray-500">
-                  Vulnerability
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {patients.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-8 text-center text-gray-400"
-                  >
-                    No patients found
-                  </td>
+        <Card flush className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-edge bg-surface-2">
+                  <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
+                    {t("patients.name")}
+                  </th>
+                  <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
+                    {t("patients.location")}
+                  </th>
+                  <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
+                    {t("patients.mobility")}
+                  </th>
+                  <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
+                    Blood Type
+                  </th>
+                  <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
+                    Last Updated
+                  </th>
+                  <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
+                    Vulnerability
+                  </th>
                 </tr>
-              ) : (
-                patients.map((patient) => {
-                  const mobility = getMobilityInfo(patient.mobility);
-                  const vulnerable = isVulnerable(patient.mobility);
-                  return (
-                    <tr
-                      key={patient.id}
-                      onClick={() => handleRowClick(patient.id)}
-                      className={`cursor-pointer transition-colors hover:bg-gray-50 ${
-                        vulnerable ? `border-s-4 ${mobility.border}` : ""
-                      }`}
-                    >
-                      <td className="px-4 py-3">
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {patient.name}
-                          </p>
-                          <p className="text-xs text-gray-500">
-                            {patient.phone}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600 max-w-[200px] truncate" title={locationText(patient)}>
-                        {locationText(patient)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${mobility.bg} ${
-                            patient.mobility === "bedridden"
-                              ? "text-red-700"
-                              : patient.mobility === "wheelchair"
-                              ? "text-orange-700"
-                              : "text-green-700"
-                          }`}
-                        >
-                          {mobility.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {patient.blood_type || "--"}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500">
-                        {timeAgo(patient.updated_at)}
-                      </td>
-                      <td className="px-4 py-3">
-                        {vulnerable ? (
-                          <StatusBadge
-                            severity={
-                              patient.mobility === "bedridden"
-                                ? "critical"
-                                : "high"
-                            }
-                            size="sm"
-                          />
-                        ) : (
-                          <span className="text-xs text-gray-400">--</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-edge">
+                {patients.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-4">
+                      <EmptyState
+                        icon={<SearchX />}
+                        title="No patients found"
+                        description="Try adjusting your search or mobility filter."
+                        className="border-0 bg-transparent"
+                      />
+                    </td>
+                  </tr>
+                ) : (
+                  patients.map((patient) => {
+                    const mobility = getMobilityInfo(patient.mobility);
+                    const vulnerable = isVulnerable(patient.mobility);
+                    const MobilityIcon = mobility.icon;
+                    return (
+                      <tr
+                        key={patient.id}
+                        onClick={() => handleRowClick(patient.id)}
+                        className={`cursor-pointer transition-colors hover:bg-surface-2 ${
+                          vulnerable ? `border-s-4 ${mobility.border}` : ""
+                        }`}
+                      >
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRowClick(patient.id);
+                            }}
+                            className="rounded-sm text-start focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
+                          >
+                            <p className="font-semibold text-ink">
+                              {patient.name}
+                            </p>
+                            <p className="text-xs text-ink-muted" dir="ltr">
+                              {patient.phone}
+                            </p>
+                          </button>
+                        </td>
+                        <td className="max-w-[200px] truncate px-4 py-3 text-sm text-ink-muted" title={locationText(patient)}>
+                          {locationText(patient)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge tone={mobility.tone} size="sm" icon={<MobilityIcon />}>
+                            {mobility.label}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-ink">
+                          {patient.blood_type || "--"}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-ink-muted">
+                          {timeAgo(patient.updated_at)}
+                        </td>
+                        <td className="px-4 py-3">
+                          {vulnerable ? (
+                            <StatusBadge
+                              severity={
+                                patient.mobility === "bedridden"
+                                  ? "critical"
+                                  : "high"
+                              }
+                              size="sm"
+                            />
+                          ) : (
+                            <span className="text-xs text-ink-faint">--</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
       {/* Card View */}
       {!loading && !error && viewMode === "card" && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {patients.length === 0 ? (
-            <div className="col-span-full py-12 text-center text-gray-400">
-              No patients found
-            </div>
+            <EmptyState
+              icon={<SearchX />}
+              title="No patients found"
+              description="Try adjusting your search or mobility filter."
+              className="col-span-full"
+            />
           ) : (
             patients.map((patient) => {
               const mobility = getMobilityInfo(patient.mobility);
               const vulnerable = isVulnerable(patient.mobility);
+              const MobilityIcon = mobility.icon;
               return (
-                <div
+                <Card
                   key={patient.id}
+                  interactive
+                  role="button"
+                  tabIndex={0}
                   onClick={() => handleRowClick(patient.id)}
-                  className={`cursor-pointer rounded-xl border bg-white p-4 shadow-sm transition-shadow hover:shadow-md ${
-                    vulnerable
-                      ? `border-2 ${mobility.border}`
-                      : "border-gray-200"
-                  }`}
+                  onKeyDown={(e: React.KeyboardEvent) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      handleRowClick(patient.id);
+                    }
+                  }}
+                  className={vulnerable ? `border-s-4 ${mobility.border}` : ""}
                 >
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-semibold text-gray-900">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <h3 className="truncate font-semibold text-ink">
                         {patient.name}
                       </h3>
-                      <p className="text-xs text-gray-500">{patient.phone}</p>
+                      <p className="text-xs text-ink-muted" dir="ltr">{patient.phone}</p>
                     </div>
                     {vulnerable && (
                       <StatusBadge
@@ -336,30 +378,31 @@ const PatientList: React.FC = () => {
                   </div>
 
                   <div className="mt-3 space-y-1.5 text-sm">
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <span className="text-xs font-medium text-gray-400 w-16">
+                    <div className="flex items-center gap-2 text-ink-muted">
+                      <span className="w-16 text-xs font-semibold text-ink-faint">
                         Location
                       </span>
-                      <span className="truncate max-w-[140px]" title={locationText(patient)}>
-                        {locationText(patient)}
+                      <span className="inline-flex min-w-0 items-center gap-1">
+                        <MapPin aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-ink-faint" />
+                        <span className="max-w-[140px] truncate" title={locationText(patient)}>
+                          {locationText(patient)}
+                        </span>
                       </span>
                     </div>
-                    <div className="flex items-center gap-2 text-gray-600">
-                      <span className="text-xs font-medium text-gray-400 w-16">
+                    <div className="flex items-center gap-2 text-ink-muted">
+                      <span className="w-16 text-xs font-semibold text-ink-faint">
                         Mobility
                       </span>
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${mobility.bg}`}
-                      >
+                      <Badge tone={mobility.tone} size="sm" icon={<MobilityIcon />}>
                         {mobility.label}
-                      </span>
+                      </Badge>
                     </div>
                     {patient.blood_type && (
-                      <div className="flex items-start gap-2 text-gray-600">
-                        <span className="text-xs font-medium text-gray-400 w-16">
+                      <div className="flex items-start gap-2 text-ink-muted">
+                        <span className="w-16 text-xs font-semibold text-ink-faint">
                           Blood
                         </span>
-                        <span className="text-xs">
+                        <span className="text-xs font-semibold text-ink">
                           {patient.blood_type}
                         </span>
                       </div>
@@ -371,22 +414,22 @@ const PatientList: React.FC = () => {
                     (patient.allergies?.length ?? 0) > 0) && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {(patient.chronic_conditions ?? []).slice(0, 2).map((c, i) => (
-                        <span key={`c-${i}`} className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-medium text-red-600">
+                        <Badge key={`c-${i}`} tone="danger" size="sm">
                           {c}
-                        </span>
+                        </Badge>
                       ))}
                       {(patient.allergies ?? []).slice(0, 2).map((a, i) => (
-                        <span key={`a-${i}`} className="rounded-full bg-yellow-50 px-2 py-0.5 text-[10px] font-medium text-yellow-600">
+                        <Badge key={`a-${i}`} tone="warning" size="sm">
                           {a}
-                        </span>
+                        </Badge>
                       ))}
                     </div>
                   )}
 
-                  <div className="mt-3 border-t border-gray-100 pt-2 text-xs text-gray-400">
+                  <div className="mt-3 border-t border-edge pt-2 text-xs text-ink-faint">
                     Updated {timeAgo(patient.updated_at)}
                   </div>
-                </div>
+                </Card>
               );
             })
           )}

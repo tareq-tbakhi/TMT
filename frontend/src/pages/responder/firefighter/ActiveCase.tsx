@@ -4,9 +4,11 @@
  */
 
 import { useNavigate } from "react-router-dom";
+import { ChevronRight, Wrench } from "lucide-react";
 import { useResponderStore } from "../../../store/responderStore";
 import {
   ActiveCaseCard,
+  AIRecommendationBanner,
   CaseStatusButton,
   NoCaseView,
 } from "../../../components/responder";
@@ -43,7 +45,7 @@ export default function FirefighterActiveCase() {
   }
 
   return (
-    <div className="p-4 space-y-4 pb-24">
+    <div className="mx-auto max-w-lg space-y-4 px-4 py-4 pb-28">
       {/* Active Case Card */}
       <ActiveCaseCard
         caseData={activeCase}
@@ -51,31 +53,44 @@ export default function FirefighterActiveCase() {
         onNavigate={handleNavigate}
       />
 
+      {/* AI Recommendations */}
+      <AIRecommendationBanner
+        recommendations={activeCase.aiRecommendations ?? []}
+        variant="warning"
+      />
+
       {/* Equipment Quick Link */}
       {activeCase.requiredEquipment && activeCase.requiredEquipment.length > 0 && (
         <button
+          type="button"
           onClick={() => navigate("/firefighter/equipment")}
-          className="w-full bg-red-50 border border-red-200 rounded-xl p-4 flex items-center justify-between active:bg-red-100 transition-colors"
+          className="flex min-h-14 w-full items-center justify-between gap-3 rounded-lg border border-edge bg-accent-soft p-4 text-start shadow-1 transition-colors hover:border-edge-strong active:opacity-90 focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
         >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
-              <svg className="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="text-left">
-              <p className="font-bold text-red-800">Required Equipment</p>
-              <p className="text-sm text-red-600">{activeCase.requiredEquipment.length} items to prepare</p>
-            </div>
-          </div>
-          <svg className="w-5 h-5 text-red-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
+          <span className="flex min-w-0 items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-surface text-on-accent-soft"
+            >
+              <Wrench className="h-5 w-5" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-base font-bold text-on-accent-soft">
+                Required Equipment
+              </span>
+              <span className="block text-sm font-semibold text-ink-muted">
+                {activeCase.requiredEquipment.length} items to prepare
+              </span>
+            </span>
+          </span>
+          <ChevronRight
+            aria-hidden="true"
+            className="h-5 w-5 shrink-0 text-on-accent-soft rtl:-scale-x-100"
+          />
         </button>
       )}
 
-      {/* Status Action Button */}
-      <div className="fixed bottom-20 left-4 right-4 max-w-lg mx-auto">
+      {/* Status Action Button — pinned above the tab bar */}
+      <div className="fixed inset-x-4 bottom-24 z-40 mx-auto max-w-lg">
         <CaseStatusButton
           currentStatus={activeCase.status}
           responderType="firefighter"

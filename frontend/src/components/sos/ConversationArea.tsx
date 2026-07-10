@@ -28,16 +28,13 @@ export function ConversationArea({ messages, isTyping }: ConversationAreaProps) 
 
   return (
     <div
-      className="overflow-y-auto px-4 py-4 space-y-1"
-      style={{
-        minHeight: "80px",
-        maxHeight: "40vh",
-        scrollbarWidth: "thin",
-        scrollbarColor: "#d1d5db transparent"
-      }}
+      role="log"
+      aria-label="Conversation with AI Assistant"
+      className="space-y-1 overflow-y-auto px-4 py-4"
+      style={{ minHeight: "80px", maxHeight: "40vh" }}
     >
       {messages.length === 0 && !isTyping && (
-        <div className="text-center text-gray-400 text-sm py-8">
+        <div className="py-8 text-center text-base text-ink-faint">
           AI Assistant is ready to help...
         </div>
       )}

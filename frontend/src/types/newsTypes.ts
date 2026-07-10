@@ -111,43 +111,23 @@ export function getTrustTier(score: number): TrustTier {
 }
 
 /**
- * Trust tier styling
+ * Trust tier labels (visual styling lives in the design system — see TrustScoreBadge)
  */
-export const TRUST_TIER_STYLES: Record<TrustTier, { bg: string; text: string; label: string }> = {
-  high: { bg: 'bg-green-100', text: 'text-green-700', label: 'Highly Trusted' },
-  trusted: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Trusted' },
-  moderate: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Moderate' },
-  low: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Low Trust' },
-  unverified: { bg: 'bg-red-100', text: 'text-red-700', label: 'Unverified' },
+export const TRUST_TIER_STYLES: Record<TrustTier, { label: string }> = {
+  high: { label: 'Highly Trusted' },
+  trusted: { label: 'Trusted' },
+  moderate: { label: 'Moderate' },
+  low: { label: 'Low Trust' },
+  unverified: { label: 'Unverified' },
 };
 
 /**
- * Severity styling
+ * Category labels (icons live in the design system — see news/NewsFilters CategoryIcon)
  */
-export const SEVERITY_STYLES: Record<NewsSeverity, { bg: string; text: string }> = {
-  critical: { bg: 'bg-red-600', text: 'text-white' },
-  high: { bg: 'bg-orange-500', text: 'text-white' },
-  medium: { bg: 'bg-yellow-500', text: 'text-gray-900' },
-  low: { bg: 'bg-blue-400', text: 'text-white' },
+export const CATEGORY_CONFIG: Record<NewsCategory, { label: string }> = {
+  threat: { label: 'Threat' },
+  warning: { label: 'Warning' },
+  update: { label: 'Update' },
+  info: { label: 'Info' },
 };
 
-/**
- * Category icons and labels
- */
-export const CATEGORY_CONFIG: Record<NewsCategory, { icon: string; label: string }> = {
-  threat: { icon: '⚠️', label: 'Threat' },
-  warning: { icon: '🚨', label: 'Warning' },
-  update: { icon: '📢', label: 'Update' },
-  info: { icon: 'ℹ️', label: 'Info' },
-};
-
-/**
- * Source platform icons
- */
-export const SOURCE_PLATFORM_ICONS: Record<SourcePlatform, string> = {
-  twitter: '🐦',
-  telegram: '✈️',
-  facebook: '📘',
-  instagram: '📷',
-  other: '🌐',
-};

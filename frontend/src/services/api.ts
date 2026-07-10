@@ -18,6 +18,52 @@ function clearAuth(): void {
   window.location.href = "/login";
 }
 
+// ─── API errors ─────────────────────────────────────────────────
+
+/** One entry of a FastAPI 422 validation error (`detail` array). */
+export interface ApiFieldIssue {
+  loc?: Array<string | number>;
+  msg?: string;
+  type?: string;
+}
+
+/**
+ * Error thrown for any non-2xx API response. Carries the HTTP status and
+ * the raw FastAPI `detail` payload so callers can map validation issues
+ * back to individual form fields.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly detail: unknown;
+
+  constructor(message: string, status: number, detail?: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.detail = detail;
+  }
+
+  /** FastAPI 422 validation issues, or an empty array for other errors. */
+  get fieldIssues(): ApiFieldIssue[] {
+    return Array.isArray(this.detail) ? (this.detail as ApiFieldIssue[]) : [];
+  }
+}
+
+function apiErrorMessage(detail: unknown, status: number): string {
+  if (typeof detail === "string" && detail) return detail;
+  if (Array.isArray(detail)) {
+    const msgs = detail
+      .map((d) =>
+        d && typeof d === "object" && "msg" in d
+          ? String((d as { msg?: unknown }).msg ?? "")
+          : ""
+      )
+      .filter(Boolean);
+    if (msgs.length) return msgs.join(". ");
+  }
+  return `Request failed with status ${status}`;
+}
+
 // ─── Core fetch wrapper ─────────────────────────────────────────
 
 interface RequestOptions {
@@ -56,17 +102,23 @@ async function request<T>(
 
   const response = await fetch(url, fetchOptions);
 
-  // Handle 401 - unauthorized
-  if (response.status === 401) {
-    clearAuth();
-    throw new Error("Unauthorized");
-  }
-
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(
-      (errorData as { detail?: string }).detail ||
-        `Request failed with status ${response.status}`
+    const errorData = (await response.json().catch(() => ({}))) as {
+      detail?: unknown;
+    };
+
+    // 401 on an authenticated call means the session expired — clear it.
+    // Public calls (login / register) surface the error to the caller
+    // instead of wiping local state and redirecting.
+    if (response.status === 401 && !noAuth) {
+      clearAuth();
+      throw new ApiError("Unauthorized", 401, errorData.detail);
+    }
+
+    throw new ApiError(
+      apiErrorMessage(errorData.detail, response.status),
+      response.status,
+      errorData.detail
     );
   }
 
@@ -104,20 +156,65 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
 
 // ─── Patient endpoints ──────────────────────────────────────────
 
+export interface RegisterEmergencyContact {
+  name: string;
+  phone: string;
+  relationship?: string;
+}
+
+/**
+ * Body for POST /patients — mirrors the backend PatientRegisterRequest
+ * (app/api/routes/patients.py). Enum-backed fields expect the backend
+ * token values:
+ *   mobility: "can_walk" | "wheelchair" | "bedridden" | "other"
+ *   living_situation: "alone" | "with_family" | "care_facility"
+ *   gender: "male" | "female" | "other"
+ * Note: the register endpoint persists identity, location, mobility,
+ * living situation, blood type, emergency contacts and consent. Medical
+ * list fields are accepted by the schema but currently only persisted
+ * via PUT /patients/{id} after login.
+ */
 export interface RegisterPatientRequest {
   phone: string;
   password: string;
   name: string;
+  email?: string;
+  date_of_birth?: string;
+  gender?: string;
+  national_id?: string;
+  primary_language?: string;
   latitude?: number;
   longitude?: number;
+  location_name?: string;
   mobility?: string;
   living_situation?: string;
   blood_type?: string;
-  emergency_contacts?: Array<{ name: string; phone: string }>;
+  height_cm?: number;
+  weight_kg?: number;
+  chronic_conditions?: string[];
+  allergies?: string[];
+  current_medications?: string[];
+  special_equipment?: string[];
+  insurance_info?: string;
+  emergency_contacts?: RegisterEmergencyContact[];
+  consent_given?: boolean;
 }
 
-export function registerPatient(data: RegisterPatientRequest) {
-  return request("/patients", {
+/**
+ * POST /patients returns the created patient (PatientResponse).
+ * sms_key / short_id are NOT returned by the current backend; they are
+ * kept optional so offline-SMS provisioning keeps working if a future
+ * backend version starts returning them.
+ */
+export interface RegisterPatientResponse extends Patient {
+  sms_key?: string;
+  short_id?: string;
+}
+
+export function registerPatient(
+  data: RegisterPatientRequest
+): Promise<RegisterPatientResponse> {
+  return request<RegisterPatientResponse>("/patients", {
     method: "POST",
     body: data,
     noAuth: true,

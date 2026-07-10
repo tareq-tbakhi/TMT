@@ -355,6 +355,7 @@ declare global {
   }
 
   interface Window {
-    SyncManager: typeof SyncManager;
+    /** Present in browsers that support Background Sync. */
+    SyncManager?: unknown;
   }
 }

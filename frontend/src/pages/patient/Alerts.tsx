@@ -1,10 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { io, type Socket } from "socket.io-client";
+import {
+  Bell,
+  CheckCircle2,
+  ChevronDown,
+  HeartHandshake,
+  TriangleAlert,
+  WifiOff,
+} from "lucide-react";
 import { getAlerts, getHospitals, type Alert, type Hospital } from "../../services/api";
 import { useAuthStore } from "../../store/authStore";
 import { getCurrentPosition } from "../../utils/locationCodec";
 import { eventTypeLabels, timeAgo } from "../../utils/formatting";
 import { isDummyMode } from "../../hooks/useDataMode";
+import { Button, Card, EmptyState, LoadingState } from "../../components/ui";
 
 // ─── Haversine Distance ─────────────────────────────────────────
 
@@ -31,14 +40,20 @@ function haversineKm(
 
 function SeverityIcon({ severity }: { severity: string }) {
   const colors: Record<string, string> = {
-    critical: "bg-red-500",
-    high: "bg-orange-500",
-    medium: "bg-yellow-500",
-    low: "bg-blue-500",
+    critical: "bg-sev-critical",
+    high: "bg-sev-high",
+    medium: "bg-sev-medium",
+    low: "bg-sev-low",
   };
 
   return (
-    <div className={`w-3 h-3 rounded-full ${colors[severity] || "bg-gray-400"}`} />
+    <>
+      <span
+        aria-hidden="true"
+        className={`h-3 w-3 shrink-0 rounded-full ${colors[severity] || "bg-ink-faint"}`}
+      />
+      <span className="sr-only">{severity} severity.</span>
+    </>
   );
 }
 
@@ -56,79 +71,74 @@ function AlertCard({
   const isExpired = alert.expires_at && new Date(alert.expires_at) < new Date();
 
   return (
-    <div
-      className={`bg-white rounded-2xl overflow-hidden transition-all ${
-        isExpired ? "opacity-50" : ""
-      } ${
+    <Card
+      flush
+      className={`overflow-hidden ${isExpired ? "opacity-50" : ""} ${
         alert.severity === "critical"
-          ? "ring-2 ring-red-100"
-          : "ring-1 ring-gray-100"
+          ? "border-sev-critical/40! ring-2 ring-sev-critical/20"
+          : ""
       }`}
     >
       {/* Main row */}
       <button
+        type="button"
         onClick={onToggle}
-        className="w-full p-4 flex items-center gap-3 text-start active:bg-gray-50 transition"
+        aria-expanded={expanded}
+        className="flex min-h-14 w-full items-center gap-3 p-4 text-start transition-colors hover:bg-surface-2 focus-visible:outline-3 focus-visible:outline-focus focus-visible:-outline-offset-2"
       >
         {/* Severity indicator */}
         <SeverityIcon severity={alert.severity} />
 
         {/* Content */}
-        <div className="flex-1 min-w-0">
-          <h3 className="font-medium text-gray-900 text-[15px] leading-snug line-clamp-2">
+        <span className="min-w-0 flex-1">
+          <span className="line-clamp-2 text-base font-semibold leading-snug text-ink">
             {alert.title}
-          </h3>
-          <p className="text-xs text-gray-400 mt-1">
+          </span>
+          <span className="mt-1 block text-sm text-ink-muted">
             {timeAgo(alert.created_at)}
             {alert.source && ` · ${alert.source}`}
-          </p>
-        </div>
+          </span>
+        </span>
 
         {/* Expand chevron */}
-        <svg
-          className={`w-5 h-5 text-gray-300 shrink-0 transition-transform ${
+        <ChevronDown
+          aria-hidden="true"
+          className={`h-5 w-5 shrink-0 text-ink-faint transition-transform ${
             expanded ? "rotate-180" : ""
           }`}
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M19 9l-7 7-7-7"
-          />
-        </svg>
+        />
       </button>
 
       {/* Expanded Details */}
       {expanded && (
-        <div className="px-4 pb-4 space-y-3">
+        <div className="flex flex-col gap-3 px-4 pb-4">
           {/* Description */}
           {alert.details && (
-            <p className="text-sm text-gray-600 leading-relaxed">
+            <p className="text-base leading-relaxed text-ink-muted">
               {alert.details}
             </p>
           )}
 
           {/* Safety Instructions - Compact */}
-          <div className="bg-amber-50/80 rounded-xl p-3">
-            <p className="text-xs font-semibold text-amber-700 mb-2">What to do:</p>
-            <div className="space-y-1.5">
+          <div className="rounded-lg bg-warning-soft p-3.5">
+            <p className="mb-2 text-sm font-bold text-on-warning-soft">What to do:</p>
+            <ol className="flex flex-col gap-1.5">
               {getSafetyInstructions(alert.event_type).map((instruction, i) => (
-                <div key={i} className="flex items-start gap-2">
-                  <span className="w-4 h-4 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                <li key={i} className="flex items-start gap-2.5">
+                  <span
+                    aria-hidden="true"
+                    className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warning text-xs font-bold text-white"
+                  >
                     {i + 1}
                   </span>
-                  <span className="text-sm text-amber-800">{instruction}</span>
-                </div>
+                  <span className="text-base text-on-warning-soft">{instruction}</span>
+                </li>
               ))}
-            </div>
+            </ol>
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 
@@ -527,29 +537,8 @@ export default function Alerts() {
 
   if (loading) {
     return (
-      <div className="min-h-full bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <svg
-            className="w-12 h-12 text-red-500 animate-spin mx-auto mb-4"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            />
-          </svg>
-          <p className="text-gray-500">Loading alerts...</p>
-        </div>
+      <div className="flex min-h-full items-center justify-center">
+        <LoadingState label="Loading alerts" />
       </div>
     );
   }
@@ -610,77 +599,87 @@ export default function Alerts() {
   // ─── Render ───────────────────────────────────────────────
 
   return (
-    <div className="min-h-full bg-gray-50">
+    <div className="min-h-full">
       {/* Emergency Alert Overlay - Full Screen, No Scroll */}
       {showEmergencyOverlay && emergencyAlert && (
-        <div className="fixed inset-0 z-[100] bg-gradient-to-b from-red-900 via-red-800 to-black">
-          {/* Flashing red border */}
-          <div className="absolute inset-0 animate-pulse pointer-events-none">
-            <div className="absolute inset-0 border-[4px] border-red-500" />
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="Emergency Alert"
+          className="fixed inset-0 z-[100] bg-sos text-on-sos"
+        >
+          {/* Flashing border */}
+          <div className="pointer-events-none absolute inset-0 animate-pulse">
+            <div className="absolute inset-0 border-4 border-on-sos/60" />
           </div>
 
-          <div className="relative h-full flex flex-col justify-center overflow-hidden px-5 py-6">
+          <div className="relative flex h-full flex-col justify-center overflow-hidden px-5 py-6">
             {/* Header - Fixed at top */}
-            <div className="absolute top-4 left-5 right-5 flex items-center justify-between">
+            <div className="absolute inset-x-5 top-4 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse" />
-                <span className="text-white/80 text-xs font-semibold uppercase tracking-wider">
+                <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-on-sos" />
+                <span className="text-xs font-bold uppercase tracking-wider text-on-sos/90">
                   Emergency Alert
                 </span>
               </div>
-              <span className="text-white/60 text-xs">
+              <span className="text-xs text-on-sos/70">
                 {new Date().toLocaleTimeString()}
               </span>
             </div>
 
             {/* Centered Content */}
-            <div className="flex flex-col items-center">
+            <div className="mx-auto flex w-full max-w-lg flex-col items-center">
               {/* Alert Icon */}
-              <div className="w-20 h-20 bg-red-600 rounded-full flex items-center justify-center animate-pulse mb-4">
-                <svg className="w-12 h-12 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
-              </div>
+              <span
+                aria-hidden="true"
+                className="mb-4 flex h-20 w-20 animate-pulse items-center justify-center rounded-full bg-on-sos/20"
+              >
+                <TriangleAlert className="h-12 w-12" />
+              </span>
 
               {/* Alert Type Badge */}
-              <span className="inline-block bg-red-600 text-white px-4 py-1 rounded-full text-sm font-bold uppercase mb-3">
+              <span className="mb-3 inline-block rounded-full bg-on-sos px-4 py-1 text-sm font-bold uppercase text-sos">
                 {eventTypeLabels[emergencyAlert.event_type]?.en || emergencyAlert.event_type}
               </span>
 
               {/* Alert Title */}
-              <h1 className="text-white text-lg font-bold text-center mb-2 leading-tight">
+              <h2 className="mb-2 text-center text-xl font-bold leading-tight">
                 {emergencyAlert.title}
-              </h1>
+              </h2>
 
               {/* Alert Message */}
-              <p className="text-white/80 text-center text-sm mb-4">
+              <p className="mb-4 text-center text-base text-on-sos/90">
                 {emergencyAlert.details}
               </p>
 
               {/* Safety Instructions */}
-              <div className="w-full bg-white/10 rounded-xl p-3 mb-4">
-                <p className="text-amber-400 text-xs font-bold uppercase mb-2">What to do:</p>
-                <div className="space-y-1.5">
+              <div className="mb-4 w-full rounded-lg bg-on-sos/15 p-3.5">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide">What to do:</p>
+                <ol className="flex flex-col gap-1.5">
                   {getSafetyInstructions(emergencyAlert.event_type).slice(0, 3).map((instruction, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <span className="w-4 h-4 bg-amber-500 rounded-full flex items-center justify-center text-[10px] font-bold text-black shrink-0 mt-0.5">
+                    <li key={i} className="flex items-start gap-2">
+                      <span
+                        aria-hidden="true"
+                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-on-sos text-xs font-bold text-sos"
+                      >
                         {i + 1}
                       </span>
-                      <span className="text-white text-xs leading-snug">{instruction}</span>
-                    </div>
+                      <span className="text-sm leading-snug">{instruction}</span>
+                    </li>
                   ))}
-                </div>
+                </ol>
               </div>
 
               {/* Source */}
-              <p className="text-center text-white/50 text-xs mb-4">
-                Source: <span className="text-white/70">{emergencyAlert.source}</span>
+              <p className="mb-4 text-center text-xs text-on-sos/70">
+                Source: <span className="text-on-sos/90">{emergencyAlert.source}</span>
               </p>
 
               {/* Dismiss Button */}
               <button
+                type="button"
                 onClick={dismissEmergencyAlert}
-                className="w-full bg-white text-red-700 font-bold py-3.5 rounded-xl text-base active:bg-gray-100 transition-colors"
+                className="min-h-14 w-full rounded-lg bg-on-sos text-lg font-bold text-sos transition-opacity focus-visible:outline-4 focus-visible:outline-focus focus-visible:outline-offset-2 active:opacity-90"
               >
                 I Understand
               </button>
@@ -691,64 +690,62 @@ export default function Alerts() {
 
       {/* Offline Banner */}
       {!isOnline && (
-        <div className="px-4 py-2.5 bg-amber-500 text-white text-center text-sm font-medium flex items-center justify-center gap-2">
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M3.707 2.293a1 1 0 00-1.414 1.414l6.921 6.922c.05.062.105.118.168.167l6.91 6.911a1 1 0 001.415-1.414l-.675-.675A9.001 9.001 0 0010 2H9.5a1 1 0 000 2H10a7 7 0 014.95 2.05l-1.414 1.414A5 5 0 0010 6a4.978 4.978 0 00-2.793.856L3.707 2.293z"
-              clipRule="evenodd"
-            />
-          </svg>
+        <div
+          role="status"
+          className="flex items-center justify-center gap-2 bg-warning px-4 py-2.5 text-center text-sm font-semibold text-white"
+        >
+          <WifiOff aria-hidden="true" className="h-4 w-4 shrink-0" />
           You are offline - showing cached alerts
         </div>
       )}
 
-      <div className="max-w-2xl mx-auto">
+      <div className="mx-auto max-w-lg">
         {/* Header */}
-        <div className="bg-white border-b border-gray-100 px-4 py-4">
+        <header className="border-b border-edge bg-surface px-4 py-4">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shadow-lg ${
-              mainTab === "alerts"
-                ? "bg-gradient-to-br from-red-500 to-red-600 shadow-red-200"
-                : "bg-gradient-to-br from-pink-500 to-pink-600 shadow-pink-200"
-            }`}>
+            <span
+              aria-hidden="true"
+              className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-lg ${
+                mainTab === "alerts"
+                  ? "bg-danger-soft text-on-danger-soft"
+                  : "bg-accent-soft text-on-accent-soft"
+              }`}
+            >
               {mainTab === "alerts" ? (
-                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-                </svg>
+                <Bell className="h-6 w-6" />
               ) : (
-                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M3.172 5.172a4 4 0 015.656 0L10 6.343l1.172-1.171a4 4 0 115.656 5.656L10 17.657l-6.828-6.829a4 4 0 010-5.656z" clipRule="evenodd" />
-                </svg>
+                <HeartHandshake className="h-6 w-6" />
               )}
-            </div>
-            <div>
-              <h1 className="font-bold text-gray-900 text-lg">
-                {mainTab === "alerts" ? "Alerts" : "Hospital Needs"}
-              </h1>
-            </div>
+            </span>
+            <h2 className="text-lg font-bold text-ink">
+              {mainTab === "alerts" ? "Alerts" : "Hospital Needs"}
+            </h2>
           </div>
-        </div>
+        </header>
 
         {/* Simple Tab Switcher */}
-        <div className="bg-white border-b border-gray-100 px-4 py-2">
-          <div className="flex gap-1">
+        <div className="border-b border-edge bg-surface px-4 py-2">
+          <div className="flex gap-1.5" role="group" aria-label="Alert categories">
             <button
+              type="button"
               onClick={() => setMainTab("alerts")}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+              aria-pressed={mainTab === "alerts"}
+              className={`min-h-11 flex-1 rounded-md px-2 text-sm font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
                 mainTab === "alerts"
-                  ? "bg-red-50 text-red-600"
-                  : "text-gray-500"
+                  ? "bg-danger-soft text-on-danger-soft"
+                  : "text-ink-muted hover:bg-surface-2 hover:text-ink"
               }`}
             >
               Alerts ({isDummyMode() ? DEMO_CRISIS_ALERTS.length : patientAlerts.filter(a => !needsEventTypes.includes(a.event_type)).length})
             </button>
             <button
+              type="button"
               onClick={() => setMainTab("needs")}
-              className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+              aria-pressed={mainTab === "needs"}
+              className={`min-h-11 flex-1 rounded-md px-2 text-sm font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
                 mainTab === "needs"
-                  ? "bg-pink-50 text-pink-600"
-                  : "text-gray-500"
+                  ? "bg-accent-soft text-on-accent-soft"
+                  : "text-ink-muted hover:bg-surface-2 hover:text-ink"
               }`}
             >
               Needs ({isDummyMode() ? DEMO_HOSPITAL_NEEDS.length : patientAlerts.filter(a => needsEventTypes.includes(a.event_type)).length})
@@ -758,35 +755,32 @@ export default function Alerts() {
 
         {/* Error */}
         {error && (
-          <div className="mx-4 mt-4 bg-red-50 rounded-xl p-3 flex items-center gap-3">
-            <svg className="w-5 h-5 text-red-500 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-            </svg>
-            <p className="text-red-700 text-sm flex-1">{error}</p>
-            <button onClick={fetchData} className="text-sm text-red-600 font-medium">Retry</button>
+          <div
+            role="alert"
+            className="mx-4 mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-danger/30 bg-danger-soft p-3.5"
+          >
+            <TriangleAlert aria-hidden="true" className="h-5 w-5 shrink-0 text-on-danger-soft" />
+            <p className="min-w-0 flex-1 text-sm font-medium text-on-danger-soft">{error}</p>
+            <Button variant="danger" size="sm" onClick={fetchData}>
+              Retry
+            </Button>
           </div>
         )}
 
         {/* Alerts List */}
         <div className="px-4 py-4">
           {sortedAlerts.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                <svg className="w-7 h-7 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-              <h3 className="font-medium text-gray-900 mb-1">
-                {mainTab === "alerts" ? "All Clear" : "No Requests"}
-              </h3>
-              <p className="text-gray-400 text-sm">
-                {mainTab === "alerts"
+            <EmptyState
+              icon={mainTab === "alerts" ? <CheckCircle2 /> : <HeartHandshake />}
+              title={mainTab === "alerts" ? "All Clear" : "No Requests"}
+              description={
+                mainTab === "alerts"
                   ? "No alerts in your area"
-                  : "No donation requests right now"}
-              </p>
-            </div>
+                  : "No donation requests right now"
+              }
+            />
           ) : (
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3">
               {sortedAlerts.map((alert) => (
                 <AlertCard
                   key={alert.id}
@@ -804,8 +798,8 @@ export default function Alerts() {
         {/* Connection status - subtle */}
         {isOnline && (
           <div className="pb-4 text-center">
-            <span className="inline-flex items-center gap-1.5 text-xs text-gray-300">
-              <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-ink-faint">
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-success" />
               Live
             </span>
           </div>

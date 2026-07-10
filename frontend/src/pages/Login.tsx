@@ -1,7 +1,20 @@
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import {
+  Ambulance,
+  ChevronDown,
+  Flame,
+  HardHat,
+  HeartPulse,
+  Languages,
+  Siren,
+  TriangleAlert,
+  UserPlus,
+  type LucideIcon,
+} from "lucide-react";
 import { useAuthStore, type UserRole, type DepartmentType } from "../store/authStore";
+import { Button, Card, Input } from "../components/ui";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -9,14 +22,13 @@ const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 const DEMO_RESPONDERS: Array<{
   role: UserRole;
   label: string;
-  icon: string;
-  color: string;
+  icon: LucideIcon;
   route: string;
 }> = [
-  { role: "ambulance_driver", label: "Ambulance", icon: "🚑", color: "from-red-500 to-red-600", route: "/ambulance" },
-  { role: "police_officer", label: "Police", icon: "🚔", color: "from-indigo-500 to-indigo-600", route: "/police" },
-  { role: "civil_defense_responder", label: "Civil Defense", icon: "🦺", color: "from-orange-500 to-orange-600", route: "/civil_defense" },
-  { role: "firefighter", label: "Firefighter", icon: "🚒", color: "from-red-600 to-red-700", route: "/firefighter" },
+  { role: "ambulance_driver", label: "Ambulance", icon: Ambulance, route: "/ambulance" },
+  { role: "police_officer", label: "Police", icon: Siren, route: "/police" },
+  { role: "civil_defense_responder", label: "Civil Defense", icon: HardHat, route: "/civil_defense" },
+  { role: "firefighter", label: "Firefighter", icon: Flame, route: "/firefighter" },
 ];
 
 const Login: React.FC = () => {
@@ -95,146 +107,141 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10">
       <div className="w-full max-w-md">
         {/* Logo / Header */}
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-3xl text-white shadow-lg">
-            &#x1F3E5;
-          </div>
-          <h1 className="text-3xl font-bold text-gray-900">TMT</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <span
+            aria-hidden="true"
+            className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-accent text-on-accent shadow-2"
+          >
+            <HeartPulse className="h-8 w-8" />
+          </span>
+          <h1 className="text-3xl font-bold tracking-tight text-ink">TMT</h1>
+          <p className="mt-1 text-base text-ink-muted">
             Triage & Monitor for Threats
           </p>
         </div>
 
         {/* Login Card */}
-        <div className="rounded-2xl border border-gray-200 bg-white p-8 shadow-xl">
-          <h2 className="mb-6 text-xl font-semibold text-gray-900">
+        <Card className="p-6 shadow-2 sm:p-8">
+          <h2 className="mb-6 text-xl font-bold text-ink">
             {t("auth.login")}
           </h2>
 
           {error && (
-            <div className="mb-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-              {error}
+            <div
+              role="alert"
+              className="mb-5 flex items-start gap-2.5 rounded-md border border-danger/30 bg-danger-soft p-3.5 text-on-danger-soft"
+            >
+              <TriangleAlert aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0" />
+              <p className="text-base font-medium">{error}</p>
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {/* Phone */}
-            <div>
-              <label
-                htmlFor="phone"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                {t("auth.phone")}
-              </label>
-              <input
-                id="phone"
-                type="tel"
-                required
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+970..."
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                dir="ltr"
-              />
-            </div>
+            <Input
+              label={t("auth.phone")}
+              type="tel"
+              required
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="+970..."
+              autoComplete="tel"
+              dir="ltr"
+            />
 
             {/* Password */}
-            <div>
-              <label
-                htmlFor="password"
-                className="mb-1 block text-sm font-medium text-gray-700"
-              >
-                {t("auth.password")}
-              </label>
-              <input
-                id="password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="********"
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-              />
-            </div>
+            <Input
+              label={t("auth.password")}
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="********"
+              autoComplete="current-password"
+            />
 
             {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full rounded-lg bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-            >
+            <Button type="submit" size="lg" fullWidth loading={loading} className="mt-1">
               {loading ? t("common.loading") : t("auth.loginButton")}
-            </button>
+            </Button>
           </form>
 
           {/* Register link */}
           <div className="mt-4 text-center">
             <Link
               to="/register"
-              className="text-sm text-blue-600 hover:text-blue-800"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-3 text-base font-semibold text-link hover:underline focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
             >
+              <UserPlus aria-hidden="true" className="h-4.5 w-4.5" />
               {t("auth.register", "Create an account")}
             </Link>
           </div>
 
           {/* Language toggle */}
-          <div className="mt-4 text-center">
+          <div className="text-center">
             <button
+              type="button"
               onClick={toggleLanguage}
-              className="text-sm text-gray-500 hover:text-gray-700"
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-md px-3 text-base font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
             >
-              {i18n.language === "ar" ? "English" : "\u0627\u0644\u0639\u0631\u0628\u064a\u0629"}
+              <Languages aria-hidden="true" className="h-4.5 w-4.5" />
+              {i18n.language === "ar" ? "English" : "العربية"}
             </button>
           </div>
 
           {/* Demo Field Responder Login */}
-          <div className="mt-6 pt-6 border-t border-gray-200">
+          <div className="mt-6 border-t border-edge pt-5">
             <button
               type="button"
               onClick={() => setShowDemoResponders(!showDemoResponders)}
-              className="w-full text-center text-sm text-gray-500 hover:text-gray-700 flex items-center justify-center gap-2"
+              aria-expanded={showDemoResponders}
+              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-md px-3 text-sm font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
             >
               <span>Demo: Field Responder Login</span>
-              <svg
-                className={`w-4 h-4 transition-transform ${showDemoResponders ? "rotate-180" : ""}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-              </svg>
+              <ChevronDown
+                aria-hidden="true"
+                className={`h-4 w-4 transition-transform ${showDemoResponders ? "rotate-180" : ""}`}
+              />
             </button>
 
             {showDemoResponders && (
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                {DEMO_RESPONDERS.map((demo) => (
-                  <button
-                    key={demo.role}
-                    type="button"
-                    onClick={() => {
-                      // Demo login - bypass API for frontend testing
-                      login("demo-token-" + demo.role, {
-                        id: "demo-" + demo.role,
-                        role: demo.role,
-                      });
-                      navigate(demo.route);
-                    }}
-                    className={`bg-gradient-to-r ${demo.color} text-white rounded-xl p-3 flex flex-col items-center gap-1 active:scale-95 transition-transform shadow-lg`}
-                  >
-                    <span className="text-2xl">{demo.icon}</span>
-                    <span className="text-xs font-medium">{demo.label}</span>
-                  </button>
-                ))}
+              <div className="mt-4 grid grid-cols-2 gap-2.5">
+                {DEMO_RESPONDERS.map((demo) => {
+                  const Icon = demo.icon;
+                  return (
+                    <button
+                      key={demo.role}
+                      type="button"
+                      onClick={() => {
+                        // Demo login - bypass API for frontend testing
+                        login("demo-token-" + demo.role, {
+                          id: "demo-" + demo.role,
+                          role: demo.role,
+                        });
+                        navigate(demo.route);
+                      }}
+                      className="flex min-h-24 flex-col items-center justify-center gap-2 rounded-lg border border-edge bg-surface-2 p-3 transition-colors hover:border-edge-strong hover:bg-surface-3 focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
+                    >
+                      <span
+                        aria-hidden="true"
+                        className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-soft text-on-accent-soft"
+                      >
+                        <Icon className="h-5 w-5" />
+                      </span>
+                      <span className="text-sm font-semibold text-ink">{demo.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
-        </div>
+        </Card>
 
         {/* Footer */}
-        <p className="mt-6 text-center text-xs text-gray-400">
+        <p className="mt-6 text-center text-sm text-ink-faint">
           TMT - Emergency Crisis Management System
         </p>
       </div>

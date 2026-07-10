@@ -1,7 +1,34 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import {
+  Bell,
+  BellOff,
+  ChevronDown,
+  ChevronRight,
+  LayoutGrid,
+  MapPin,
+  Navigation,
+  RefreshCw,
+  Siren,
+  Sparkles,
+  Table2,
+  TriangleAlert,
+} from "lucide-react";
 import AlertCard from "../../components/common/AlertCard";
+import StatusBadge from "../../components/common/StatusBadge";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  LoadingState,
+  PageHeader,
+  Select,
+  announce,
+  severityTone,
+  type BadgeTone,
+} from "../../components/ui";
 import { useAlertStore, type AlertStats } from "../../store/alertStore";
 import { useSocketEvent } from "../../contexts/SocketContext";
 import { eventTypeLabels, timeAgo } from "../../utils/formatting";
@@ -38,10 +65,26 @@ const SOURCE_OPTIONS = [
 /* Severity config                                                    */
 /* ------------------------------------------------------------------ */
 const SEV = {
-  critical: { dot: "bg-red-600", ring: "ring-red-200", text: "text-red-700", bg: "bg-red-50" },
-  high: { dot: "bg-orange-500", ring: "ring-orange-200", text: "text-orange-700", bg: "bg-orange-50" },
-  medium: { dot: "bg-yellow-500", ring: "ring-yellow-200", text: "text-yellow-700", bg: "bg-yellow-50" },
-  low: { dot: "bg-blue-400", ring: "ring-blue-200", text: "text-blue-700", bg: "bg-blue-50" },
+  critical: {
+    dot: "bg-sev-critical",
+    text: "text-on-sev-critical-soft",
+    active: "border-sev-critical bg-sev-critical-soft",
+  },
+  high: {
+    dot: "bg-sev-high",
+    text: "text-on-sev-high-soft",
+    active: "border-sev-high bg-sev-high-soft",
+  },
+  medium: {
+    dot: "bg-sev-medium",
+    text: "text-on-sev-medium-soft",
+    active: "border-sev-medium bg-sev-medium-soft",
+  },
+  low: {
+    dot: "bg-sev-low",
+    text: "text-on-sev-low-soft",
+    active: "border-sev-low bg-sev-low-soft",
+  },
 } as const;
 
 type ViewMode = "cards" | "compact";
@@ -164,6 +207,7 @@ const CrisisAlerts: React.FC = () => {
   // Real-time: just refetch current page (debounced)
   const socketTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useSocketEvent("new_alert", () => {
+    announce("New crisis alert received", "polite");
     clearTimeout(socketTimer.current);
     socketTimer.current = setTimeout(fetchAlerts, 1500);
   });
@@ -198,72 +242,83 @@ const CrisisAlerts: React.FC = () => {
   const sevCount = (key: string) =>
     stats?.by_severity?.[key] ?? 0;
 
+  const viewToggleClasses = (active: boolean) =>
+    `inline-flex min-h-11 items-center gap-1.5 px-3 text-sm font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
+      active
+        ? "bg-accent text-on-accent"
+        : "bg-surface text-ink-muted hover:bg-surface-2 hover:text-ink"
+    }`;
+
+  const pageBtnClasses = (active = false) =>
+    `min-h-11 min-w-11 rounded-md border px-2.5 text-sm font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-40 ${
+      active
+        ? "border-accent bg-accent text-on-accent"
+        : "border-edge-strong bg-surface text-ink-muted hover:bg-surface-2"
+    }`;
+
   return (
     <div className="space-y-4">
       {/* ── Header ── */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">
-            {t("alerts.title")}
-          </h1>
-          <p className="mt-0.5 text-sm text-gray-500">
-            Real-time crisis alerts and notifications
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {/* View toggle */}
-          <div className="inline-flex rounded-lg border border-gray-300 bg-white text-xs font-medium">
-            <button
-              onClick={() => setViewMode("compact")}
-              className={`px-3 py-1.5 rounded-s-lg transition-colors ${
-                viewMode === "compact"
-                  ? "bg-gray-900 text-white"
-                  : "text-gray-600 hover:bg-gray-50"
-              }`}
+      <PageHeader
+        icon={<Siren />}
+        title={t("alerts.title")}
+        description="Real-time crisis alerts and notifications"
+        actions={
+          <>
+            <div
+              className="inline-flex overflow-hidden rounded-md border border-edge-strong"
+              role="group"
+              aria-label="List view mode"
             >
-              Table
-            </button>
-            <button
-              onClick={() => setViewMode("cards")}
-              className={`px-3 py-1.5 rounded-e-lg transition-colors ${
-                viewMode === "cards"
-                  ? "bg-gray-900 text-white"
-                  : "text-gray-600 hover:bg-gray-50"
-              }`}
-            >
-              Cards
-            </button>
-          </div>
-          <button
-            onClick={fetchAlerts}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50"
-          >
-            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            Refresh
-          </button>
-        </div>
-      </div>
+              <button
+                type="button"
+                onClick={() => setViewMode("compact")}
+                aria-pressed={viewMode === "compact"}
+                className={viewToggleClasses(viewMode === "compact")}
+              >
+                <Table2 aria-hidden="true" className="h-4 w-4" />
+                Table
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                aria-pressed={viewMode === "cards"}
+                className={`${viewToggleClasses(viewMode === "cards")} border-s border-edge-strong`}
+              >
+                <LayoutGrid aria-hidden="true" className="h-4 w-4" />
+                Cards
+              </button>
+            </div>
+            <Button variant="secondary" icon={<RefreshCw />} onClick={fetchAlerts}>
+              Refresh
+            </Button>
+          </>
+        }
+      />
 
       {/* ── Stats bar ── */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {/* Total */}
-        <div className="rounded-lg border border-gray-200 bg-white px-4 py-3">
-          <p className="text-xs font-medium text-gray-500">Total Alerts</p>
-          <p className="mt-1 text-2xl font-bold text-gray-900">{(stats?.total ?? totalCount).toLocaleString()}</p>
+        <div className="rounded-lg border border-edge bg-surface px-4 py-3 shadow-1">
+          <p className="text-xs font-semibold text-ink-muted">Total Alerts</p>
+          <p className="mt-1 text-2xl font-bold tracking-tight text-ink">{(stats?.total ?? totalCount).toLocaleString()}</p>
         </div>
         {/* SOS */}
         <button
+          type="button"
           onClick={() => setSourceFilter(sourceFilter === "sos" ? "" : "sos")}
-          className={`rounded-lg border px-4 py-3 text-left transition-colors ${
+          aria-pressed={sourceFilter === "sos"}
+          className={`rounded-lg border px-4 py-3 text-start shadow-1 transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
             sourceFilter === "sos"
-              ? "border-red-300 bg-red-50 ring-2 ring-red-200"
-              : "border-gray-200 bg-white hover:bg-red-50/50"
+              ? "border-danger bg-danger-soft"
+              : "border-edge bg-surface hover:bg-surface-2"
           }`}
         >
-          <p className="text-xs font-medium text-red-600">SOS Alerts</p>
-          <p className="mt-1 text-2xl font-bold text-red-700">{(stats?.sos_count ?? 0).toLocaleString()}</p>
+          <p className="flex items-center gap-1.5 text-xs font-semibold text-on-danger-soft">
+            <Siren aria-hidden="true" className="h-3.5 w-3.5" />
+            SOS Alerts
+          </p>
+          <p className="mt-1 text-2xl font-bold tracking-tight text-on-danger-soft">{(stats?.sos_count ?? 0).toLocaleString()}</p>
         </button>
         {/* By severity */}
         {(["critical", "high", "medium", "low"] as const).map((key) => {
@@ -273,18 +328,18 @@ const CrisisAlerts: React.FC = () => {
           return (
             <button
               key={key}
+              type="button"
               onClick={() => setSeverityFilter(isActive ? "" : key)}
-              className={`rounded-lg border px-4 py-3 text-left transition-colors ${
-                isActive
-                  ? `${s.bg} border-current ${s.ring} ring-2`
-                  : `border-gray-200 bg-white hover:${s.bg}`
+              aria-pressed={isActive}
+              className={`rounded-lg border px-4 py-3 text-start shadow-1 transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
+                isActive ? s.active : "border-edge bg-surface hover:bg-surface-2"
               }`}
             >
               <div className="flex items-center gap-1.5">
-                <span className={`h-2 w-2 rounded-full ${s.dot}`} />
-                <p className={`text-xs font-medium ${s.text}`}>{key.charAt(0).toUpperCase() + key.slice(1)}</p>
+                <span aria-hidden="true" className={`h-2 w-2 rounded-full ${s.dot}`} />
+                <p className={`text-xs font-semibold ${s.text}`}>{key.charAt(0).toUpperCase() + key.slice(1)}</p>
               </div>
-              <p className={`mt-1 text-2xl font-bold ${s.text}`}>{count.toLocaleString()}</p>
+              <p className={`mt-1 text-2xl font-bold tracking-tight ${s.text}`}>{count.toLocaleString()}</p>
             </button>
           );
         })}
@@ -293,86 +348,97 @@ const CrisisAlerts: React.FC = () => {
       {/* ── Filters row ── */}
       <div className="flex flex-wrap items-center gap-2">
         <button
+          type="button"
           onClick={() => setSortByPriority(!sortByPriority)}
-          className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+          aria-pressed={sortByPriority}
+          className={`inline-flex min-h-11 items-center gap-1.5 rounded-md px-3 text-sm font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
             sortByPriority
-              ? "bg-purple-600 text-white shadow-sm"
-              : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+              ? "bg-accent text-on-accent shadow-1"
+              : "border border-edge-strong bg-surface text-ink-muted hover:bg-surface-2 hover:text-ink"
           }`}
         >
-          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
+          <Sparkles aria-hidden="true" className="h-4 w-4" />
           AI Priority
         </button>
-        <select
+        <Select
+          label="Filter by severity"
+          hideLabel
           value={severityFilter}
           onChange={(e) => setSeverityFilter(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          className="w-40 [&_select]:text-sm"
         >
           {SEVERITY_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
+          label="Filter by event type"
+          hideLabel
           value={eventTypeFilter}
           onChange={(e) => setEventTypeFilter(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          className="w-40 [&_select]:text-sm"
         >
           {EVENT_TYPE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
-        </select>
-        <select
+        </Select>
+        <Select
+          label="Filter by source"
+          hideLabel
           value={sourceFilter}
           onChange={(e) => setSourceFilter(e.target.value)}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          className="w-40 [&_select]:text-sm"
         >
           {SOURCE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
-        </select>
+        </Select>
         {(severityFilter || eventTypeFilter || sourceFilter) && (
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
+            className="min-h-11"
             onClick={() => {
               setSeverityFilter("");
               setEventTypeFilter("");
               setSourceFilter("");
             }}
-            className="text-xs text-blue-600 hover:text-blue-800"
           >
             Clear filters
-          </button>
+          </Button>
         )}
         {stats && stats.unacknowledged > 0 && (
-          <span className="ms-auto inline-flex items-center rounded-full bg-red-100 px-2.5 py-1 text-xs font-medium text-red-700">
+          <Badge tone="danger" className="ms-auto" icon={<BellOff />}>
             {stats.unacknowledged.toLocaleString()} unacknowledged
-          </span>
+          </Badge>
         )}
       </div>
 
       {/* ── Loading / Error ── */}
-      {loading && (
-        <div className="flex h-24 items-center justify-center">
-          <div className="h-7 w-7 animate-spin rounded-full border-[3px] border-blue-200 border-t-blue-600" />
-        </div>
-      )}
+      {loading && <LoadingState label="Loading alerts" />}
       {error && !loading && (
-        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          {error}
-        </div>
+        <Card className="border-danger bg-danger-soft">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="flex items-center gap-2 text-sm font-semibold text-on-danger-soft">
+              <TriangleAlert aria-hidden="true" className="h-5 w-5 shrink-0" />
+              {error}
+            </p>
+            <Button variant="secondary" size="sm" onClick={fetchAlerts}>
+              Retry
+            </Button>
+          </div>
+        </Card>
       )}
 
       {/* ── Alert list ── */}
       {!loading && !error && (
         <>
           {alerts.length === 0 ? (
-            <div className="rounded-lg border border-gray-200 bg-white py-16 text-center">
-              <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-              </svg>
-              <p className="mt-3 text-sm text-gray-500">{t("alerts.noAlerts")}</p>
-            </div>
+            <EmptyState
+              icon={<Bell />}
+              title={t("alerts.noAlerts")}
+              description="New crisis alerts will appear here in real time."
+            />
           ) : viewMode === "cards" ? (
             /* ── Card view ── */
             <div className="space-y-3">
@@ -382,22 +448,22 @@ const CrisisAlerts: React.FC = () => {
             </div>
           ) : (
             /* ── Compact table view ── */
-            <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+            <Card flush className="overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
+                <table className="w-full text-start text-sm">
                   <thead>
-                    <tr className="border-b border-gray-100 bg-gray-50 text-xs font-medium uppercase tracking-wider text-gray-500">
-                      <th className="px-4 py-2.5 w-[90px]">Severity</th>
-                      <th className="px-4 py-2.5">Alert</th>
-                      <th className="px-4 py-2.5 w-[85px]">Dept</th>
-                      <th className="px-4 py-2.5 w-[100px]">Source</th>
-                      <th className="px-4 py-2.5 w-[65px] text-center">Priority</th>
-                      <th className="px-4 py-2.5 w-[70px] text-center">Patients</th>
-                      <th className="px-4 py-2.5 w-[100px]">Time</th>
-                      <th className="px-4 py-2.5 w-[140px] text-right">Action</th>
+                    <tr className="border-b border-edge bg-surface-2">
+                      <th className="w-[110px] px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">Severity</th>
+                      <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">Alert</th>
+                      <th className="w-[85px] px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">Dept</th>
+                      <th className="w-[100px] px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">Source</th>
+                      <th className="w-[80px] px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-ink-muted">Priority</th>
+                      <th className="w-[70px] px-4 py-3 text-center text-xs font-bold uppercase tracking-wide text-ink-muted">Patients</th>
+                      <th className="w-[100px] px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">Time</th>
+                      <th className="w-[190px] px-4 py-3 text-end text-xs font-bold uppercase tracking-wide text-ink-muted">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-50">
+                  <tbody className="divide-y divide-edge">
                     {sortedAlerts.map((alert) => (
                       <CompactRow
                         key={alert.id}
@@ -409,27 +475,32 @@ const CrisisAlerts: React.FC = () => {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </Card>
           )}
 
           {/* ── Pagination ── */}
           {totalCount > PAGE_SIZE && (
-            <div className="flex flex-col items-center justify-between gap-3 sm:flex-row">
-              <p className="text-xs text-gray-500">
+            <nav
+              aria-label="Alerts pagination"
+              className="flex flex-col items-center justify-between gap-3 sm:flex-row"
+            >
+              <p className="text-xs text-ink-muted">
                 Showing {showFrom}–{showTo} of {totalCount.toLocaleString()} alerts
               </p>
               <div className="flex items-center gap-1">
                 <button
+                  type="button"
                   onClick={() => setPage(0)}
                   disabled={page === 0}
-                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                  className={pageBtnClasses()}
                 >
                   First
                 </button>
                 <button
+                  type="button"
                   onClick={() => setPage((p) => Math.max(0, p - 1))}
                   disabled={page === 0}
-                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                  className={pageBtnClasses()}
                 >
                   Prev
                 </button>
@@ -442,33 +513,34 @@ const CrisisAlerts: React.FC = () => {
                   return pages.map((p) => (
                     <button
                       key={p}
+                      type="button"
                       onClick={() => setPage(p)}
-                      className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                        p === page
-                          ? "border-blue-600 bg-blue-600 text-white"
-                          : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
-                      }`}
+                      aria-current={p === page ? "page" : undefined}
+                      aria-label={`Page ${p + 1}`}
+                      className={pageBtnClasses(p === page)}
                     >
                       {p + 1}
                     </button>
                   ));
                 })()}
                 <button
+                  type="button"
                   onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                   disabled={page >= totalPages - 1}
-                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                  className={pageBtnClasses()}
                 >
                   Next
                 </button>
                 <button
+                  type="button"
                   onClick={() => setPage(totalPages - 1)}
                   disabled={page >= totalPages - 1}
-                  className="rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                  className={pageBtnClasses()}
                 >
                   Last
                 </button>
               </div>
-            </div>
+            </nav>
           )}
         </>
       )}
@@ -479,24 +551,17 @@ const CrisisAlerts: React.FC = () => {
 /* ------------------------------------------------------------------ */
 /* Compact table row                                                  */
 /* ------------------------------------------------------------------ */
-const sevBadge: Record<string, string> = {
-  critical: "bg-red-100 text-red-800",
-  high: "bg-orange-100 text-orange-800",
-  medium: "bg-yellow-100 text-yellow-800",
-  low: "bg-blue-100 text-blue-700",
-};
-
 const patientStatusColor: Record<string, string> = {
-  injured: "text-red-700",
-  trapped: "text-red-800 font-semibold",
-  evacuate: "text-orange-700",
-  safe: "text-green-700",
+  injured: "text-on-danger-soft",
+  trapped: "font-bold text-on-sev-critical-soft",
+  evacuate: "text-on-sev-high-soft",
+  safe: "text-success",
 };
 
-const deptBadge: Record<string, string> = {
-  hospital: "bg-blue-50 text-blue-700",
-  police: "bg-indigo-50 text-indigo-700",
-  civil_defense: "bg-orange-50 text-orange-700",
+const deptTone: Record<string, BadgeTone> = {
+  hospital: "accent",
+  police: "info",
+  civil_defense: "high",
 };
 
 const deptLabel: Record<string, string> = {
@@ -504,6 +569,9 @@ const deptLabel: Record<string, string> = {
   police: "Police",
   civil_defense: "Civil Def",
 };
+
+const priorityToneOf = (score: number): BadgeTone =>
+  score >= 80 ? "critical" : score >= 60 ? "high" : score >= 40 ? "medium" : "neutral";
 
 interface CompactRowProps {
   alert: Alert;
@@ -522,57 +590,78 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge, userLocat
   const eventLabel = eventTypeLabels[alert.event_type]?.en ?? alert.event_type;
   const routedDept = (alert as any).routed_department as string | undefined;
 
+  const navLinkClasses =
+    "inline-flex min-h-11 items-center gap-1 rounded-md bg-success px-2.5 text-xs font-semibold text-white transition-opacity hover:opacity-90 focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2";
+  const mapLinkClasses =
+    "inline-flex min-h-11 items-center gap-1 rounded-md border border-edge-strong bg-surface px-2.5 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface-2 focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2";
+
   return (
     <>
       <tr
         onClick={() => setExpanded(!expanded)}
-        className={`cursor-pointer transition-colors hover:bg-gray-50 ${
+        className={`cursor-pointer transition-colors hover:bg-surface-2 ${
           alert.acknowledged ? "opacity-60" : ""
-        } ${expanded ? "bg-blue-50/40" : ""}`}
+        } ${expanded ? "bg-accent-soft/40" : ""}`}
       >
-        {/* Severity */}
+        {/* Severity + expander */}
         <td className="px-4 py-2.5">
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ${sevBadge[alert.severity] ?? "bg-gray-100 text-gray-600"}`}>
-            {alert.severity.toUpperCase()}
-          </span>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              aria-expanded={expanded}
+              aria-label={expanded ? "Collapse alert details" : "Expand alert details"}
+              onClick={(e) => {
+                e.stopPropagation();
+                setExpanded(!expanded);
+              }}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-surface-3 hover:text-ink focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
+            >
+              {expanded ? (
+                <ChevronDown aria-hidden="true" className="h-4 w-4" />
+              ) : (
+                <ChevronRight aria-hidden="true" className="h-4 w-4 rtl:rotate-180" />
+              )}
+            </button>
+            <StatusBadge severity={alert.severity} size="sm" />
+          </div>
         </td>
 
         {/* Title + event + patient status */}
         <td className="px-4 py-2.5">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="truncate font-medium text-gray-900 text-sm">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="truncate text-sm font-semibold text-ink">
               {alert.title}
             </span>
-            <span className="shrink-0 text-[10px] text-gray-400">
+            <span className="shrink-0 text-xs text-ink-faint">
               {eventLabel}
             </span>
             {patientStatus && (
-              <span className={`shrink-0 text-[10px] font-medium ${patientStatusColor[patientStatus] ?? "text-gray-500"}`}>
+              <span className={`shrink-0 text-xs font-semibold ${patientStatusColor[patientStatus] ?? "text-ink-muted"}`}>
                 {patientStatus}
               </span>
             )}
             {isSecondary && (
-              <span className="shrink-0 rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium text-purple-700">
+              <Badge tone="info" size="sm">
                 Supporting
-              </span>
+              </Badge>
             )}
           </div>
           {/* Second line: patient name + details preview */}
           {isSOS && patientInfo?.name && (
-            <div className="mt-0.5 flex items-center gap-2 text-[11px] text-gray-500">
-              <span className="font-medium text-gray-700">{patientInfo.name}</span>
+            <div className="mt-0.5 flex items-center gap-2 text-xs text-ink-muted">
+              <span className="font-semibold text-ink">{patientInfo.name}</span>
               {patientInfo.phone && (
                 <span dir="ltr">{patientInfo.phone}</span>
               )}
               {patientInfo.blood_type && (
-                <span className="rounded bg-red-50 px-1 text-[10px] font-medium text-red-700">
+                <Badge tone="danger" size="sm">
                   {patientInfo.blood_type}
-                </span>
+                </Badge>
               )}
             </div>
           )}
           {!isSOS && alert.details && (
-            <p className="mt-0.5 truncate text-[11px] text-gray-500 max-w-[400px]">
+            <p className="mt-0.5 max-w-[400px] truncate text-xs text-ink-muted">
               {alert.details}
             </p>
           )}
@@ -581,68 +670,67 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge, userLocat
         {/* Department */}
         <td className="px-4 py-2.5">
           {routedDept ? (
-            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${deptBadge[routedDept] ?? "bg-gray-100 text-gray-600"}`}>
+            <Badge tone={deptTone[routedDept] ?? "neutral"} size="sm">
               {deptLabel[routedDept] ?? routedDept}
-            </span>
+            </Badge>
           ) : (
-            <span className="text-[10px] text-gray-300">&mdash;</span>
+            <span className="text-xs text-ink-faint">&mdash;</span>
           )}
         </td>
 
         {/* Source */}
         <td className="px-4 py-2.5">
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
-            isSOS
-              ? "bg-red-50 text-red-700"
-              : alert.source === "telegram"
-              ? "bg-cyan-50 text-cyan-700"
-              : "bg-gray-100 text-gray-600"
-          }`}>
+          <Badge
+            tone={isSOS ? "danger" : alert.source === "telegram" ? "info" : "neutral"}
+            size="sm"
+          >
             {alert.source ?? "system"}
-          </span>
+          </Badge>
         </td>
 
         {/* Priority */}
         <td className="px-4 py-2.5 text-center">
           {priorityScore > 0 && (
-            <span className={`inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-bold ${
-              priorityScore >= 80 ? "bg-red-100 text-red-800" :
-              priorityScore >= 60 ? "bg-orange-100 text-orange-800" :
-              priorityScore >= 40 ? "bg-yellow-100 text-yellow-800" :
-              "bg-gray-100 text-gray-600"
-            }`}>
+            <Badge
+              tone={priorityToneOf(priorityScore)}
+              solid={priorityScore >= 80}
+              size="sm"
+              icon={<Sparkles />}
+              title="AI Priority Score"
+            >
               P{priorityScore}
-            </span>
+            </Badge>
           )}
         </td>
 
         {/* Affected patients */}
-        <td className="px-4 py-2.5 text-center text-xs text-gray-600">
-          {alert.affected_patients_count > 0 ? alert.affected_patients_count : "\u2014"}
+        <td className="px-4 py-2.5 text-center text-xs text-ink-muted">
+          {alert.affected_patients_count > 0 ? alert.affected_patients_count : "—"}
         </td>
 
         {/* Time */}
-        <td className="px-4 py-2.5 text-xs text-gray-500 whitespace-nowrap">
+        <td className="whitespace-nowrap px-4 py-2.5 text-xs text-ink-muted">
           {timeAgo(alert.created_at)}
         </td>
 
         {/* Actions */}
-        <td className="px-4 py-2.5 text-right">
+        <td className="px-4 py-2.5 text-end">
           <div className="flex items-center justify-end gap-1.5">
             {!alert.acknowledged ? (
-              <button
+              <Button
+                size="sm"
+                className="min-h-11"
                 onClick={(e) => {
                   e.stopPropagation();
                   onAcknowledge(alert.id);
                 }}
-                className="rounded-md bg-blue-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-blue-700 transition-colors"
               >
                 Ack
-              </button>
+              </Button>
             ) : (
-              <span className="rounded-md bg-gray-100 px-2.5 py-1 text-[11px] font-medium text-gray-400">
+              <Badge tone="neutral" size="sm">
                 Done
-              </span>
+              </Badge>
             )}
             {alert.latitude && alert.longitude && (
               <>
@@ -656,16 +744,18 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge, userLocat
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className="rounded-md bg-green-600 px-2 py-1 text-[11px] font-medium text-white hover:bg-green-700 transition-colors"
+                  className={navLinkClasses}
                   title="Get directions in Google Maps"
                 >
+                  <Navigation aria-hidden="true" className="h-3.5 w-3.5" />
                   Navigate
                 </a>
                 <a
                   href={`/dashboard/map?lat=${alert.latitude}&lon=${alert.longitude}`}
                   onClick={(e) => e.stopPropagation()}
-                  className="rounded-md border border-gray-200 px-2 py-1 text-[11px] font-medium text-gray-500 hover:bg-gray-50"
+                  className={mapLinkClasses}
                 >
+                  <MapPin aria-hidden="true" className="h-3.5 w-3.5" />
                   Map
                 </a>
               </>
@@ -677,23 +767,23 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge, userLocat
       {/* Expanded detail row */}
       {expanded && (
         <tr>
-          <td colSpan={8} className="bg-gray-50/70 px-4 py-3 border-b border-gray-100">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-xs">
+          <td colSpan={8} className="border-b border-edge bg-surface-2 px-4 py-3">
+            <div className="grid gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
               {/* Details */}
               {alert.details && (
                 <div className="sm:col-span-2 lg:col-span-3">
-                  <p className="font-medium text-gray-700 mb-0.5">Details</p>
-                  <p className="text-gray-600">{alert.details}</p>
+                  <p className="mb-0.5 font-bold text-ink">Details</p>
+                  <p className="text-ink-muted">{alert.details}</p>
                 </div>
               )}
               {/* Location + Navigate */}
               {alert.latitude && alert.longitude && (
                 <div>
-                  <p className="font-medium text-gray-700 mb-0.5">Location</p>
-                  <p className="text-gray-600">
+                  <p className="mb-0.5 font-bold text-ink">Location</p>
+                  <p className="text-ink-muted">
                     {alert.latitude.toFixed(5)}, {alert.longitude.toFixed(5)}
                     {userLocation && (
-                      <span className="ms-2 text-blue-600 font-medium">
+                      <span className="ms-2 font-semibold text-on-accent-soft">
                         ({haversineKm(userLocation.lat, userLocation.lon, alert.latitude, alert.longitude).toFixed(1)} km away)
                       </span>
                     )}
@@ -708,33 +798,33 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge, userLocat
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={(e) => e.stopPropagation()}
-                    className="mt-1 inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 text-[11px] font-medium text-white hover:bg-green-700 transition-colors"
+                    className={`mt-1 ${navLinkClasses}`}
                   >
-                    <svg className="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                    </svg>
+                    <Navigation aria-hidden="true" className="h-3 w-3" />
                     Get Directions
                   </a>
                 </div>
               )}
               {/* Confidence */}
               <div>
-                <p className="font-medium text-gray-700 mb-0.5">Confidence</p>
-                <p className="text-gray-600">{Math.round(alert.confidence * 100)}%</p>
+                <p className="mb-0.5 font-bold text-ink">Confidence</p>
+                <p className="text-ink-muted">{Math.round(alert.confidence * 100)}%</p>
               </div>
               {/* AI recommendation */}
               {meta?.recommendation && (
                 <div className="sm:col-span-2">
-                  <p className="font-medium text-blue-700 mb-0.5">AI Recommendation</p>
-                  <p className="text-blue-600 bg-blue-50 rounded px-2 py-1">{String(meta.recommendation)}</p>
+                  <p className="mb-0.5 flex items-center gap-1 font-bold text-on-info-soft">
+                    <Sparkles aria-hidden="true" className="h-3 w-3" />
+                    AI Recommendation
+                  </p>
+                  <p className="rounded-md bg-info-soft px-2 py-1 text-on-info-soft">{String(meta.recommendation)}</p>
                 </div>
               )}
               {/* Priority factors */}
               {Array.isArray(meta?.priority_factors) && meta.priority_factors.length > 0 && (
                 <div className="sm:col-span-2 lg:col-span-3">
-                  <p className="font-medium text-gray-700 mb-0.5">Priority Factors</p>
-                  <ul className="list-disc ms-4 space-y-0.5 text-gray-600">
+                  <p className="mb-0.5 font-bold text-ink">Priority Factors</p>
+                  <ul className="ms-4 list-disc space-y-0.5 text-ink-muted">
                     {(meta.priority_factors as string[]).map((f: string, i: number) => (
                       <li key={i}>{f}</li>
                     ))}
@@ -743,9 +833,9 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge, userLocat
               )}
               {/* SOS patient details */}
               {isSOS && patientInfo && (
-                <div className="sm:col-span-2 lg:col-span-3 rounded-md bg-red-50 p-2.5">
-                  <p className="font-medium text-red-700 mb-1">Patient Information</p>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-gray-700">
+                <div className="rounded-md bg-danger-soft p-2.5 sm:col-span-2 lg:col-span-3">
+                  <p className="mb-1 font-bold text-on-danger-soft">Patient Information</p>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-on-danger-soft">
                     <span><b>Name:</b> {patientInfo.name}</span>
                     {patientInfo.phone && <span dir="ltr"><b>Phone:</b> {patientInfo.phone}</span>}
                     {patientInfo.blood_type && <span><b>Blood:</b> {patientInfo.blood_type}</span>}
@@ -753,7 +843,7 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge, userLocat
                       <span><b>Conditions:</b> {patientInfo.chronic_conditions.join(", ")}</span>
                     )}
                     {patientInfo.allergies?.length > 0 && (
-                      <span className="text-amber-700"><b>Allergies:</b> {patientInfo.allergies.join(", ")}</span>
+                      <span><b>Allergies:</b> {patientInfo.allergies.join(", ")}</span>
                     )}
                     {patientInfo.emergency_contacts?.length > 0 && (
                       <span>
@@ -764,10 +854,10 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge, userLocat
                   {/* Trust warning */}
                   {meta?.patient_trust_score != null && Number(meta.patient_trust_score) < 0.5 && (
                     <div className="mt-1.5">
-                      <span className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+                      <Badge tone="warning" size="sm" icon={<TriangleAlert />}>
                         Low trust ({Math.round(Number(meta.patient_trust_score) * 100)}%)
-                        {meta.patient_false_alarms ? ` \u00B7 ${meta.patient_false_alarms} false alarm(s)` : ""}
-                      </span>
+                        {meta.patient_false_alarms ? ` · ${meta.patient_false_alarms} false alarm(s)` : ""}
+                      </Badge>
                     </div>
                   )}
                 </div>
@@ -778,31 +868,29 @@ const CompactRow: React.FC<CompactRowProps> = ({ alert, onAcknowledge, userLocat
                   <Link
                     to={`/dashboard/patients/${meta.patient_id}`}
                     onClick={(e) => e.stopPropagation()}
-                    className="inline-flex items-center gap-1.5 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition-colors"
+                    className="inline-flex min-h-11 items-center gap-1.5 rounded-md bg-accent px-3 text-xs font-semibold text-on-accent transition-colors hover:bg-accent-hover focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
                   >
                     View Full Patient Profile
-                    <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
+                    <ChevronRight aria-hidden="true" className="h-3.5 w-3.5 rtl:rotate-180" />
                   </Link>
                 </div>
               )}
               {/* Nearby alert info */}
               {meta?.nearby_alert_count != null && Number(meta.nearby_alert_count) > 0 && (
                 <div>
-                  <p className="font-medium text-gray-700 mb-0.5">Nearby Alerts</p>
-                  <p className="text-gray-600">
+                  <p className="mb-0.5 font-bold text-ink">Nearby Alerts</p>
+                  <p className="text-ink-muted">
                     {String(meta.nearby_alert_count)} nearby
                     {meta.telegram_corroborated && (
-                      <span className="ms-1 text-cyan-600 font-medium">Telegram confirmed</span>
+                      <span className="ms-1 font-semibold text-on-info-soft">Telegram confirmed</span>
                     )}
                   </p>
                 </div>
               )}
               {/* Created at */}
               <div>
-                <p className="font-medium text-gray-700 mb-0.5">Created</p>
-                <p className="text-gray-600">{new Date(alert.created_at).toLocaleString()}</p>
+                <p className="mb-0.5 font-bold text-ink">Created</p>
+                <p className="text-ink-muted">{new Date(alert.created_at).toLocaleString()}</p>
               </div>
             </div>
           </td>

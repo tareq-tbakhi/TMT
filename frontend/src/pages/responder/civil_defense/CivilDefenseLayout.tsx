@@ -4,6 +4,7 @@
  */
 
 import ResponderLayout from "../../../components/responder/ResponderLayout";
+import { useAccent } from "../../../contexts/PreferencesContext";
 
 const CIVIL_DEFENSE_TABS = [
   { path: "", label: "Case", icon: "case" as const },
@@ -12,5 +13,6 @@ const CIVIL_DEFENSE_TABS = [
 ];
 
 export default function CivilDefenseLayout() {
+  useAccent("civil_defense");
   return <ResponderLayout responderType="civil_defense" tabs={CIVIL_DEFENSE_TABS} />;
 }

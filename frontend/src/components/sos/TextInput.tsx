@@ -3,6 +3,7 @@
  */
 
 import { useState, useRef, useEffect } from "react";
+import { SendHorizontal } from "lucide-react";
 
 interface TextInputProps {
   onSend: (text: string) => void;
@@ -48,26 +49,29 @@ export function TextInput({
   };
 
   return (
-    <div className="flex items-center gap-2 px-4 py-3 bg-gray-50 border-t border-gray-100">
+    <div className="flex items-center gap-2 border-t border-edge bg-surface-2 px-4 py-3">
+      <label htmlFor="sos-chat-input" className="sr-only">
+        {placeholder}
+      </label>
       <input
         ref={inputRef}
+        id="sos-chat-input"
         type="text"
         value={text}
         onChange={handleChange}
         onKeyDown={handleKeyDown}
         disabled={disabled}
         placeholder={placeholder}
-        className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+        className="min-h-12 w-full flex-1 rounded-lg border border-edge-strong bg-surface px-4 text-base text-ink placeholder:text-ink-faint transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-1 disabled:cursor-not-allowed disabled:opacity-55"
       />
       <button
+        type="button"
         onClick={handleSubmit}
         disabled={disabled || !text.trim()}
-        className="w-12 h-12 bg-blue-600 text-white rounded-xl flex items-center justify-center hover:bg-blue-700 active:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         aria-label="Send message"
+        className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-accent text-on-accent shadow-1 transition-colors hover:bg-accent-hover focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-55"
       >
-        <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
-        </svg>
+        <SendHorizontal aria-hidden="true" className="h-5 w-5 rtl:-scale-x-100" />
       </button>
     </div>
   );

@@ -1,220 +1,202 @@
+/**
+ * AdminLayout — shell for the Super Admin (Ministry) area.
+ * Token-based design system, admin accent, full a11y support.
+ */
+
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import {
+  BarChart3,
+  Bell,
+  Building2,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  MessageCircle,
+  Settings,
+  ShieldCheck,
+  Users,
+  X,
+  type LucideIcon,
+} from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
+import { useAccent } from "../../contexts/PreferencesContext";
+import { SettingsPanel } from "../ui";
 
-const navItems = [
-  {
-    path: "/admin",
-    label: "admin.nav.dashboard",
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" />
-      </svg>
-    ),
-  },
-  {
-    path: "/admin/hospitals",
-    label: "admin.nav.facilities",
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-      </svg>
-    ),
-  },
-  {
-    path: "/admin/users",
-    label: "admin.nav.users",
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-      </svg>
-    ),
-  },
-  {
-    path: "/admin/analytics",
-    label: "admin.nav.analytics",
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-      </svg>
-    ),
-  },
-  {
-    path: "/admin/alerts",
-    label: "admin.nav.alerts",
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-      </svg>
-    ),
-  },
-  {
-    path: "/admin/social-media",
-    label: "admin.nav.socialMedia",
-    icon: (
-      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
-      </svg>
-    ),
-  },
+const NAV_ITEMS: { path: string; label: string; icon: LucideIcon }[] = [
+  { path: "/admin", label: "admin.nav.dashboard", icon: LayoutDashboard },
+  { path: "/admin/hospitals", label: "admin.nav.facilities", icon: Building2 },
+  { path: "/admin/users", label: "admin.nav.users", icon: Users },
+  { path: "/admin/analytics", label: "admin.nav.analytics", icon: BarChart3 },
+  { path: "/admin/alerts", label: "admin.nav.alerts", icon: Bell },
+  { path: "/admin/social-media", label: "admin.nav.socialMedia", icon: MessageCircle },
 ];
 
 const AdminLayout: React.FC = () => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { logout } = useAuthStore();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  useAccent("admin");
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
 
-  const toggleLanguage = () => {
-    const newLang = i18n.language === "ar" ? "en" : "ar";
-    i18n.changeLanguage(newLang);
-  };
-
   const navLinkClasses = ({ isActive }: { isActive: boolean }) =>
-    `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
+    `flex min-h-11 items-center gap-3 rounded-md px-3 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
       isActive
-        ? "bg-purple-50 text-purple-700"
-        : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+        ? "bg-accent-soft text-on-accent-soft"
+        : "text-ink-muted hover:bg-surface-2 hover:text-ink"
     }`;
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-canvas">
+      <a href="#main-content" className="skip-link">
+        {t("a11y.skipToContent")}
+      </a>
+
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 z-30 bg-black/50 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/60 lg:hidden"
           onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
         />
       )}
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 start-0 z-40 flex w-64 flex-col border-e border-gray-200 bg-white transition-transform lg:static lg:translate-x-0 ${
-          sidebarOpen
-            ? "translate-x-0"
-            : "-translate-x-full rtl:translate-x-full"
+        id="app-sidebar"
+        aria-label="Admin navigation"
+        className={`fixed inset-y-0 start-0 z-40 flex w-72 flex-col border-e border-edge bg-surface transition-transform lg:static lg:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full rtl:translate-x-full"
         }`}
       >
-        {/* Logo area */}
-        <div className="flex h-16 items-center gap-2 border-b border-gray-200 px-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-600">
-            <svg className="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-            </svg>
+        {/* Logo */}
+        <div className="flex h-16 items-center justify-between gap-2 border-b border-edge px-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent text-on-accent"
+            >
+              <ShieldCheck className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-lg font-bold leading-tight text-ink">TMT</p>
+              <p className="truncate text-xs font-semibold text-on-accent-soft">
+                {t("admin.title")}
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-lg font-bold text-gray-900">TMT</h1>
-            <p className="text-xs text-purple-600 font-medium">{t("admin.title")}</p>
-          </div>
+          <button
+            type="button"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close menu"
+            className="flex h-10 w-10 items-center justify-center rounded-md text-ink-muted hover:bg-surface-2 hover:text-ink focus-visible:outline-3 focus-visible:outline-focus lg:hidden"
+          >
+            <X aria-hidden="true" className="h-5 w-5" />
+          </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-          {navItems.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.path === "/admin"}
-              className={navLinkClasses}
-              onClick={() => setSidebarOpen(false)}
-            >
-              {item.icon}
-              <span>{t(item.label)}</span>
-            </NavLink>
-          ))}
+        <nav aria-label="Main" className="flex-1 space-y-1 overflow-y-auto p-3">
+          {NAV_ITEMS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                end={item.path === "/admin"}
+                className={navLinkClasses}
+                onClick={() => setSidebarOpen(false)}
+              >
+                <Icon aria-hidden="true" className="h-5 w-5 shrink-0" />
+                <span className="truncate">{t(item.label)}</span>
+              </NavLink>
+            );
+          })}
         </nav>
 
-        {/* Sidebar footer */}
-        <div className="border-t border-gray-200 p-3">
-          {/* User info */}
-          <div className="mb-2 flex items-center gap-3 rounded-lg px-3 py-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-purple-100 text-sm font-medium text-purple-700">
+        {/* Footer */}
+        <div className="space-y-1 border-t border-edge p-3">
+          <div className="mb-1 flex items-center gap-3 rounded-md bg-surface-2 px-3 py-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-sm font-bold text-on-accent-soft">
               SA
-            </div>
+            </span>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-gray-900">
+              <p className="truncate text-sm font-semibold text-ink">
                 {t("admin.superAdmin")}
               </p>
-              <p className="truncate text-xs text-gray-500">
-                {t("admin.role")}
-              </p>
+              <p className="truncate text-xs text-ink-muted">{t("admin.role")}</p>
             </div>
           </div>
-
           <button
-            onClick={toggleLanguage}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus-visible:outline-3 focus-visible:outline-focus"
           >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
-            </svg>
-            <span>{i18n.language === "ar" ? "English" : "\u0627\u0644\u0639\u0631\u0628\u064a\u0629"}</span>
+            <Settings aria-hidden="true" className="h-5 w-5 shrink-0" />
+            <span className="truncate">{t("settings.title")}</span>
           </button>
           <button
+            type="button"
             onClick={handleLogout}
-            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+            className="flex min-h-11 w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-semibold text-danger transition-colors hover:bg-danger-soft focus-visible:outline-3 focus-visible:outline-focus"
           >
-            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-            </svg>
+            <LogOut aria-hidden="true" className="h-5 w-5 shrink-0" />
             <span>{t("nav.logout")}</span>
           </button>
         </div>
       </aside>
 
       {/* Main content area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Top bar */}
-        <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-4 lg:px-6">
-          {/* Hamburger */}
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 lg:hidden"
-          >
-            <svg
-              className="h-6 w-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-edge bg-surface px-4 lg:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open menu"
+              aria-controls="app-sidebar"
+              aria-expanded={sidebarOpen}
+              className="flex h-11 w-11 items-center justify-center rounded-md text-ink-muted hover:bg-surface-2 hover:text-ink focus-visible:outline-3 focus-visible:outline-focus lg:hidden"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M4 6h16M4 12h16M4 18h16"
-              />
-            </svg>
-          </button>
-
-          {/* Title */}
-          <div className="hidden lg:block">
-            <h2 className="text-lg font-semibold text-gray-900">
+              <Menu aria-hidden="true" className="h-6 w-6" />
+            </button>
+            <h2 className="hidden truncate text-lg font-bold text-ink lg:block">
               {t("admin.title")}
             </h2>
           </div>
 
-          {/* Right side */}
-          <div className="ms-auto flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-lg bg-purple-50 px-3 py-1.5">
-              <div className="h-2 w-2 rounded-full bg-purple-500" />
-              <span className="text-xs font-medium text-purple-700">
+          <div className="flex items-center gap-2">
+            <span className="hidden items-center gap-2 rounded-full bg-accent-soft px-3 py-1.5 sm:inline-flex">
+              <span aria-hidden="true" className="h-2 w-2 rounded-full bg-accent" />
+              <span className="text-xs font-semibold text-on-accent-soft">
                 {t("admin.superAdmin")}
               </span>
-            </div>
+            </span>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen(true)}
+              aria-label={t("settings.open")}
+              className="flex h-11 w-11 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus-visible:outline-3 focus-visible:outline-focus"
+            >
+              <Settings aria-hidden="true" className="h-5 w-5" />
+            </button>
           </div>
         </header>
 
-        {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto p-4 lg:p-6">
           <Outlet />
         </main>
       </div>
+
+      <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   );
 };

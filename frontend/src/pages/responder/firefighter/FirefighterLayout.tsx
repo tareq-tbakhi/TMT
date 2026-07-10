@@ -4,6 +4,7 @@
  */
 
 import ResponderLayout from "../../../components/responder/ResponderLayout";
+import { useAccent } from "../../../contexts/PreferencesContext";
 
 const FIREFIGHTER_TABS = [
   { path: "", label: "Case", icon: "case" as const },
@@ -12,5 +13,6 @@ const FIREFIGHTER_TABS = [
 ];
 
 export default function FirefighterLayout() {
+  useAccent("firefighter");
   return <ResponderLayout responderType="firefighter" tabs={FIREFIGHTER_TABS} />;
 }

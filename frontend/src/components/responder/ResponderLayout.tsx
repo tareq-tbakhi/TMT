@@ -1,13 +1,32 @@
 /**
- * Base layout for all Field Responder views
- * Mobile-first with bottom tab navigation
- * Minimal UI optimized for emergency use
+ * Base layout for all Field Responder views.
+ * Mobile-first shell: compact header (role identity + connection state as
+ * icon + text, never color alone) and a bottom tab bar with >=56px targets.
+ * Token-driven so it adapts to light / dark / high-contrast and the
+ * role accent set by each responder layout via useAccent().
  */
 
+import { useState } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { useAuthStore, RESPONDER_COLORS, RESPONDER_LABELS, type ResponderType } from "../../store/authStore";
+import {
+  Ambulance,
+  ClipboardList,
+  Flame,
+  History,
+  LifeBuoy,
+  LogOut,
+  Map,
+  Settings,
+  Siren,
+  Wifi,
+  WifiOff,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
+import { useAuthStore, RESPONDER_LABELS, type ResponderType } from "../../store/authStore";
 import { useResponderStore } from "../../store/responderStore";
+import { Badge, SettingsPanel } from "../ui";
 
 interface ResponderLayoutProps {
   responderType: ResponderType;
@@ -18,104 +37,21 @@ interface ResponderLayoutProps {
   }>;
 }
 
-// ─── Tab Icons ───────────────────────────────────────────────────
+/** Tab icon keys -> lucide components (design system: lucide only). */
+const TAB_ICONS: Record<ResponderLayoutProps["tabs"][number]["icon"], LucideIcon> = {
+  case: ClipboardList,
+  map: Map,
+  equipment: Wrench,
+  history: History,
+};
 
-function TabIcon({ icon, active, color }: { icon: string; active: boolean; color: string }) {
-  const strokeColor = active ? color : "currentColor";
-
-  switch (icon) {
-    case "case":
-      return (
-        <svg
-          width="28"
-          height="28"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke={strokeColor}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-          <polyline points="14 2 14 8 20 8" />
-          <line x1="12" y1="18" x2="12" y2="12" />
-          <line x1="9" y1="15" x2="15" y2="15" />
-        </svg>
-      );
-
-    case "map":
-      return (
-        <svg
-          width="28"
-          height="28"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke={strokeColor}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6" />
-          <line x1="8" y1="2" x2="8" y2="18" />
-          <line x1="16" y1="6" x2="16" y2="22" />
-        </svg>
-      );
-
-    case "equipment":
-      return (
-        <svg
-          width="28"
-          height="28"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke={strokeColor}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M9 11l3 3L22 4" />
-          <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
-        </svg>
-      );
-
-    case "history":
-      return (
-        <svg
-          width="28"
-          height="28"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke={strokeColor}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <circle cx="12" cy="12" r="10" />
-          <polyline points="12 6 12 12 16 14" />
-        </svg>
-      );
-
-    default:
-      return null;
-  }
-}
-
-// ─── Status Indicator ────────────────────────────────────────────
-
-function ConnectionStatus({ isConnected }: { isConnected: boolean }) {
-  return (
-    <div className="flex items-center gap-1.5">
-      <span
-        className={`w-2 h-2 rounded-full ${
-          isConnected ? "bg-green-500" : "bg-red-500 animate-pulse"
-        }`}
-      />
-      <span className="text-xs text-gray-500">
-        {isConnected ? "Live" : "Offline"}
-      </span>
-    </div>
-  );
-}
+/** Role identity icon shown in the header chip. */
+const ROLE_ICONS: Record<ResponderType, LucideIcon> = {
+  ambulance: Ambulance,
+  police: Siren,
+  civil_defense: LifeBuoy,
+  firefighter: Flame,
+};
 
 // ─── Layout Component ────────────────────────────────────────────
 
@@ -125,9 +61,10 @@ export default function ResponderLayout({ responderType, tabs }: ResponderLayout
   const location = useLocation();
   const { logout } = useAuthStore();
   const { activeCase, isConnected, isOnDuty } = useResponderStore();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const colors = RESPONDER_COLORS[responderType];
   const label = RESPONDER_LABELS[responderType];
+  const RoleIcon = ROLE_ICONS[responderType];
 
   const handleLogout = () => {
     logout();
@@ -139,100 +76,126 @@ export default function ResponderLayout({ responderType, tabs }: ResponderLayout
     i18n.changeLanguage(newLang);
   };
 
-  // Get active color for icons
-  const activeIconColor = colors.text.replace("text-", "").replace("-700", "-600").replace("-800", "-700");
-  const iconColorClass = `#${activeIconColor === "red-600" ? "dc2626" : activeIconColor === "indigo-600" ? "4f46e5" : activeIconColor === "orange-600" ? "ea580c" : "b91c1c"}`;
-
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      {/* Top Header - Compact */}
-      <header className={`bg-gradient-to-r ${colors.gradient} px-4 py-3 flex items-center justify-between shrink-0 shadow-lg`}>
-        <div className="flex items-center gap-3">
-          {/* Role Badge */}
-          <div className="flex items-center gap-2">
-            <span className="text-white font-bold text-lg">{label}</span>
+    <div className="flex h-screen flex-col bg-canvas">
+      <a href="#main-content" className="skip-link">
+        {t("a11y.skipToContent")}
+      </a>
+
+      {/* Top header: role identity + connection state */}
+      <header className="flex shrink-0 items-center justify-between gap-2 border-b border-edge bg-surface px-3 py-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span
+            aria-hidden="true"
+            className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-accent text-on-accent"
+          >
+            <RoleIcon className="h-5 w-5" />
+          </span>
+          <div className="flex min-w-0 items-center gap-2">
+            <h1 className="truncate text-lg font-bold leading-tight text-ink">{label}</h1>
             {activeCase && (
-              <span className="bg-white/20 text-white text-xs font-medium px-2 py-0.5 rounded-full">
+              <Badge tone="danger" solid size="sm" dot>
                 Active
-              </span>
+              </Badge>
             )}
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          {/* Connection Status */}
-          <div className="flex items-center gap-1.5 bg-white/10 rounded-full px-2 py-1">
-            <span
-              className={`w-2 h-2 rounded-full ${
-                isConnected ? "bg-green-400" : "bg-red-400 animate-pulse"
-              }`}
-            />
-            <span className="text-white/90 text-xs">
-              {isConnected ? "Live" : "Offline"}
-            </span>
-          </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {/* Connection state: icon + text, never color alone */}
+          <span
+            role="status"
+            className={`me-1 inline-flex min-h-9 items-center gap-1.5 rounded-full px-2.5 text-xs font-bold ${
+              isConnected
+                ? "bg-success-soft text-on-success-soft"
+                : "bg-danger-soft text-on-danger-soft"
+            }`}
+          >
+            {isConnected ? (
+              <Wifi aria-hidden="true" className="h-4 w-4" />
+            ) : (
+              <WifiOff aria-hidden="true" className="h-4 w-4 animate-pulse" />
+            )}
+            {isConnected ? "Live" : "Offline"}
+          </span>
 
-          {/* Language Toggle */}
+          {/* Language toggle */}
           <button
+            type="button"
             onClick={toggleLanguage}
-            className="text-white/90 text-sm font-medium hover:text-white transition-colors"
+            aria-label="Change language"
+            className="flex h-11 min-w-11 items-center justify-center rounded-md px-2 text-sm font-bold text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus-visible:outline-3 focus-visible:outline-focus"
           >
             {i18n.language === "ar" ? "EN" : "AR"}
           </button>
 
+          {/* Settings */}
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            aria-label={t("settings.open")}
+            className="flex h-11 w-11 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus-visible:outline-3 focus-visible:outline-focus"
+          >
+            <Settings aria-hidden="true" className="h-5 w-5" />
+          </button>
+
           {/* Logout */}
           <button
+            type="button"
             onClick={handleLogout}
-            className="bg-white/10 hover:bg-white/20 text-white rounded-lg p-2 transition-colors"
             aria-label="Logout"
+            className="flex h-11 w-11 items-center justify-center rounded-md text-danger transition-colors hover:bg-danger-soft focus-visible:outline-3 focus-visible:outline-focus"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
+            <LogOut aria-hidden="true" className="h-5 w-5" />
           </button>
         </div>
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto pb-24">
+      <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto pb-24">
         <Outlet />
       </main>
 
-      {/* Bottom Tab Navigation - Large Touch Targets */}
+      {/* Bottom tab navigation — large touch targets */}
       <nav
-        className="fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 z-50"
         role="navigation"
+        aria-label={label}
+        className="fixed bottom-0 inset-x-0 z-50 border-t border-edge bg-surface"
         style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
       >
-        <div className="flex items-stretch justify-around max-w-lg mx-auto" style={{ height: "72px" }}>
+        <div className="mx-auto flex h-[4.5rem] max-w-lg items-stretch justify-around">
           {tabs.map((tab) => {
             const fullPath = `/${responderType}${tab.path}`;
             const isActive =
               location.pathname === fullPath ||
               (tab.path === "" && location.pathname === `/${responderType}`);
+            const Icon = TAB_ICONS[tab.icon];
 
             return (
               <NavLink
                 key={tab.path}
                 to={fullPath}
-                className={`flex flex-col items-center justify-center flex-1 min-w-0 px-2 transition-all ${
-                  isActive
-                    ? colors.text
-                    : "text-gray-400 hover:text-gray-600"
+                aria-current={isActive ? "page" : undefined}
+                className={`flex min-w-0 flex-1 flex-col items-center justify-center gap-1 rounded-md px-1 py-2 transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
+                  isActive ? "text-accent" : "text-ink-muted hover:text-ink"
                 }`}
               >
-                <div className={`p-1.5 rounded-xl transition-colors ${isActive ? colors.bg : ""}`}>
-                  <TabIcon
-                    icon={tab.icon}
-                    active={isActive}
-                    color={isActive ? iconColorClass : "currentColor"}
+                <span className="relative">
+                  <Icon
+                    aria-hidden="true"
+                    className="h-7 w-7"
+                    strokeWidth={isActive ? 2.5 : 2}
                   />
-                </div>
+                  {isActive && (
+                    <span
+                      aria-hidden="true"
+                      className="absolute -bottom-1.5 start-1/2 h-1 w-4 -translate-x-1/2 rounded-full bg-accent rtl:translate-x-1/2"
+                    />
+                  )}
+                </span>
                 <span
-                  className={`text-[11px] mt-0.5 ${
-                    isActive ? "font-semibold" : "font-medium"
+                  className={`max-w-full truncate text-xs ${
+                    isActive ? "font-bold" : "font-semibold"
                   }`}
                 >
                   {tab.label}
@@ -242,6 +205,11 @@ export default function ResponderLayout({ responderType, tabs }: ResponderLayout
           })}
         </div>
       </nav>
+
+      {/* Mounted only while open so provider-less unit tests stay green */}
+      {settingsOpen && (
+        <SettingsPanel open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      )}
     </div>
   );
 }

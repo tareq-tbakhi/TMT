@@ -2,6 +2,58 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { io, Socket } from "socket.io-client";
 import {
+  Activity,
+  BadgeCheck,
+  Bomb,
+  Building2,
+  CircleAlert,
+  CircleCheck,
+  ClipboardList,
+  Compass,
+  Crosshair,
+  Flame,
+  Hash,
+  HeartPulse,
+  Lightbulb,
+  MapPin,
+  MessageCircle,
+  MessageSquareText,
+  Pause,
+  Phone,
+  Plane,
+  Play,
+  Plus,
+  Radar,
+  RadioTower,
+  RefreshCw,
+  Search,
+  Send,
+  Siren,
+  Tent,
+  Trash2,
+  TriangleAlert,
+  Unplug,
+  Waves,
+  Wifi,
+  WifiOff,
+  X,
+  Zap,
+} from "lucide-react";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  LoadingState,
+  Modal,
+  PageHeader,
+  Select,
+  Spinner,
+  StatCard,
+  type BadgeTone,
+} from "../../components/ui";
+import {
   getTelegramStatus,
   getTelegramChannels,
   addTelegramChannel,
@@ -33,31 +85,19 @@ const PLATFORMS = [
   {
     id: "telegram" as const,
     label: "admin.socialMedia.platformTelegram",
-    icon: (
-      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-      </svg>
-    ),
+    icon: <Send aria-hidden="true" className="h-4 w-4" />,
     enabled: true,
   },
   {
     id: "whatsapp" as const,
     label: "admin.socialMedia.platformWhatsApp",
-    icon: (
-      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-      </svg>
-    ),
+    icon: <Phone aria-hidden="true" className="h-4 w-4" />,
     enabled: false,
   },
   {
     id: "twitter" as const,
     label: "admin.socialMedia.platformTwitter",
-    icon: (
-      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
-      </svg>
-    ),
+    icon: <Hash aria-hidden="true" className="h-4 w-4" />,
     enabled: false,
   },
 ];
@@ -72,38 +112,37 @@ const SocialMediaPage: React.FC = () => {
   const [activePlatform, setActivePlatform] = useState<PlatformId>("telegram");
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-7xl">
       {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
-          {t("admin.socialMedia.title")}
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          {t("admin.socialMedia.subtitle")}
-        </p>
-      </div>
+      <PageHeader
+        title={t("admin.socialMedia.title")}
+        description={t("admin.socialMedia.subtitle")}
+        icon={<MessageCircle />}
+      />
 
       {/* Platform sub-tabs */}
-      <div className="flex gap-2 border-b border-gray-200">
+      <div className="mb-6 flex flex-wrap gap-1 border-b border-edge">
         {PLATFORMS.map((p) => (
           <button
             key={p.id}
+            type="button"
             onClick={() => p.enabled && setActivePlatform(p.id)}
             disabled={!p.enabled}
-            className={`flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
+            aria-pressed={activePlatform === p.id}
+            className={`-mb-px flex min-h-11 items-center gap-2 border-b-2 px-4 text-sm font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
               activePlatform === p.id
-                ? "border-purple-600 text-purple-700"
+                ? "border-accent text-accent"
                 : p.enabled
-                  ? "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
-                  : "border-transparent text-gray-300 cursor-not-allowed"
+                  ? "border-transparent text-ink-muted hover:border-edge-strong hover:text-ink"
+                  : "cursor-not-allowed border-transparent text-ink-faint"
             }`}
           >
             {p.icon}
             <span>{t(p.label)}</span>
             {!p.enabled && (
-              <span className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-400">
+              <Badge tone="neutral" size="sm">
                 {t("admin.socialMedia.comingSoon")}
-              </span>
+              </Badge>
             )}
           </button>
         ))}
@@ -548,24 +587,24 @@ const TelegramContent: React.FC = () => {
 
   // Trust score color
   const getTrustColor = (score: number) => {
-    if (score >= 0.6) return "text-green-700 bg-green-100";
-    if (score >= 0.3) return "text-amber-700 bg-amber-100";
-    return "text-red-700 bg-red-100";
+    if (score >= 0.6) return "bg-success-soft text-on-success-soft";
+    if (score >= 0.3) return "bg-warning-soft text-on-warning-soft";
+    return "bg-danger-soft text-on-danger-soft";
   };
 
   const getTrustBarColor = (score: number) => {
-    if (score >= 0.6) return "bg-green-500";
-    if (score >= 0.3) return "bg-amber-500";
-    return "bg-red-500";
+    if (score >= 0.6) return "bg-success";
+    if (score >= 0.3) return "bg-warning";
+    return "bg-danger";
   };
 
   // Status badge
   const getStatusBadge = (s: string) => {
-    const map: Record<string, string> = {
-      active: "bg-green-100 text-green-700",
-      paused: "bg-yellow-100 text-yellow-700",
-      blacklisted: "bg-red-100 text-red-700",
-      removed: "bg-gray-100 text-gray-500",
+    const toneMap: Record<string, BadgeTone> = {
+      active: "success",
+      paused: "warning",
+      blacklisted: "danger",
+      removed: "neutral",
     };
     const labelMap: Record<string, string> = {
       active: t("admin.telegram.statusActive"),
@@ -574,33 +613,28 @@ const TelegramContent: React.FC = () => {
       removed: t("admin.telegram.statusRemoved"),
     };
     return (
-      <span
-        className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${map[s] || map.removed}`}
-      >
+      <Badge tone={toneMap[s] ?? "neutral"} size="sm" dot>
         {labelMap[s] || s}
-      </span>
+      </Badge>
     );
   };
 
   if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="text-gray-500">{t("common.loading")}</div>
-      </div>
-    );
+    return <LoadingState label={t("common.loading")} />;
   }
 
   if (error) {
     return (
-      <div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center">
-        <p className="text-red-700">{error}</p>
-        <button
-          onClick={fetchData}
-          className="mt-3 rounded-lg bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700"
-        >
+      <Card className="border-danger bg-danger-soft text-center">
+        <TriangleAlert
+          aria-hidden="true"
+          className="mx-auto mb-3 h-8 w-8 text-danger"
+        />
+        <p className="text-base font-semibold text-on-danger-soft">{error}</p>
+        <Button variant="danger" className="mt-4" onClick={fetchData}>
           {t("admin.retry")}
-        </button>
-      </div>
+        </Button>
+      </Card>
     );
   }
 
@@ -609,13 +643,19 @@ const TelegramContent: React.FC = () => {
       {/* Notification toast */}
       {notification && (
         <div
-          className={`fixed end-4 top-20 z-50 rounded-lg px-4 py-3 shadow-lg ${
+          role="status"
+          className={`fixed end-4 top-20 z-50 flex items-center gap-2.5 rounded-md px-4 py-3 shadow-2 ${
             notification.type === "success"
-              ? "bg-green-500 text-white"
-              : "bg-red-500 text-white"
+              ? "bg-success text-white"
+              : "bg-danger text-white"
           }`}
         >
-          {notification.message}
+          {notification.type === "success" ? (
+            <CircleCheck aria-hidden="true" className="h-5 w-5 shrink-0" />
+          ) : (
+            <CircleAlert aria-hidden="true" className="h-5 w-5 shrink-0" />
+          )}
+          <span className="text-sm font-semibold">{notification.message}</span>
         </div>
       )}
 
@@ -623,34 +663,41 @@ const TelegramContent: React.FC = () => {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         {/* Status banner */}
         {status && (
-          <div
-            className={`flex-1 rounded-lg border p-4 ${
+          <Card
+            className={`flex-1 ${
               status.connected
-                ? "border-green-200 bg-green-50"
+                ? "border-success bg-success-soft"
                 : status.configured
-                  ? "border-yellow-200 bg-yellow-50"
-                  : "border-red-200 bg-red-50"
+                  ? "border-warning bg-warning-soft"
+                  : "border-danger bg-danger-soft"
             }`}
           >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div
-                  className={`h-3 w-3 rounded-full ${
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
                     status.connected
-                      ? "bg-green-500"
+                      ? "bg-success text-white"
                       : status.configured
-                        ? "bg-yellow-500"
-                        : "bg-red-500"
+                        ? "bg-warning text-white"
+                        : "bg-danger text-white"
                   }`}
-                />
-                <div>
+                >
+                  {status.connected ? (
+                    <Wifi className="h-5 w-5" />
+                  ) : (
+                    <WifiOff className="h-5 w-5" />
+                  )}
+                </span>
+                <div className="min-w-0">
                   <p
-                    className={`text-sm font-medium ${
+                    className={`text-sm font-bold ${
                       status.connected
-                        ? "text-green-800"
+                        ? "text-on-success-soft"
                         : status.configured
-                          ? "text-yellow-800"
-                          : "text-red-800"
+                          ? "text-on-warning-soft"
+                          : "text-on-danger-soft"
                     }`}
                   >
                     {t("admin.telegram.connectionStatus")}:{" "}
@@ -660,7 +707,7 @@ const TelegramContent: React.FC = () => {
                         ? t("admin.telegram.disconnected")
                         : t("admin.telegram.notConfigured")}
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-ink-muted">
                     {status.connected
                       ? t("admin.telegram.channelsMonitored", {
                           count: status.monitored_channels,
@@ -673,68 +720,69 @@ const TelegramContent: React.FC = () => {
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex shrink-0 items-center gap-2">
                 {(status.connected || channels.length > 0) && (
-                  <button
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    icon={<Unplug />}
                     onClick={() => setShowDisconnectModal(true)}
-                    className="rounded-lg border border-red-300 bg-white px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50"
                   >
                     {t("admin.telegram.disconnect")}
-                  </button>
+                  </Button>
                 )}
                 {status.configured && !status.connected && (
-                  <button
-                    onClick={handleConnect}
-                    className="rounded-lg bg-purple-600 px-3 py-1.5 text-sm text-white hover:bg-purple-700"
-                  >
+                  <Button size="sm" onClick={handleConnect}>
                     {t("admin.telegram.connect")}
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
-          </div>
+          </Card>
         )}
 
         {/* Action buttons */}
-        <div className="flex shrink-0 gap-2">
-          <button
-            onClick={handleDiscover}
-            className="rounded-lg border border-purple-300 bg-white px-4 py-2.5 text-sm font-medium text-purple-700 hover:bg-purple-50"
-          >
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <Button variant="secondary" icon={<Compass />} onClick={handleDiscover}>
             {t("admin.telegram.discoverChannels")}
-          </button>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-purple-700"
-          >
+          </Button>
+          <Button icon={<Plus />} onClick={() => setShowAddModal(true)}>
             {t("admin.telegram.addChannel")}
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 rounded-lg bg-gray-100 p-1">
+      <div className="flex gap-1 rounded-lg border border-edge bg-surface-2 p-1">
         {(["channels", "live", "intel"] as const).map((tab) => (
           <button
             key={tab}
+            type="button"
             onClick={() => setActiveTab(tab)}
-            className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+            aria-pressed={activeTab === tab}
+            className={`flex min-h-11 flex-1 items-center justify-center rounded-md px-4 text-sm font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
               activeTab === tab
-                ? "bg-white text-purple-700 shadow-sm"
-                : "text-gray-600 hover:text-gray-900"
+                ? "bg-accent text-on-accent shadow-1"
+                : "text-ink-muted hover:bg-surface-3 hover:text-ink"
             }`}
           >
             {tab === "channels" && t("admin.telegram.tabChannels")}
             {tab === "live" && t("admin.telegram.tabLive")}
             {tab === "intel" && t("admin.telegram.tabIntel")}
             {tab === "live" && liveMessages.length > 0 && (
-              <span className="ms-1.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-purple-600 px-1.5 text-xs text-white">
+              <span
+                className={`ms-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-bold ${
+                  activeTab === tab
+                    ? "bg-surface text-accent"
+                    : "bg-accent text-on-accent"
+                }`}
+              >
                 {liveMessages.length}
               </span>
             )}
             {tab === "intel" &&
               processingMessages.filter((p) => p.status === "processing").length > 0 && (
-                <span className="ms-1.5 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-500 px-1.5 text-xs text-white animate-pulse">
+                <span className="ms-1.5 inline-flex h-5 min-w-5 animate-pulse items-center justify-center rounded-full bg-warning px-1.5 text-xs font-bold text-white">
                   {processingMessages.filter((p) => p.status === "processing").length}
                 </span>
               )}
@@ -744,183 +792,197 @@ const TelegramContent: React.FC = () => {
 
       {/* ========== CHANNELS TAB ========== */}
       {activeTab === "channels" && (
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-start text-xs font-medium uppercase text-gray-500">
-                  {t("admin.telegram.username")}
-                </th>
-                <th className="px-4 py-3 text-start text-xs font-medium uppercase text-gray-500">
-                  {t("admin.telegram.trustScore")}
-                </th>
-                <th className="hidden px-4 py-3 text-start text-xs font-medium uppercase text-gray-500 md:table-cell">
-                  {t("admin.telegram.totalReports")}
-                </th>
-                <th className="hidden px-4 py-3 text-start text-xs font-medium uppercase text-gray-500 lg:table-cell">
-                  {t("admin.telegram.verifiedReports")} / {t("admin.telegram.falseReports")}
-                </th>
-                <th className="px-4 py-3 text-start text-xs font-medium uppercase text-gray-500">
-                  {t("admin.telegram.status")}
-                </th>
-                <th className="px-4 py-3 text-end text-xs font-medium uppercase text-gray-500">
-                  {t("admin.telegram.actions")}
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {channels.length === 0 ? (
+        <Card flush className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="bg-surface-2">
                 <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-gray-500">
-                    {t("admin.telegram.noChannels")}
-                  </td>
+                  <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
+                    {t("admin.telegram.username")}
+                  </th>
+                  <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
+                    {t("admin.telegram.trustScore")}
+                  </th>
+                  <th className="hidden px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted md:table-cell">
+                    {t("admin.telegram.totalReports")}
+                  </th>
+                  <th className="hidden px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted lg:table-cell">
+                    {t("admin.telegram.verifiedReports")} / {t("admin.telegram.falseReports")}
+                  </th>
+                  <th className="px-4 py-3 text-start text-xs font-bold uppercase tracking-wide text-ink-muted">
+                    {t("admin.telegram.status")}
+                  </th>
+                  <th className="px-4 py-3 text-end text-xs font-bold uppercase tracking-wide text-ink-muted">
+                    {t("admin.telegram.actions")}
+                  </th>
                 </tr>
-              ) : (
-                channels.map((ch) => (
-                  <tr key={ch.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3">
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {ch.channel_name || `@${ch.channel_id}`}
-                        </p>
-                        {ch.channel_url && (
-                          <a
-                            href={ch.channel_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-purple-600 hover:underline"
-                          >
-                            {ch.channel_url}
-                          </a>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="h-2 w-20 rounded-full bg-gray-200">
-                          <div
-                            className={`h-2 rounded-full ${getTrustBarColor(ch.trust_score)}`}
-                            style={{
-                              width: `${Math.round(ch.trust_score * 100)}%`,
-                            }}
-                          />
-                        </div>
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-xs font-medium ${getTrustColor(ch.trust_score)}`}
-                        >
-                          {(ch.trust_score * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                    </td>
-                    <td className="hidden px-4 py-3 text-sm text-gray-600 md:table-cell">
-                      {ch.total_reports}
-                    </td>
-                    <td className="hidden px-4 py-3 text-sm lg:table-cell">
-                      <span className="text-green-600">{ch.verified_reports}</span>
-                      {" / "}
-                      <span className="text-red-600">{ch.false_reports}</span>
-                    </td>
-                    <td className="px-4 py-3">{getStatusBadge(ch.monitoring_status)}</td>
-                    <td className="px-4 py-3 text-end">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          onClick={() => handleViewMessages(ch)}
-                          className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-purple-600"
-                          title={t("admin.telegram.viewMessages")}
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                          </svg>
-                        </button>
-                        {ch.monitoring_status !== "removed" && (
-                          <button
-                            onClick={() => handleTogglePause(ch)}
-                            className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-yellow-600"
-                            title={
-                              ch.monitoring_status === "active"
-                                ? t("admin.telegram.statusPaused")
-                                : t("admin.telegram.statusActive")
-                            }
-                          >
-                            {ch.monitoring_status === "active" ? (
-                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            ) : (
-                              <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            )}
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setShowRemoveModal(ch)}
-                          className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
-                          title={t("admin.telegram.removeChannel")}
-                        >
-                          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
+              </thead>
+              <tbody className="divide-y divide-edge">
+                {channels.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="p-6">
+                      <EmptyState
+                        icon={<RadioTower />}
+                        title={t("admin.telegram.noChannels")}
+                        className="border-0"
+                      />
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                ) : (
+                  channels.map((ch) => (
+                    <tr key={ch.id} className="transition-colors hover:bg-surface-2">
+                      <td className="px-4 py-3">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-ink">
+                            {ch.channel_name || `@${ch.channel_id}`}
+                          </p>
+                          {ch.channel_url && (
+                            <a
+                              href={ch.channel_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="break-all text-xs text-link hover:underline focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
+                            >
+                              {ch.channel_url}
+                            </a>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <div
+                            role="meter"
+                            aria-label={t("admin.telegram.trustScore")}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                            aria-valuenow={Math.round(ch.trust_score * 100)}
+                            className="h-2 w-20 overflow-hidden rounded-full bg-surface-3"
+                          >
+                            <div
+                              className={`h-full rounded-full ${getTrustBarColor(ch.trust_score)}`}
+                              style={{
+                                width: `${Math.round(ch.trust_score * 100)}%`,
+                              }}
+                            />
+                          </div>
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${getTrustColor(ch.trust_score)}`}
+                          >
+                            {(ch.trust_score * 100).toFixed(0)}%
+                          </span>
+                        </div>
+                      </td>
+                      <td className="hidden px-4 py-3 text-sm text-ink-muted md:table-cell">
+                        {ch.total_reports}
+                      </td>
+                      <td className="hidden px-4 py-3 text-sm lg:table-cell">
+                        <span className="font-semibold text-success">{ch.verified_reports}</span>
+                        <span className="text-ink-faint">{" / "}</span>
+                        <span className="font-semibold text-danger">{ch.false_reports}</span>
+                      </td>
+                      <td className="px-4 py-3">{getStatusBadge(ch.monitoring_status)}</td>
+                      <td className="px-4 py-2 text-end">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => handleViewMessages(ch)}
+                            aria-label={t("admin.telegram.viewMessages")}
+                            title={t("admin.telegram.viewMessages")}
+                            className="flex h-11 w-11 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-accent-soft hover:text-on-accent-soft focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
+                          >
+                            <MessageSquareText aria-hidden="true" className="h-4 w-4" />
+                          </button>
+                          {ch.monitoring_status !== "removed" && (
+                            <button
+                              type="button"
+                              onClick={() => handleTogglePause(ch)}
+                              aria-label={
+                                ch.monitoring_status === "active"
+                                  ? t("admin.telegram.statusPaused")
+                                  : t("admin.telegram.statusActive")
+                              }
+                              title={
+                                ch.monitoring_status === "active"
+                                  ? t("admin.telegram.statusPaused")
+                                  : t("admin.telegram.statusActive")
+                              }
+                              className="flex h-11 w-11 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-warning-soft hover:text-on-warning-soft focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
+                            >
+                              {ch.monitoring_status === "active" ? (
+                                <Pause aria-hidden="true" className="h-4 w-4" />
+                              ) : (
+                                <Play aria-hidden="true" className="h-4 w-4" />
+                              )}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setShowRemoveModal(ch)}
+                            aria-label={t("admin.telegram.removeChannel")}
+                            title={t("admin.telegram.removeChannel")}
+                            className="flex h-11 w-11 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-danger-soft hover:text-danger focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
+                          >
+                            <Trash2 aria-hidden="true" className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
       {/* ========== LIVE FEED TAB ========== */}
       {activeTab === "live" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <span className="relative flex h-3 w-3">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
-                <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500"></span>
+              <span aria-hidden="true" className="relative flex h-3 w-3">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-danger opacity-75"></span>
+                <span className="relative inline-flex h-3 w-3 rounded-full bg-danger"></span>
               </span>
-              <span className="text-sm font-medium text-gray-700">
+              <span className="text-sm font-semibold text-ink">
                 {t("admin.telegram.liveMessages")} ({liveMessages.length})
               </span>
             </div>
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={() => setLiveMessages([])}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
             >
               {t("admin.telegram.clearFeed")}
-            </button>
+            </Button>
           </div>
 
           <div
             ref={liveFeedRef}
-            className="max-h-[60vh] space-y-2 overflow-y-auto rounded-lg border border-gray-200 bg-white p-4"
+            className="max-h-[60vh] space-y-2 overflow-y-auto rounded-lg border border-edge bg-surface p-4 shadow-1"
           >
             {liveMessages.length === 0 ? (
-              <div className="py-16 text-center">
-                <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <p className="mt-3 text-sm text-gray-500">{t("admin.telegram.waitingForMessages")}</p>
-                <p className="mt-1 text-xs text-gray-400">{t("admin.telegram.waitingHint")}</p>
-              </div>
+              <EmptyState
+                icon={<MessageCircle />}
+                title={t("admin.telegram.waitingForMessages")}
+                description={t("admin.telegram.waitingHint")}
+                className="border-0"
+              />
             ) : (
               liveMessages.map((msg, idx) => (
                 <div
                   key={`${msg.id}-${idx}`}
-                  className="rounded-lg border border-gray-100 bg-gray-50 p-3 transition-all hover:border-purple-200"
+                  className="rounded-md border border-edge bg-surface-2 p-3"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700">
+                    <Badge tone="accent" size="sm">
                       {msg.channel_name || msg.channel}
-                    </span>
-                    <span className="whitespace-nowrap text-xs text-gray-400">
+                    </Badge>
+                    <span className="whitespace-nowrap text-xs text-ink-faint">
                       {new Date(msg.date).toLocaleTimeString()}
                     </span>
                   </div>
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-gray-800" dir="auto">
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-ink" dir="auto">
                     {msg.text}
                   </p>
                 </div>
@@ -933,155 +995,180 @@ const TelegramContent: React.FC = () => {
       {/* ========== AI INTELLIGENCE TAB ========== */}
       {activeTab === "intel" && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {[
-              { label: t("admin.telegram.intelTotal"), value: events.length, color: "text-purple-700 bg-purple-50 border-purple-200" },
-              { label: t("admin.telegram.intelCritical"), value: events.filter((e) => e.severity >= 4).length, color: "text-red-700 bg-red-50 border-red-200" },
-              { label: t("admin.telegram.intelHighConf"), value: events.filter((e) => (e.confidence ?? 0) >= 0.7).length, color: "text-green-700 bg-green-50 border-green-200" },
-              { label: t("admin.telegram.intelChannels"), value: new Set(events.map((e) => e.source_channel).filter(Boolean)).size, color: "text-blue-700 bg-blue-50 border-blue-200" },
-            ].map((stat) => (
-              <div key={stat.label} className={`rounded-lg border p-4 ${stat.color}`}>
-                <p className="text-2xl font-bold">{stat.value}</p>
-                <p className="text-xs font-medium">{stat.label}</p>
-              </div>
-            ))}
+          <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+            <StatCard
+              label={t("admin.telegram.intelTotal")}
+              value={events.length}
+              icon={<Radar />}
+              tone="accent"
+            />
+            <StatCard
+              label={t("admin.telegram.intelCritical")}
+              value={events.filter((e) => e.severity >= 4).length}
+              icon={<Siren />}
+              tone="danger"
+            />
+            <StatCard
+              label={t("admin.telegram.intelHighConf")}
+              value={events.filter((e) => (e.confidence ?? 0) >= 0.7).length}
+              icon={<BadgeCheck />}
+              tone="success"
+            />
+            <StatCard
+              label={t("admin.telegram.intelChannels")}
+              value={new Set(events.map((e) => e.source_channel).filter(Boolean)).size}
+              icon={<RadioTower />}
+              tone="info"
+            />
           </div>
 
           <div className="flex justify-end">
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={fetchEvents}
               disabled={eventsLoading}
-              className="flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              icon={<RefreshCw className={eventsLoading ? "animate-spin" : ""} />}
             >
-              <svg className={`h-4 w-4 ${eventsLoading ? "animate-spin" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
               {t("admin.telegram.refresh")}
-            </button>
+            </Button>
           </div>
 
           {/* --- Real-time AI analysis cards --- */}
           {processingMessages.length > 0 && (
             <div className="space-y-3">
               <div className="flex justify-end">
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => setProcessingMessages([])}
-                  className="rounded-lg border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50"
                 >
                   {t("admin.telegram.clearFeed")}
-                </button>
+                </Button>
               </div>
               {processingMessages.map((pm) => {
-                const sevMap: Record<string, { label: string; border: string; bg: string; text: string }> = {
-                  low:      { label: "Low",      border: "border-blue-200",   bg: "bg-blue-50",   text: "text-blue-700" },
-                  medium:   { label: "Medium",   border: "border-yellow-200", bg: "bg-yellow-50", text: "text-yellow-700" },
-                  high:     { label: "High",     border: "border-orange-200", bg: "bg-orange-50", text: "text-orange-700" },
-                  critical: { label: "Critical", border: "border-red-300",    bg: "bg-red-50",    text: "text-red-700" },
-                  extreme:  { label: "Extreme",  border: "border-red-400",    bg: "bg-red-100",   text: "text-red-900" },
+                const sevMap: Record<
+                  string,
+                  { label: string; card: string; tone: BadgeTone }
+                > = {
+                  low: { label: "Low", card: "border-sev-low bg-sev-low-soft", tone: "low" },
+                  medium: { label: "Medium", card: "border-sev-medium bg-sev-medium-soft", tone: "medium" },
+                  high: { label: "High", card: "border-sev-high bg-sev-high-soft", tone: "high" },
+                  critical: { label: "Critical", card: "border-sev-critical bg-sev-critical-soft", tone: "critical" },
+                  extreme: { label: "Extreme", card: "border-sev-critical bg-sev-critical-soft", tone: "critical" },
                 };
                 const sevKey = (pm.severity || "").toLowerCase();
                 const sev = sevMap[sevKey];
-                const cardStyle = pm.status === "processing"
-                  ? "border-amber-300 bg-amber-50"
-                  : pm.is_crisis && sev
-                    ? `${sev.border} ${sev.bg}`
-                    : !pm.is_crisis
-                      ? "border-green-300 bg-green-50"
-                      : "border-gray-200 bg-white";
+                const cardStyle =
+                  pm.status === "processing"
+                    ? "border-warning bg-warning-soft"
+                    : pm.is_crisis && sev
+                      ? sev.card
+                      : !pm.is_crisis
+                        ? "border-success bg-success-soft"
+                        : "border-edge bg-surface";
 
                 return (
-                  <div key={pm.message_id} className={`relative rounded-lg border p-4 transition-all ${cardStyle}`}>
+                  <div
+                    key={pm.message_id}
+                    className={`relative rounded-lg border p-4 shadow-1 transition-all ${cardStyle}`}
+                  >
                     {pm.status !== "processing" && (
                       <button
-                        onClick={() => setProcessingMessages((prev) => prev.filter((p) => p.message_id !== pm.message_id))}
-                        className="absolute end-2 top-2 rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-600"
+                        type="button"
+                        onClick={() =>
+                          setProcessingMessages((prev) =>
+                            prev.filter((p) => p.message_id !== pm.message_id)
+                          )
+                        }
+                        aria-label="Dismiss"
+                        title="Dismiss"
+                        className="absolute end-1 top-1 flex h-11 w-11 items-center justify-center rounded-md text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
                       >
-                        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                        </svg>
+                        <X aria-hidden="true" className="h-4 w-4" />
                       </button>
                     )}
                     {pm.status === "processing" ? (
                       <>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
-                            <span className="relative flex h-2.5 w-2.5">
-                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75"></span>
-                              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-amber-500"></span>
+                            <span aria-hidden="true" className="relative flex h-2.5 w-2.5">
+                              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-warning opacity-75"></span>
+                              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-warning"></span>
                             </span>
-                            <span className="text-xs font-semibold text-amber-700">Processing...</span>
+                            <span className="text-xs font-bold text-on-warning-soft">Processing...</span>
                           </div>
-                          <span className="text-xs text-gray-400">
+                          <span className="text-xs text-ink-faint">
                             {pm.date ? new Date(pm.date).toLocaleTimeString() : ""}
                           </span>
                         </div>
                         <div className="mt-2 flex items-center gap-2">
-                          <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700">
+                          <Badge tone="accent" size="sm">
                             {pm.channel_name || pm.channel}
-                          </span>
+                          </Badge>
                         </div>
-                        <p className="mt-2 line-clamp-2 text-sm text-gray-700" dir="auto">
+                        <p className="mt-2 line-clamp-2 text-sm text-ink" dir="auto">
                           {pm.text}
                         </p>
-                        <div className="mt-2 flex items-center gap-1">
-                          <div className="h-1 flex-1 overflow-hidden rounded-full bg-amber-200">
-                            <div className="h-full w-2/3 animate-pulse rounded-full bg-amber-500"></div>
+                        <div className="mt-2 flex items-center gap-2">
+                          <div
+                            aria-hidden="true"
+                            className="h-1 flex-1 overflow-hidden rounded-full bg-surface-3"
+                          >
+                            <div className="h-full w-2/3 animate-pulse rounded-full bg-warning"></div>
                           </div>
-                          <span className="text-[10px] text-amber-600">Analyzing with AI</span>
+                          <span className="text-xs font-medium text-on-warning-soft">
+                            Analyzing with AI
+                          </span>
                         </div>
                       </>
                     ) : (
                       <>
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-2 pe-10">
                           {/* Classification badge */}
                           {pm.is_crisis ? (
-                            <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${sev ? `${sev.text} bg-opacity-80` : "text-red-800"} ${sev ? sev.bg : "bg-red-100"}`}>
+                            <Badge tone={sev ? sev.tone : "critical"} size="sm">
                               {sev ? sev.label : "Threat"}
-                            </span>
+                            </Badge>
                           ) : (
-                            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-bold text-green-800">
+                            <Badge tone="success" size="sm">
                               No Threat
-                            </span>
+                            </Badge>
                           )}
                           {/* Event type */}
                           {pm.event_type && (
-                            <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                              pm.is_crisis ? "bg-red-100 text-red-800" : "bg-gray-100 text-gray-700"
-                            }`}>
+                            <Badge tone={pm.is_crisis ? "danger" : "neutral"} size="sm">
                               {pm.event_type}
-                            </span>
+                            </Badge>
                           )}
                           {/* Confidence */}
                           {pm.confidence != null && (
-                            <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700">
+                            <Badge tone="accent" size="sm">
                               {(pm.confidence * 100).toFixed(0)}%
-                            </span>
+                            </Badge>
                           )}
-                          <span className="ms-auto text-xs text-gray-400">
+                          <span className="ms-auto text-xs text-ink-faint">
                             {pm.date ? new Date(pm.date).toLocaleTimeString() : ""}
                           </span>
                         </div>
                         {/* Channel */}
                         <div className="mt-2">
-                          <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700">
+                          <Badge tone="accent" size="sm">
                             {pm.channel_name || pm.channel}
-                          </span>
+                          </Badge>
                         </div>
                         {/* AI details / summary */}
                         {pm.details && (
-                          <p className="mt-2 text-sm font-medium text-gray-800">{pm.details}</p>
+                          <p className="mt-2 text-sm font-semibold text-ink">{pm.details}</p>
                         )}
                         {/* Original text */}
-                        <div className="mt-2 rounded-md bg-gray-50 p-2">
-                          <p className="text-xs text-gray-500" dir="auto">{pm.text}</p>
+                        <div className="mt-2 rounded-md border border-edge bg-surface p-2">
+                          <p className="text-xs text-ink-muted" dir="auto">{pm.text}</p>
                         </div>
                         {/* Location if available */}
                         {pm.latitude != null && pm.longitude != null && (
-                          <div className="mt-2 flex items-center gap-1 text-xs text-gray-400">
-                            <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
+                          <div className="mt-2 flex items-center gap-1 text-xs text-ink-muted">
+                            <MapPin aria-hidden="true" className="h-3.5 w-3.5" />
                             {pm.latitude.toFixed(4)}, {pm.longitude.toFixed(4)}
                           </div>
                         )}
@@ -1094,87 +1181,84 @@ const TelegramContent: React.FC = () => {
           )}
 
           {eventsLoading ? (
-            <div className="flex h-48 items-center justify-center">
-              <div className="text-gray-500">{t("common.loading")}</div>
-            </div>
+            <LoadingState label={t("common.loading")} />
           ) : events.length === 0 ? (
-            <div className="rounded-lg border border-gray-200 bg-white p-12 text-center">
-              <svg className="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
-              <p className="mt-3 text-gray-500">{t("admin.telegram.noEvents")}</p>
-              <p className="mt-1 text-xs text-gray-400">{t("admin.telegram.noEventsHint")}</p>
-            </div>
+            <EmptyState
+              icon={<Lightbulb />}
+              title={t("admin.telegram.noEvents")}
+              description={t("admin.telegram.noEventsHint")}
+            />
           ) : (
             <div className="space-y-3">
               {events.map((ev) => {
-                const severityMap: Record<number, { label: string; color: string }> = {
-                  1: { label: t("admin.telegram.severityLow"), color: "bg-blue-100 text-blue-700" },
-                  2: { label: t("admin.telegram.severityMedium"), color: "bg-yellow-100 text-yellow-700" },
-                  3: { label: t("admin.telegram.severityHigh"), color: "bg-orange-100 text-orange-700" },
-                  4: { label: t("admin.telegram.severityCritical"), color: "bg-red-100 text-red-700" },
-                  5: { label: t("admin.telegram.severityExtreme"), color: "bg-red-200 text-red-900" },
+                const severityMap: Record<number, { label: string; tone: BadgeTone }> = {
+                  1: { label: t("admin.telegram.severityLow"), tone: "low" },
+                  2: { label: t("admin.telegram.severityMedium"), tone: "medium" },
+                  3: { label: t("admin.telegram.severityHigh"), tone: "high" },
+                  4: { label: t("admin.telegram.severityCritical"), tone: "critical" },
+                  5: { label: t("admin.telegram.severityExtreme"), tone: "critical" },
                 };
                 const sev = severityMap[ev.severity] || severityMap[1];
-                const eventTypeMap: Record<string, { icon: string; color: string }> = {
-                  bombing: { icon: "\uD83D\uDCA3", color: "bg-red-100 text-red-800" },
-                  airstrike: { icon: "\u2708\uFE0F", color: "bg-red-100 text-red-800" },
-                  shelling: { icon: "\uD83D\uDCA5", color: "bg-orange-100 text-orange-800" },
-                  shooting: { icon: "\uD83D\uDD2B", color: "bg-red-100 text-red-800" },
-                  flood: { icon: "\uD83C\uDF0A", color: "bg-blue-100 text-blue-800" },
-                  earthquake: { icon: "\uD83C\uDF0D", color: "bg-amber-100 text-amber-800" },
-                  fire: { icon: "\uD83D\uDD25", color: "bg-orange-100 text-orange-800" },
-                  displacement: { icon: "\uD83C\uDFDA\uFE0F", color: "bg-gray-100 text-gray-800" },
-                  medical: { icon: "\uD83C\uDFE5", color: "bg-green-100 text-green-800" },
-                  infrastructure: { icon: "\uD83C\uDFD7\uFE0F", color: "bg-slate-100 text-slate-800" },
-                  other: { icon: "\uD83D\uDCCB", color: "bg-gray-100 text-gray-700" },
+                const eventTypeMap: Record<
+                  string,
+                  { icon: React.ReactNode; tone: BadgeTone }
+                > = {
+                  bombing: { icon: <Bomb />, tone: "danger" },
+                  airstrike: { icon: <Plane />, tone: "danger" },
+                  shelling: { icon: <Zap />, tone: "high" },
+                  shooting: { icon: <Crosshair />, tone: "danger" },
+                  flood: { icon: <Waves />, tone: "info" },
+                  earthquake: { icon: <Activity />, tone: "warning" },
+                  fire: { icon: <Flame />, tone: "high" },
+                  displacement: { icon: <Tent />, tone: "neutral" },
+                  medical: { icon: <HeartPulse />, tone: "success" },
+                  infrastructure: { icon: <Building2 />, tone: "neutral" },
+                  other: { icon: <ClipboardList />, tone: "neutral" },
                 };
                 const evType = eventTypeMap[ev.event_type] || eventTypeMap.other;
                 return (
-                  <div key={ev.id} className="rounded-lg border border-gray-200 bg-white p-4 transition-shadow hover:shadow-md">
+                  <Card key={ev.id} className="transition-shadow hover:shadow-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${evType.color}`}>
-                        <span>{evType.icon}</span>
+                      <Badge tone={evType.tone} size="sm" icon={evType.icon}>
                         {ev.event_type}
-                      </span>
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${sev.color}`}>{sev.label}</span>
+                      </Badge>
+                      <Badge tone={sev.tone} size="sm">{sev.label}</Badge>
                       {ev.confidence != null && (
-                        <span className="rounded-full bg-purple-100 px-2.5 py-0.5 text-xs font-medium text-purple-700">
+                        <Badge tone="accent" size="sm">
                           {t("admin.telegram.confidence")}: {(ev.confidence * 100).toFixed(0)}%
-                        </span>
+                        </Badge>
                       )}
-                      <span className="ms-auto text-xs text-gray-400">
-                        {ev.created_at ? new Date(ev.created_at).toLocaleString() : "\u2014"}
+                      <span className="ms-auto text-xs text-ink-faint">
+                        {ev.created_at ? new Date(ev.created_at).toLocaleString() : "—"}
                       </span>
                     </div>
-                    {ev.title && <h4 className="mt-2 text-sm font-semibold text-gray-900">{ev.title}</h4>}
-                    {ev.details && <p className="mt-1 text-sm text-gray-600">{ev.details}</p>}
+                    {ev.title && <h4 className="mt-2 text-sm font-bold text-ink">{ev.title}</h4>}
+                    {ev.details && <p className="mt-1 text-sm text-ink-muted">{ev.details}</p>}
                     {ev.original_text && (
-                      <div className="mt-3 rounded-md bg-gray-50 p-3">
-                        <p className="mb-1 text-xs font-medium text-gray-400">{t("admin.telegram.originalText")}</p>
-                        <p className="whitespace-pre-wrap text-sm text-gray-700" dir="auto">{ev.original_text}</p>
+                      <div className="mt-3 rounded-md bg-surface-2 p-3">
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-faint">
+                          {t("admin.telegram.originalText")}
+                        </p>
+                        <p className="whitespace-pre-wrap text-sm text-ink-muted" dir="auto">
+                          {ev.original_text}
+                        </p>
                       </div>
                     )}
-                    <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-gray-400">
+                    <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-ink-muted">
                       {ev.source_channel && (
                         <span className="flex items-center gap-1">
-                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                          </svg>
+                          <Send aria-hidden="true" className="h-3.5 w-3.5" />
                           @{ev.source_channel}
                         </span>
                       )}
                       {ev.latitude != null && ev.longitude != null && (
                         <span className="flex items-center gap-1">
-                          <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                          </svg>
+                          <MapPin aria-hidden="true" className="h-3.5 w-3.5" />
                           {ev.latitude.toFixed(4)}, {ev.longitude.toFixed(4)}
                         </span>
                       )}
                     </div>
-                  </div>
+                  </Card>
                 );
               })}
             </div>
@@ -1184,331 +1268,348 @@ const TelegramContent: React.FC = () => {
 
       {/* ========== AUTH MODAL ========== */}
       {showAuthModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
-            <h3 className="mb-1 text-lg font-semibold text-gray-900">
-              {t("admin.telegram.authTitle")}
-            </h3>
-            <p className="mb-5 text-sm text-gray-500">
-              {authStep === "sending"
-                ? t("admin.telegram.authSending")
-                : authStep === "2fa"
-                  ? t("admin.telegram.auth2faPrompt")
-                  : t("admin.telegram.authCodePrompt", { phone: `***${authPhoneHint}` })}
-            </p>
+        <Modal
+          open
+          onClose={() => { setShowAuthModal(false); setAuthStep("idle"); }}
+          title={t("admin.telegram.authTitle")}
+          description={
+            authStep === "sending"
+              ? t("admin.telegram.authSending")
+              : authStep === "2fa"
+                ? t("admin.telegram.auth2faPrompt")
+                : t("admin.telegram.authCodePrompt", { phone: `***${authPhoneHint}` })
+          }
+          size="sm"
+          dismissible={false}
+        >
+          {authStep === "sending" && (
+            <div className="flex items-center justify-center py-8">
+              <Spinner size="lg" label={t("admin.telegram.authSending")} />
+            </div>
+          )}
 
-            {authStep === "sending" && (
-              <div className="flex items-center justify-center py-8">
-                <div className="h-8 w-8 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600" />
+          {(authStep === "code" || authStep === "verifying") && (
+            <div className="flex flex-col gap-4">
+              <input
+                type="text"
+                value={authCode}
+                onChange={(e) => setAuthCode(e.target.value)}
+                placeholder={t("admin.telegram.authCodePlaceholder")}
+                aria-label={t("admin.telegram.authCodePlaceholder")}
+                className="min-h-12 w-full rounded-md border border-edge-strong bg-surface px-3.5 text-center text-lg font-semibold tracking-widest text-ink placeholder:text-ink-faint transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-1"
+                maxLength={10}
+                autoFocus
+              />
+              {authError && (
+                <p className="flex items-center gap-1.5 text-sm font-medium text-danger">
+                  <CircleAlert aria-hidden="true" className="h-4 w-4 shrink-0" />
+                  {authError}
+                </p>
+              )}
+              <div className="flex flex-wrap justify-end gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => { setShowAuthModal(false); setAuthStep("idle"); }}
+                >
+                  {t("common.cancel")}
+                </Button>
+                <Button
+                  onClick={handleVerifyCode}
+                  disabled={authCode.length < 3 || authStep === "verifying"}
+                  loading={authStep === "verifying"}
+                >
+                  {t("admin.telegram.authVerify")}
+                </Button>
               </div>
-            )}
+            </div>
+          )}
 
-            {(authStep === "code" || authStep === "verifying") && (
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  value={authCode}
-                  onChange={(e) => setAuthCode(e.target.value)}
-                  placeholder={t("admin.telegram.authCodePlaceholder")}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-center text-lg tracking-widest focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                  maxLength={10}
-                  autoFocus
-                />
-                {authError && <p className="text-sm text-red-600">{authError}</p>}
-                <div className="flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => { setShowAuthModal(false); setAuthStep("idle"); }}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    {t("common.cancel")}
-                  </button>
-                  <button
-                    onClick={handleVerifyCode}
-                    disabled={authCode.length < 3 || authStep === "verifying"}
-                    className="rounded-lg bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700 disabled:opacity-50"
-                  >
-                    {authStep === "verifying" ? t("common.loading") : t("admin.telegram.authVerify")}
-                  </button>
-                </div>
+          {authStep === "2fa" && (
+            <div className="flex flex-col gap-4">
+              <Input
+                label={t("admin.telegram.auth2faPlaceholder")}
+                hideLabel
+                type="password"
+                value={authPassword}
+                onChange={(e) => setAuthPassword(e.target.value)}
+                placeholder={t("admin.telegram.auth2faPlaceholder")}
+                autoFocus
+              />
+              {authError && (
+                <p className="flex items-center gap-1.5 text-sm font-medium text-danger">
+                  <CircleAlert aria-hidden="true" className="h-4 w-4 shrink-0" />
+                  {authError}
+                </p>
+              )}
+              <div className="flex flex-wrap justify-end gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => { setShowAuthModal(false); setAuthStep("idle"); }}
+                >
+                  {t("common.cancel")}
+                </Button>
+                <Button onClick={handleVerifyCode} disabled={!authPassword}>
+                  {t("admin.telegram.authVerify")}
+                </Button>
               </div>
-            )}
+            </div>
+          )}
 
-            {authStep === "2fa" && (
-              <div className="space-y-4">
-                <input
-                  type="password"
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  placeholder={t("admin.telegram.auth2faPlaceholder")}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                  autoFocus
-                />
-                {authError && <p className="text-sm text-red-600">{authError}</p>}
-                <div className="flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => { setShowAuthModal(false); setAuthStep("idle"); }}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    {t("common.cancel")}
-                  </button>
-                  <button
-                    onClick={handleVerifyCode}
-                    disabled={!authPassword}
-                    className="rounded-lg bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700 disabled:opacity-50"
-                  >
-                    {t("admin.telegram.authVerify")}
-                  </button>
-                </div>
+          {authStep === "idle" && authError && (
+            <div className="flex flex-col gap-4">
+              <p className="flex items-center gap-1.5 text-sm font-medium text-danger">
+                <CircleAlert aria-hidden="true" className="h-4 w-4 shrink-0" />
+                {authError}
+              </p>
+              <div className="flex flex-wrap justify-end gap-3">
+                <Button
+                  variant="secondary"
+                  onClick={() => { setShowAuthModal(false); setAuthStep("idle"); }}
+                >
+                  {t("common.cancel")}
+                </Button>
+                <Button onClick={handleStartAuth}>{t("admin.retry")}</Button>
               </div>
-            )}
-
-            {authStep === "idle" && authError && (
-              <div className="space-y-4">
-                <p className="text-sm text-red-600">{authError}</p>
-                <div className="flex justify-end gap-3">
-                  <button
-                    onClick={() => { setShowAuthModal(false); setAuthStep("idle"); }}
-                    className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                  >
-                    {t("common.cancel")}
-                  </button>
-                  <button
-                    onClick={handleStartAuth}
-                    className="rounded-lg bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700"
-                  >
-                    {t("admin.retry")}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
+        </Modal>
       )}
 
       {/* ========== DISCOVER CHANNELS MODAL ========== */}
       {showDiscoverModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 flex max-h-[80vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b px-6 py-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {t("admin.telegram.discoverChannels")}
-              </h3>
-              <button
-                onClick={() => { setShowDiscoverModal(false); setSelectedDiscovered(new Set()); setDiscoverSearch(""); }}
-                className="rounded p-1 text-gray-400 hover:bg-gray-100"
+        <Modal
+          open
+          onClose={() => { setShowDiscoverModal(false); setSelectedDiscovered(new Set()); setDiscoverSearch(""); }}
+          title={t("admin.telegram.discoverChannels")}
+          footer={
+            <>
+              <span className="me-auto text-sm text-ink-muted">
+                {selectedDiscovered.size} {t("admin.telegram.selected")}
+              </span>
+              <Button
+                onClick={handleImportSelected}
+                disabled={selectedDiscovered.size === 0 || importLoading}
+                loading={importLoading}
               >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="border-b px-6 py-3">
+                {t("admin.telegram.importSelected")}
+              </Button>
+            </>
+          }
+        >
+          <div className="flex flex-col gap-4">
+            <div className="relative">
+              <Search
+                aria-hidden="true"
+                className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint"
+              />
               <input
                 type="text"
                 value={discoverSearch}
                 onChange={(e) => setDiscoverSearch(e.target.value)}
                 placeholder={t("admin.telegram.searchChannels")}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                aria-label={t("admin.telegram.searchChannels")}
+                className="min-h-11 w-full rounded-md border border-edge-strong bg-surface ps-10 pe-3.5 text-base text-ink placeholder:text-ink-faint transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-1"
               />
             </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              {discoverLoading ? (
-                <div className="py-12 text-center text-gray-500">{t("common.loading")}</div>
-              ) : filteredDiscovered.length === 0 ? (
-                <div className="py-12 text-center text-gray-500">{t("admin.telegram.noDiscoveredChannels")}</div>
-              ) : (
-                <div className="space-y-2">
-                  {filteredDiscovered.map((ch) => (
-                    <label
-                      key={ch.chat_id}
-                      className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors ${
-                        selectedDiscovered.has(ch.chat_id) ? "border-purple-300 bg-purple-50" : "border-gray-200 hover:bg-gray-50"
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedDiscovered.has(ch.chat_id)}
-                        onChange={() => toggleDiscoverSelect(ch.chat_id)}
-                        className="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-                      />
-                      <div className="flex-1">
-                        <p className="text-sm font-medium text-gray-900">{ch.name}</p>
-                        <div className="flex items-center gap-2 text-xs text-gray-500">
-                          <span className={`rounded px-1.5 py-0.5 ${ch.type === "channel" ? "bg-blue-100 text-blue-700" : "bg-green-100 text-green-700"}`}>
-                            {ch.type}
-                          </span>
-                          {ch.username && <span>@{ch.username}</span>}
-                          {ch.participants_count != null && <span>{ch.participants_count.toLocaleString()} members</span>}
-                        </div>
+            {discoverLoading ? (
+              <LoadingState label={t("common.loading")} />
+            ) : filteredDiscovered.length === 0 ? (
+              <EmptyState
+                icon={<Compass />}
+                title={t("admin.telegram.noDiscoveredChannels")}
+              />
+            ) : (
+              <div className="flex flex-col gap-2">
+                {filteredDiscovered.map((ch) => (
+                  <label
+                    key={ch.chat_id}
+                    className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-md border p-3 transition-colors ${
+                      selectedDiscovered.has(ch.chat_id)
+                        ? "border-accent bg-accent-soft"
+                        : "border-edge hover:bg-surface-2"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedDiscovered.has(ch.chat_id)}
+                      onChange={() => toggleDiscoverSelect(ch.chat_id)}
+                      className="h-5 w-5 shrink-0 rounded border-edge-strong accent-accent focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-ink">{ch.name}</p>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+                        <Badge tone={ch.type === "channel" ? "info" : "success"} size="sm">
+                          {ch.type}
+                        </Badge>
+                        {ch.username && <span>@{ch.username}</span>}
+                        {ch.participants_count != null && (
+                          <span>{ch.participants_count.toLocaleString()} members</span>
+                        )}
                       </div>
-                    </label>
-                  ))}
-                </div>
-              )}
-            </div>
-            <div className="flex items-center justify-between border-t px-6 py-4">
-              <span className="text-sm text-gray-500">{selectedDiscovered.size} {t("admin.telegram.selected")}</span>
-              <button
-                onClick={handleImportSelected}
-                disabled={selectedDiscovered.size === 0 || importLoading}
-                className="rounded-lg bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700 disabled:opacity-50"
-              >
-                {importLoading ? t("common.loading") : t("admin.telegram.importSelected")}
-              </button>
-            </div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* ========== ADD CHANNEL MODAL ========== */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-            <h3 className="mb-4 text-lg font-semibold text-gray-900">{t("admin.telegram.addChannel")}</h3>
-            <form onSubmit={handleAdd} className="space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">{t("admin.telegram.username")}</label>
-                <input
-                  type="text"
-                  value={addForm.username}
-                  onChange={(e) => setAddForm({ ...addForm, username: e.target.value })}
-                  placeholder={t("admin.telegram.usernamePlaceholder")}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                  required
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">{t("admin.telegram.category")}</label>
-                <select
-                  value={addForm.category}
-                  onChange={(e) => setAddForm({ ...addForm, category: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                >
-                  <option value="crisis">{t("admin.telegram.categoryOptions.crisis")}</option>
-                  <option value="news">{t("admin.telegram.categoryOptions.news")}</option>
-                  <option value="medical">{t("admin.telegram.categoryOptions.medical")}</option>
-                  <option value="unknown">{t("admin.telegram.categoryOptions.unknown")}</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">{t("admin.telegram.language")}</label>
-                <select
-                  value={addForm.language}
-                  onChange={(e) => setAddForm({ ...addForm, language: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none focus:ring-1 focus:ring-purple-500"
-                >
-                  <option value="ar">{"\u0627\u0644\u0639\u0631\u0628\u064a\u0629"}</option>
-                  <option value="en">English</option>
-                </select>
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button type="button" onClick={() => setShowAddModal(false)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                  {t("common.cancel")}
-                </button>
-                <button type="submit" disabled={addLoading} className="rounded-lg bg-purple-600 px-4 py-2 text-sm text-white hover:bg-purple-700 disabled:opacity-50">
-                  {addLoading ? t("common.loading") : t("admin.telegram.addChannel")}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+        <Modal
+          open
+          onClose={() => setShowAddModal(false)}
+          title={t("admin.telegram.addChannel")}
+          size="sm"
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowAddModal(false)}>
+                {t("common.cancel")}
+              </Button>
+              <Button type="submit" form="add-channel-form" loading={addLoading}>
+                {t("admin.telegram.addChannel")}
+              </Button>
+            </>
+          }
+        >
+          <form id="add-channel-form" onSubmit={handleAdd} className="flex flex-col gap-4">
+            <Input
+              label={t("admin.telegram.username")}
+              value={addForm.username}
+              onChange={(e) => setAddForm({ ...addForm, username: e.target.value })}
+              placeholder={t("admin.telegram.usernamePlaceholder")}
+              required
+            />
+            <Select
+              label={t("admin.telegram.category")}
+              value={addForm.category}
+              onChange={(e) => setAddForm({ ...addForm, category: e.target.value })}
+            >
+              <option value="crisis">{t("admin.telegram.categoryOptions.crisis")}</option>
+              <option value="news">{t("admin.telegram.categoryOptions.news")}</option>
+              <option value="medical">{t("admin.telegram.categoryOptions.medical")}</option>
+              <option value="unknown">{t("admin.telegram.categoryOptions.unknown")}</option>
+            </Select>
+            <Select
+              label={t("admin.telegram.language")}
+              value={addForm.language}
+              onChange={(e) => setAddForm({ ...addForm, language: e.target.value })}
+            >
+              <option value="ar">{"العربية"}</option>
+              <option value="en">English</option>
+            </Select>
+          </form>
+        </Modal>
       )}
 
       {/* ========== REMOVE CONFIRMATION MODAL ========== */}
       {showRemoveModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
-            <h3 className="mb-2 text-lg font-semibold text-gray-900">{t("admin.telegram.confirmRemove")}</h3>
-            <p className="mb-6 text-sm text-gray-600">
+        <Modal
+          open
+          onClose={() => setShowRemoveModal(null)}
+          title={t("admin.telegram.confirmRemove")}
+          size="sm"
+          dismissible={false}
+          footer={
+            <>
+              <Button variant="secondary" onClick={() => setShowRemoveModal(null)}>
+                {t("common.cancel")}
+              </Button>
+              <Button variant="danger" icon={<Trash2 />} onClick={handleRemove}>
+                {t("admin.telegram.removeChannel")}
+              </Button>
+            </>
+          }
+        >
+          <div className="flex items-start gap-3">
+            <span
+              aria-hidden="true"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-danger-soft text-danger"
+            >
+              <TriangleAlert className="h-5 w-5" />
+            </span>
+            <p className="text-sm text-ink-muted">
               {t("admin.telegram.confirmRemoveMessage", {
                 name: showRemoveModal.channel_name || `@${showRemoveModal.channel_id}`,
               })}
             </p>
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setShowRemoveModal(null)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                {t("common.cancel")}
-              </button>
-              <button onClick={handleRemove} className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700">
-                {t("admin.telegram.removeChannel")}
-              </button>
-            </div>
           </div>
-        </div>
+        </Modal>
       )}
 
       {/* ========== MESSAGES MODAL ========== */}
       {showMessagesModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 flex max-h-[80vh] w-full max-w-2xl flex-col rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b px-6 py-4">
-              <h3 className="text-lg font-semibold text-gray-900">
-                {t("admin.telegram.messages")} {"\u2014"} {showMessagesModal.channel_name || `@${showMessagesModal.channel_id}`}
-              </h3>
-              <button onClick={() => { setShowMessagesModal(null); setMessages([]); }} className="rounded p-1 text-gray-400 hover:bg-gray-100">
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-6">
-              {messagesLoading ? (
-                <div className="py-12 text-center text-gray-500">{t("common.loading")}</div>
-              ) : messages.length === 0 ? (
-                <div className="py-12 text-center text-gray-500">{t("admin.telegram.noMessages")}</div>
-              ) : (
-                <div className="space-y-3">
-                  {messages.map((msg) => (
-                    <div key={msg.id} className="rounded-lg border border-gray-200 p-3">
-                      <p className="whitespace-pre-wrap text-sm text-gray-800" dir="auto">{msg.text}</p>
-                      <div className="mt-2 flex items-center gap-4 text-xs text-gray-400">
-                        <span>{new Date(msg.date).toLocaleString()}</span>
-                        {msg.views != null && <span>{msg.views.toLocaleString()} views</span>}
-                        {msg.forwards != null && <span>{msg.forwards.toLocaleString()} forwards</span>}
-                      </div>
-                    </div>
-                  ))}
+        <Modal
+          open
+          onClose={() => { setShowMessagesModal(null); setMessages([]); }}
+          title={`${t("admin.telegram.messages")} — ${showMessagesModal.channel_name || `@${showMessagesModal.channel_id}`}`}
+          size="lg"
+        >
+          {messagesLoading ? (
+            <LoadingState label={t("common.loading")} />
+          ) : messages.length === 0 ? (
+            <EmptyState
+              icon={<MessageSquareText />}
+              title={t("admin.telegram.noMessages")}
+            />
+          ) : (
+            <div className="space-y-3">
+              {messages.map((msg) => (
+                <div key={msg.id} className="rounded-md border border-edge bg-surface-2 p-3">
+                  <p className="whitespace-pre-wrap text-sm text-ink" dir="auto">{msg.text}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-ink-faint">
+                    <span>{new Date(msg.date).toLocaleString()}</span>
+                    {msg.views != null && <span>{msg.views.toLocaleString()} views</span>}
+                    {msg.forwards != null && <span>{msg.forwards.toLocaleString()} forwards</span>}
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
-          </div>
-        </div>
+          )}
+        </Modal>
       )}
 
       {/* ========== DISCONNECT CONFIRMATION MODAL ========== */}
       {showDisconnectModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 w-full max-w-sm rounded-xl bg-white p-6 shadow-xl">
-            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-              <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-            </div>
-            <h3 className="mb-2 text-lg font-semibold text-gray-900">
-              {t("admin.telegram.confirmDisconnect")}
-            </h3>
-            <p className="mb-6 text-sm text-gray-600">
-              {t("admin.telegram.confirmDisconnectMessage")}
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
+        <Modal
+          open
+          onClose={() => setShowDisconnectModal(false)}
+          title={t("admin.telegram.confirmDisconnect")}
+          size="sm"
+          dismissible={false}
+          footer={
+            <>
+              <Button
+                variant="secondary"
                 onClick={() => setShowDisconnectModal(false)}
                 disabled={disconnectLoading}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50"
               >
                 {t("common.cancel")}
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="danger"
+                icon={<Unplug />}
+                loading={disconnectLoading}
                 onClick={handleDisconnect}
-                disabled={disconnectLoading}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-50"
               >
-                {disconnectLoading ? t("common.loading") : t("admin.telegram.disconnect")}
-              </button>
-            </div>
+                {t("admin.telegram.disconnect")}
+              </Button>
+            </>
+          }
+        >
+          <div className="flex items-start gap-3">
+            <span
+              aria-hidden="true"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-danger-soft text-danger"
+            >
+              <TriangleAlert className="h-5 w-5" />
+            </span>
+            <p className="text-sm text-ink-muted">
+              {t("admin.telegram.confirmDisconnectMessage")}
+            </p>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

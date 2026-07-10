@@ -3,6 +3,7 @@
  */
 
 import type { ConversationMessage } from "../../types/sosTypes";
+import { Badge } from "../ui";
 
 interface MessageBubbleProps {
   message: ConversationMessage;
@@ -12,16 +13,16 @@ export function MessageBubble({ message }: MessageBubbleProps) {
   const isAI = message.role === "ai";
 
   return (
-    <div className={`flex ${isAI ? "justify-start" : "justify-end"} mb-3`}>
+    <div className={`mb-3 flex ${isAI ? "justify-start" : "justify-end"}`}>
       <div
-        className={`max-w-[85%] ${
+        className={`max-w-[85%] rounded-xl ${
           isAI
-            ? "bg-gray-100 border border-gray-200 rounded-2xl rounded-tl-md"
-            : "bg-blue-600 text-white rounded-2xl rounded-tr-md"
+            ? "rounded-ss-md border border-edge bg-surface-2 text-ink"
+            : "rounded-se-md bg-accent-soft text-on-accent-soft"
         }`}
       >
         {/* Message content */}
-        <p className={`px-4 py-3 text-sm leading-relaxed ${isAI ? "text-gray-800" : ""}`}>
+        <p className="px-4 py-3 text-base leading-relaxed">
           {message.content}
         </p>
 
@@ -31,7 +32,7 @@ export function MessageBubble({ message }: MessageBubbleProps) {
             <img
               src={message.imageUrl}
               alt="Attached"
-              className="rounded-lg max-h-32 object-cover"
+              className="max-h-32 rounded-md object-cover"
             />
           </div>
         )}
@@ -39,9 +40,9 @@ export function MessageBubble({ message }: MessageBubbleProps) {
         {/* Selected option badge (for user messages) */}
         {message.role === "user" && message.selectedOption && (
           <div className="px-4 pb-3">
-            <span className="inline-block px-2 py-0.5 bg-blue-500 rounded text-xs font-medium text-blue-100">
+            <Badge tone="accent" solid size="sm">
               {message.selectedOption}
-            </span>
+            </Badge>
           </div>
         )}
       </div>

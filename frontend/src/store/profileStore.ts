@@ -61,6 +61,12 @@ export interface ProfileActions {
   addEmergencyContact: (contact: EmergencyContact) => Promise<void>;
   removeEmergencyContact: (contactId: string) => Promise<void>;
 
+  /**
+   * Seed the store (and the offline cache) with a freshly registered
+   * profile so the app works offline immediately after sign-up.
+   */
+  setRegisteredProfile: (profile: Patient) => Promise<void>;
+
   // Sync operations
   syncWithServer: () => Promise<void>;
   loadFromCache: (patientId: string) => Promise<boolean>;
@@ -334,6 +340,28 @@ export const useProfileStore = create<ProfileStore>((set, get) => ({
         error: 'Failed to remove contact - will retry when online',
         syncStatus: 'pending',
       });
+    }
+  },
+
+  // ─── Seed Profile After Registration ─────────────────────────
+
+  setRegisteredProfile: async (profile: Patient) => {
+    set({
+      profile,
+      emergencyContacts: profile.emergency_contacts || [],
+      isLoading: false,
+      fromCache: false,
+      lastSyncedAt: Date.now(),
+      syncStatus: 'synced',
+      cacheAge: 'Just now',
+      error: null,
+    });
+
+    // Cache immediately so SOS / profile screens work offline right away.
+    try {
+      await cacheFullProfile(profile);
+    } catch (error) {
+      console.error('[ProfileStore] Failed to cache registered profile:', error);
     }
   },
 

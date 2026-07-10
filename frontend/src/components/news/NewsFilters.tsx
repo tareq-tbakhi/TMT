@@ -21,21 +21,22 @@ type FilterTab = 'all' | NewsCategory;
 
 const FILTER_TABS: FilterTab[] = ['all', 'threat', 'warning', 'update', 'info'];
 
-// Colors matching the Alerts screen style
+// Resting (soft) chip styles per category — token colors only
 const tabColors: Record<FilterTab, string> = {
-  all: 'bg-gray-100 text-gray-700',
-  threat: 'bg-red-100 text-red-700',
-  warning: 'bg-orange-100 text-orange-700',
-  update: 'bg-blue-100 text-blue-700',
-  info: 'bg-green-100 text-green-700',
+  all: 'border-edge bg-surface-2 text-ink-muted hover:bg-surface-3 hover:text-ink',
+  threat: 'border-transparent bg-danger-soft text-on-danger-soft hover:opacity-85',
+  warning: 'border-transparent bg-sev-high-soft text-on-sev-high-soft hover:opacity-85',
+  update: 'border-transparent bg-info-soft text-on-info-soft hover:opacity-85',
+  info: 'border-transparent bg-success-soft text-on-success-soft hover:opacity-85',
 };
 
+// Selected (solid) chip styles per category
 const activeColors: Record<FilterTab, string> = {
-  all: 'bg-gray-800 text-white',
-  threat: 'bg-red-600 text-white',
-  warning: 'bg-orange-500 text-white',
-  update: 'bg-blue-500 text-white',
-  info: 'bg-green-500 text-white',
+  all: 'border-transparent bg-accent text-on-accent',
+  threat: 'border-transparent bg-danger text-white',
+  warning: 'border-transparent bg-sev-high text-white',
+  update: 'border-transparent bg-info text-white',
+  info: 'border-transparent bg-success text-white',
 };
 
 const tabLabels: Record<FilterTab, string> = {
@@ -54,7 +55,7 @@ export function NewsFilters({ filters, onFilterChange, counts }: NewsFiltersProp
   };
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div role="group" aria-label="Filter news by category" className="flex flex-wrap gap-2">
       {FILTER_TABS.map((tab) => {
         const isActive = currentFilter === tab;
         const count = counts[tab];
@@ -62,8 +63,10 @@ export function NewsFilters({ filters, onFilterChange, counts }: NewsFiltersProp
         return (
           <button
             key={tab}
+            type="button"
             onClick={() => handleCategoryChange(tab)}
-            className={`px-4 py-2 rounded-full text-sm font-semibold capitalize transition ${
+            aria-pressed={isActive}
+            className={`min-h-11 rounded-full border px-4 py-2 text-sm font-semibold capitalize transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
               isActive ? activeColors[tab] : tabColors[tab]
             }`}
           >

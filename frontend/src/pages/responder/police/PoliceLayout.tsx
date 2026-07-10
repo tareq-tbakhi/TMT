@@ -3,6 +3,7 @@
  */
 
 import ResponderLayout from "../../../components/responder/ResponderLayout";
+import { useAccent } from "../../../contexts/PreferencesContext";
 
 const POLICE_TABS = [
   { path: "", label: "Case", icon: "case" as const },
@@ -11,5 +12,6 @@ const POLICE_TABS = [
 ];
 
 export default function PoliceLayout() {
+  useAccent("police");
   return <ResponderLayout responderType="police" tabs={POLICE_TABS} />;
 }

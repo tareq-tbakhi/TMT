@@ -1,0 +1,282 @@
+/**
+ * TMT Design System — Design Tokens
+ * ----------------------------------
+ * Single source of truth for color, type, spacing, and motion.
+ * Themes are driven by data attributes on <html>:
+ *   data-theme="light" | "dark"          (visual theme)
+ *   data-contrast="high"                 (high-contrast accessibility mode)
+ *   data-font-scale="md" | "lg" | "xl"   (text size accessibility setting)
+ *   data-motion="reduce"                 (reduced motion accessibility setting)
+ *   data-accent="hospital" | "police" | "civil_defense" | "firefighter" | "admin" | "patient"
+ *
+ * All colors meet WCAG 2.1 AA contrast in both themes.
+ * Use ONLY these tokens (via Tailwind utilities mapped in App.css).
+ * Never hardcode hex values in components.
+ */
+
+:root {
+  /* ── Font scale (accessibility) ─────────────────────────── */
+  --font-scale: 1;
+
+  /* ── Surfaces (light) ───────────────────────────────────── */
+  --t-canvas: #f2f5fa;        /* app background */
+  --t-surface: #ffffff;       /* cards, panels */
+  --t-surface-2: #e9eef7;     /* nested / hover surfaces */
+  --t-surface-3: #dde5f1;     /* pressed / selected surfaces */
+  --t-border: #d4dcea;        /* hairline borders */
+  --t-border-strong: #9daabf; /* input borders, dividers that matter */
+
+  /* ── Text (light) ───────────────────────────────────────── */
+  --t-ink: #0f1829;           /* primary text  (16.5:1 on surface) */
+  --t-ink-muted: #4b5a72;     /* secondary text (7.2:1) */
+  --t-ink-faint: #64748b;     /* tertiary text  (4.8:1) */
+
+  /* ── Brand / primary (trust blue) ───────────────────────── */
+  --t-primary: #2050c8;           /* 6.0:1 with white text */
+  --t-primary-hover: #17399b;
+  --t-primary-soft: #e3ebfc;
+  --t-on-primary: #ffffff;
+  --t-link: #1d4ed8;
+
+  /* ── Accent (role color; defaults to primary) ───────────── */
+  --t-accent: var(--t-primary);
+  --t-accent-hover: var(--t-primary-hover);
+  --t-accent-soft: var(--t-primary-soft);
+  --t-on-accent: #ffffff;
+  --t-on-accent-soft: #17399b;
+
+  /* ── Semantic: success / warning / danger / info ────────── */
+  --t-success: #157138;         /* 5.3:1 with white */
+  --t-success-soft: #d8f5e0;
+  --t-on-success-soft: #0c4423;
+  --t-warning: #92400e;         /* amber-800, 6.4:1 with white */
+  --t-warning-soft: #fdedd3;
+  --t-on-warning-soft: #6b3007;
+  --t-danger: #c11f2f;          /* 5.9:1 with white */
+  --t-danger-hover: #9a1826;
+  --t-danger-soft: #fde3e5;
+  --t-on-danger-soft: #8c1622;
+  --t-info: #1d4ed8;
+  --t-info-soft: #e0eafc;
+  --t-on-info-soft: #173a9e;
+
+  /* ── SOS (reserved for emergency actions only) ──────────── */
+  --t-sos: #d81e2c;
+  --t-sos-hover: #a91622;
+  --t-on-sos: #ffffff;
+  --t-sos-halo: rgba(216, 30, 44, 0.45);
+
+  /* ── Severity scale (crisis levels) ─────────────────────── */
+  --t-sev-critical: #c11f2f;
+  --t-sev-critical-soft: #fde3e5;
+  --t-on-sev-critical-soft: #8c1622;
+  --t-sev-high: #b03a06;          /* 5.6:1 with white */
+  --t-sev-high-soft: #ffe8d8;
+  --t-on-sev-high-soft: #7e2a05;
+  --t-sev-medium: #855c00;        /* 5.4:1 with white */
+  --t-sev-medium-soft: #fcf1cd;
+  --t-on-sev-medium-soft: #5f4200;
+  --t-sev-low: #1d4ed8;
+  --t-sev-low-soft: #e0eafc;
+  --t-on-sev-low-soft: #173a9e;
+
+  /* ── Focus ring ─────────────────────────────────────────── */
+  --t-focus: #1d4ed8;
+
+  /* ── Elevation ──────────────────────────────────────────── */
+  --t-shadow-1: 0 1px 2px rgba(15, 24, 41, 0.06), 0 1px 3px rgba(15, 24, 41, 0.08);
+  --t-shadow-2: 0 4px 12px rgba(15, 24, 41, 0.08), 0 2px 4px rgba(15, 24, 41, 0.05);
+  --t-shadow-3: 0 12px 32px rgba(15, 24, 41, 0.14), 0 4px 8px rgba(15, 24, 41, 0.06);
+
+  /* ── Shape ──────────────────────────────────────────────── */
+  --t-radius-sm: 0.5rem;
+  --t-radius-md: 0.75rem;
+  --t-radius-lg: 1rem;
+  --t-radius-xl: 1.5rem;
+
+  /* ── Motion ─────────────────────────────────────────────── */
+  --t-ease: cubic-bezier(0.2, 0, 0, 1);
+  --t-dur-fast: 120ms;
+  --t-dur: 200ms;
+  --t-dur-slow: 320ms;
+
+  color-scheme: light;
+}
+
+/* ═══ Dark theme ═══════════════════════════════════════════ */
+[data-theme="dark"] {
+  --t-canvas: #0a1120;
+  --t-surface: #101a2e;
+  --t-surface-2: #18253e;
+  --t-surface-3: #21304e;
+  --t-border: #24334f;
+  --t-border-strong: #465877;
+
+  --t-ink: #ecf1fa;            /* 15.4:1 on surface */
+  --t-ink-muted: #a7b4cc;      /* 7.6:1 */
+  --t-ink-faint: #8291ac;      /* 5.0:1 */
+
+  --t-primary: #3b6fe0;            /* buttons keep white text: 4.6:1 */
+  --t-primary-hover: #5c8aee;
+  --t-primary-soft: #1a2b52;
+  --t-on-primary: #ffffff;
+  --t-link: #8fb3ff;
+
+  --t-accent: var(--t-primary);
+  --t-accent-hover: var(--t-primary-hover);
+  --t-accent-soft: var(--t-primary-soft);
+  --t-on-accent: #ffffff;
+  --t-on-accent-soft: #b7ccfa;
+
+  --t-success: #1d8a48;
+  --t-success-soft: #10321d;
+  --t-on-success-soft: #8fe6ae;
+  --t-warning: #a35a10;
+  --t-warning-soft: #37270e;
+  --t-on-warning-soft: #f5c17c;
+  --t-danger: #d43848;
+  --t-danger-hover: #e05e6b;
+  --t-danger-soft: #3d151a;
+  --t-on-danger-soft: #f7a3ab;
+  --t-info: #3b6fe0;
+  --t-info-soft: #16244a;
+  --t-on-info-soft: #a8c2f8;
+
+  --t-sos: #e02434;
+  --t-sos-hover: #f04c5a;
+  --t-on-sos: #ffffff;
+  --t-sos-halo: rgba(224, 36, 52, 0.5);
+
+  --t-sev-critical: #d43848;
+  --t-sev-critical-soft: #3d151a;
+  --t-on-sev-critical-soft: #f7a3ab;
+  --t-sev-high: #c25a12;
+  --t-sev-high-soft: #38200c;
+  --t-on-sev-high-soft: #f0b98a;
+  --t-sev-medium: #a08010;
+  --t-sev-medium-soft: #322a0c;
+  --t-on-sev-medium-soft: #e6d287;
+  --t-sev-low: #3b6fe0;
+  --t-sev-low-soft: #16244a;
+  --t-on-sev-low-soft: #a8c2f8;
+
+  --t-focus: #8fb3ff;
+
+  --t-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.5);
+  --t-shadow-2: 0 4px 12px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.35);
+  --t-shadow-3: 0 12px 32px rgba(0, 0, 0, 0.55), 0 4px 8px rgba(0, 0, 0, 0.4);
+
+  color-scheme: dark;
+}
+
+/* ═══ Role accents ═════════════════════════════════════════ */
+[data-accent="hospital"] {
+  --t-accent: #0c7d70;
+  --t-accent-hover: #085e54;
+  --t-accent-soft: #d5f2ee;
+  --t-on-accent-soft: #074e46;
+}
+[data-theme="dark"][data-accent="hospital"] {
+  --t-accent: #12a292;
+  --t-accent-hover: #2fbfae;
+  --t-accent-soft: #0c2f2b;
+  --t-on-accent-soft: #7fe0d4;
+}
+[data-accent="police"] {
+  --t-accent: #4740d4;
+  --t-accent-hover: #362fb0;
+  --t-accent-soft: #e6e4fb;
+  --t-on-accent-soft: #2f2a99;
+}
+[data-theme="dark"][data-accent="police"] {
+  --t-accent: #6d66e8;
+  --t-accent-hover: #8b85f0;
+  --t-accent-soft: #1f1c50;
+  --t-on-accent-soft: #c3c0f8;
+}
+[data-accent="civil_defense"] {
+  --t-accent: #b03a06;
+  --t-accent-hover: #8a2d05;
+  --t-accent-soft: #ffe8d8;
+  --t-on-accent-soft: #7e2a05;
+}
+[data-theme="dark"][data-accent="civil_defense"] {
+  --t-accent: #cf5a14;
+  --t-accent-hover: #e2762f;
+  --t-accent-soft: #3a1e0a;
+  --t-on-accent-soft: #f4bd93;
+}
+[data-accent="firefighter"] {
+  --t-accent: #c11f2f;
+  --t-accent-hover: #9a1826;
+  --t-accent-soft: #fde3e5;
+  --t-on-accent-soft: #8c1622;
+}
+[data-theme="dark"][data-accent="firefighter"] {
+  --t-accent: #d43848;
+  --t-accent-hover: #e05e6b;
+  --t-accent-soft: #3d151a;
+  --t-on-accent-soft: #f7a3ab;
+}
+[data-accent="admin"] {
+  --t-accent: #6d28c9;
+  --t-accent-hover: #571fa3;
+  --t-accent-soft: #efe6fc;
+  --t-on-accent-soft: #4c1d8c;
+}
+[data-theme="dark"][data-accent="admin"] {
+  --t-accent: #9058e8;
+  --t-accent-hover: #a97cf0;
+  --t-accent-soft: #291646;
+  --t-on-accent-soft: #d3bcf8;
+}
+[data-accent="patient"] {
+  --t-accent: var(--t-primary);
+}
+
+/* ═══ High-contrast mode ═══════════════════════════════════ */
+[data-contrast="high"] {
+  --t-canvas: #ffffff;
+  --t-surface: #ffffff;
+  --t-surface-2: #f0f0f0;
+  --t-surface-3: #e0e0e0;
+  --t-border: #444c5c;
+  --t-border-strong: #0f1829;
+  --t-ink: #000000;
+  --t-ink-muted: #1f2937;
+  --t-ink-faint: #374151;
+  --t-primary: #0f2e8c;
+  --t-primary-hover: #081d61;
+  --t-link: #0f2e8c;
+  --t-focus: #000000;
+  --t-success: #0c4423;
+  --t-warning: #6b3007;
+  --t-danger: #8c1622;
+  --t-sos: #a3101e;
+  --t-sos-hover: #7d0c17;
+}
+[data-theme="dark"][data-contrast="high"] {
+  --t-canvas: #000000;
+  --t-surface: #000000;
+  --t-surface-2: #131313;
+  --t-surface-3: #242424;
+  --t-border: #8a94a8;
+  --t-border-strong: #e5e7eb;
+  --t-ink: #ffffff;
+  --t-ink-muted: #e5e7eb;
+  --t-ink-faint: #d1d5db;
+  --t-primary: #6f9dff;
+  --t-primary-hover: #96b8ff;
+  --t-on-primary: #000000;
+  --t-link: #9db9ff;
+  --t-focus: #ffffff;
+}
+
+/* ═══ Font scale steps ═════════════════════════════════════ */
+[data-font-scale="lg"]  { --font-scale: 1.125; }
+[data-font-scale="xl"]  { --font-scale: 1.25; }
+[data-font-scale="xxl"] { --font-scale: 1.4; }
+
+html {
+  font-size: calc(16px * var(--font-scale));
+}

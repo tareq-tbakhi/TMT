@@ -1,8 +1,48 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { useAuthStore, ROLE_TO_DEPARTMENT, DEPARTMENT_LABELS, DEPARTMENT_COLORS, type DepartmentType } from "../../store/authStore";
+import React, { useEffect, useState, useCallback, useMemo } from "react";
+import { useTranslation } from "react-i18next";
+import {
+  ArrowLeftRight,
+  ArrowRight,
+  Ban,
+  Check,
+  Circle,
+  CircleAlert,
+  CircleCheck,
+  CircleX,
+  Clock,
+  Inbox,
+  MoveDownLeft,
+  MoveUpRight,
+  Plus,
+  RefreshCw,
+  Send,
+  TriangleAlert,
+  Truck,
+  UserRound,
+  X,
+  type LucideIcon,
+} from "lucide-react";
+import { useAuthStore } from "../../store/authStore";
+import { useSocketEvent } from "../../contexts/SocketContext";
 import { timeAgo } from "../../utils/formatting";
+import {
+  Badge,
+  Button,
+  Card,
+  EmptyState,
+  Input,
+  LoadingState,
+  Modal,
+  PageHeader,
+  Select,
+  Textarea,
+  announce,
+  type BadgeTone,
+} from "../../components/ui";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+// ─── Types ──────────────────────────────────────────────────────
 
 interface Transfer {
   id: string;
@@ -18,6 +58,18 @@ interface Transfer {
   accepted_by: string | null;
   created_at: string | null;
   resolved_at: string | null;
+  // Additive backend fields (patient transfer details + timeline)
+  patient_ref?: string | null;
+  urgency?: string | null;
+  medical_notes?: string | null;
+  accepted_facility_id?: string | null;
+  accepted_at?: string | null;
+  in_transit_at?: string | null;
+  completed_at?: string | null;
+  cancelled_at?: string | null;
+  from_facility_name?: string | null;
+  to_facility_name?: string | null;
+  accepted_facility_name?: string | null;
 }
 
 interface Facility {
@@ -35,74 +87,393 @@ function getAuthHeaders(): Record<string, string> {
   };
 }
 
-const deptBadge: Record<string, string> = {
-  hospital: "bg-blue-50 text-blue-700",
-  police: "bg-indigo-50 text-indigo-700",
-  civil_defense: "bg-orange-50 text-orange-700",
+// ─── Status / department metadata ───────────────────────────────
+
+const STATUS_FILTERS = ["", "pending", "accepted", "in_transit", "completed", "rejected", "cancelled"];
+
+const STATUS_META: Record<string, { tone: BadgeTone; icon: LucideIcon }> = {
+  pending: { tone: "warning", icon: Clock },
+  accepted: { tone: "info", icon: Check },
+  in_transit: { tone: "accent", icon: Truck },
+  completed: { tone: "success", icon: CircleCheck },
+  rejected: { tone: "danger", icon: CircleX },
+  cancelled: { tone: "neutral", icon: Ban },
 };
 
-const statusBadge: Record<string, string> = {
-  pending: "bg-yellow-100 text-yellow-800",
-  accepted: "bg-green-100 text-green-800",
-  rejected: "bg-red-100 text-red-800",
+const URGENCY_TONES: Record<string, BadgeTone> = {
+  critical: "critical",
+  high: "high",
+  medium: "medium",
+  low: "low",
 };
+
+const deptTone: Record<string, BadgeTone> = {
+  hospital: "accent",
+  police: "info",
+  civil_defense: "high",
+};
+
+// ─── Timeline ───────────────────────────────────────────────────
+
+interface TimelineStep {
+  key: string;
+  labelKey: string;
+  at: string | null;
+  state: "done" | "current" | "upcoming" | "terminal-negative";
+}
+
+function buildTimeline(t: Transfer): TimelineStep[] {
+  const requested: TimelineStep = {
+    key: "requested",
+    labelKey: "transfer.step.requested",
+    at: t.created_at,
+    state: "done",
+  };
+
+  if (t.status === "rejected") {
+    return [
+      requested,
+      {
+        key: "rejected",
+        labelKey: "transfer.step.rejected",
+        at: t.resolved_at,
+        state: "terminal-negative",
+      },
+    ];
+  }
+
+  if (t.status === "cancelled") {
+    const steps: TimelineStep[] = [requested];
+    if (t.accepted_at) {
+      steps.push({ key: "accepted", labelKey: "transfer.step.accepted", at: t.accepted_at, state: "done" });
+    }
+    if (t.in_transit_at) {
+      steps.push({ key: "in_transit", labelKey: "transfer.step.inTransit", at: t.in_transit_at, state: "done" });
+    }
+    steps.push({
+      key: "cancelled",
+      labelKey: "transfer.step.cancelled",
+      at: t.cancelled_at ?? t.resolved_at,
+      state: "terminal-negative",
+    });
+    return steps;
+  }
+
+  const order = ["pending", "accepted", "in_transit", "completed"];
+  const idx = Math.max(order.indexOf(t.status), 0);
+  const stepFor = (
+    key: string,
+    labelKey: string,
+    at: string | null | undefined,
+    pos: number
+  ): TimelineStep => ({
+    key,
+    labelKey,
+    at: at ?? null,
+    state: pos <= idx ? "done" : pos === idx + 1 ? "current" : "upcoming",
+  });
+
+  return [
+    requested,
+    stepFor("accepted", "transfer.step.accepted", t.accepted_at, 1),
+    stepFor("in_transit", "transfer.step.inTransit", t.in_transit_at, 2),
+    stepFor("completed", "transfer.step.completed", t.completed_at, 3),
+  ];
+}
+
+const TransferTimeline: React.FC<{ transfer: Transfer }> = ({ transfer }) => {
+  const { t } = useTranslation();
+  const steps = buildTimeline(transfer);
+
+  return (
+    <ol
+      aria-label={t("transfer.timeline")}
+      className="flex flex-wrap items-start gap-x-1 gap-y-2 rounded-lg bg-surface-2 p-3"
+    >
+      {steps.map((step, i) => {
+        const done = step.state === "done";
+        const negative = step.state === "terminal-negative";
+        const current = step.state === "current";
+        const Icon = negative ? CircleX : done ? CircleCheck : current ? Clock : Circle;
+        return (
+          <li key={step.key} className="flex items-start" aria-current={current ? "step" : undefined}>
+            <span className="flex flex-col items-center gap-0.5 px-1 text-center">
+              <Icon
+                aria-hidden="true"
+                className={`h-5 w-5 ${
+                  negative
+                    ? "text-danger"
+                    : done
+                      ? "text-success"
+                      : current
+                        ? "text-accent"
+                        : "text-ink-faint"
+                }`}
+              />
+              <span
+                className={`text-xs font-semibold ${
+                  done || negative || current ? "text-ink" : "text-ink-faint"
+                }`}
+              >
+                {t(step.labelKey)}
+              </span>
+              <span className="text-xs text-ink-muted">
+                {step.at ? timeAgo(step.at) : done || negative ? "" : t("transfer.stepPending")}
+              </span>
+            </span>
+            {i < steps.length - 1 && (
+              <ArrowRight
+                aria-hidden="true"
+                className="mt-1 h-4 w-4 shrink-0 text-ink-faint rtl:rotate-180"
+              />
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  );
+};
+
+// ─── Transfer card ──────────────────────────────────────────────
+
+interface TransferCardProps {
+  transfer: Transfer;
+  facilityId: string;
+  isSuper: boolean;
+  actionLoading: string | null;
+  onAccept: (id: string) => void;
+  onReject: (id: string) => void;
+  onStatusChange: (id: string, status: string) => void;
+}
+
+const TransferCard: React.FC<TransferCardProps> = ({
+  transfer,
+  facilityId,
+  isSuper,
+  actionLoading,
+  onAccept,
+  onReject,
+  onStatusChange,
+}) => {
+  const { t } = useTranslation();
+  const incoming = transfer.to_facility_id === facilityId;
+  const outgoing = transfer.from_facility_id === facilityId;
+  const isPending = transfer.status === "pending";
+  const loading = actionLoading === transfer.id;
+  const meta = STATUS_META[transfer.status] ?? { tone: "neutral" as BadgeTone, icon: Circle };
+  const StatusIcon = meta.icon;
+
+  const canAccept = isPending && (incoming || isSuper);
+  const canStartTransit = transfer.status === "accepted" && (incoming || isSuper);
+  const canComplete = transfer.status === "in_transit" && (incoming || outgoing || isSuper);
+  const canCancel = (isPending || transfer.status === "accepted") && (outgoing || isSuper);
+
+  const deptLabel = (d: string) => t(`transfer.dept.${d}`, d);
+
+  return (
+    <Card className={incoming && isPending ? "border-s-4 border-s-warning" : ""}>
+      <div className="flex flex-col gap-3">
+        {/* Badges row */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge
+            tone={incoming ? "success" : "accent"}
+            size="sm"
+            icon={incoming ? <MoveDownLeft /> : <MoveUpRight />}
+          >
+            {incoming ? t("transfer.incoming") : t("transfer.outgoing")}
+          </Badge>
+          <Badge tone={meta.tone} size="sm" icon={<StatusIcon />}>
+            {t(`transfer.status.${transfer.status}`, transfer.status)}
+          </Badge>
+          {transfer.urgency && (
+            <Badge tone={URGENCY_TONES[transfer.urgency] ?? "neutral"} size="sm" dot>
+              {t(`aid.urg.${transfer.urgency}`, transfer.urgency)}
+            </Badge>
+          )}
+        </div>
+
+        {/* Patient reference */}
+        {transfer.patient_ref && (
+          <p className="flex items-center gap-1.5 text-sm font-semibold text-ink">
+            <UserRound aria-hidden="true" className="h-4 w-4 text-ink-faint" />
+            {t("transfer.patient")}: {transfer.patient_ref}
+          </p>
+        )}
+
+        {/* Routing */}
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <Badge tone={deptTone[transfer.from_department] ?? "neutral"} size="sm">
+            {transfer.from_facility_name || deptLabel(transfer.from_department)}
+          </Badge>
+          <ArrowRight aria-hidden="true" className="h-4 w-4 text-ink-faint rtl:rotate-180" />
+          <Badge tone={deptTone[transfer.to_department] ?? "neutral"} size="sm">
+            {transfer.to_facility_name || deptLabel(transfer.to_department)}
+          </Badge>
+        </div>
+
+        {/* Details */}
+        <div className="space-y-0.5 text-xs text-ink-muted">
+          <p>
+            {t("transfer.sosRef")}:{" "}
+            <span className="font-mono" dir="ltr">
+              {transfer.sos_request_id.slice(0, 8)}...
+            </span>
+          </p>
+          {transfer.reason && (
+            <p>
+              {t("transfer.reason")}: {transfer.reason}
+            </p>
+          )}
+          {transfer.medical_notes && (
+            <p className="whitespace-pre-wrap">
+              {t("transfer.notes")}: {transfer.medical_notes}
+            </p>
+          )}
+          {transfer.created_at && <p>{timeAgo(transfer.created_at)}</p>}
+        </div>
+
+        {/* Status timeline */}
+        <TransferTimeline transfer={transfer} />
+
+        {/* Actions */}
+        {(canAccept || canStartTransit || canComplete || canCancel) && (
+          <div className="flex flex-wrap gap-2">
+            {canAccept && (
+              <>
+                <Button
+                  variant="success"
+                  icon={<Check />}
+                  loading={loading}
+                  onClick={() => onAccept(transfer.id)}
+                >
+                  {t("transfer.accept")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  icon={<X />}
+                  className="text-danger"
+                  loading={loading}
+                  onClick={() => onReject(transfer.id)}
+                >
+                  {t("transfer.reject")}
+                </Button>
+              </>
+            )}
+            {canStartTransit && (
+              <Button
+                icon={<Truck />}
+                loading={loading}
+                onClick={() => onStatusChange(transfer.id, "in_transit")}
+              >
+                {t("transfer.startTransit")}
+              </Button>
+            )}
+            {canComplete && (
+              <Button
+                variant="success"
+                icon={<CircleCheck />}
+                loading={loading}
+                onClick={() => onStatusChange(transfer.id, "completed")}
+              >
+                {t("transfer.markCompleted")}
+              </Button>
+            )}
+            {canCancel && (
+              <Button
+                variant="secondary"
+                icon={<Ban />}
+                loading={loading}
+                onClick={() => onStatusChange(transfer.id, "cancelled")}
+              >
+                {t("transfer.cancel")}
+              </Button>
+            )}
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+};
+
+// ─── Main page ──────────────────────────────────────────────────
 
 const CaseTransfers: React.FC = () => {
+  const { t } = useTranslation();
   const { user } = useAuthStore();
-  const dept: DepartmentType = user?.facilityType ?? ROLE_TO_DEPARTMENT[user?.role ?? ""] ?? "hospital";
-  const deptLabel = DEPARTMENT_LABELS[dept] ?? "Hospital";
   const facilityId = user?.hospitalId ?? "";
+  const isSuper = user?.role === "super_admin";
 
   const [transfers, setTransfers] = useState<Transfer[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [notification, setNotification] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [notification, setNotification] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
 
   // Create transfer modal
   const [createOpen, setCreateOpen] = useState(false);
   const [facilities, setFacilities] = useState<Facility[]>([]);
   const [sosId, setSosId] = useState("");
   const [alertId, setAlertId] = useState("");
+  const [patientRef, setPatientRef] = useState("");
+  const [urgency, setUrgency] = useState("");
+  const [medicalNotes, setMedicalNotes] = useState("");
   const [targetFacilityId, setTargetFacilityId] = useState("");
   const [targetDept, setTargetDept] = useState("");
   const [reason, setReason] = useState("");
   const [creating, setCreating] = useState(false);
 
-  const showNotification = useCallback((type: "success" | "error", message: string) => {
-    setNotification({ type, message });
-    setTimeout(() => setNotification(null), 4000);
-  }, []);
+  const showNotification = useCallback(
+    (type: "success" | "error", message: string) => {
+      setNotification({ type, message });
+      setTimeout(() => setNotification(null), 4000);
+    },
+    []
+  );
 
   const fetchTransfers = useCallback(async () => {
     try {
       setLoading(true);
+      setError(null);
       const params = new URLSearchParams();
       if (statusFilter) params.set("status_filter", statusFilter);
       const qs = params.toString() ? `?${params.toString()}` : "";
-      const res = await fetch(`${API_URL}/api/v1/transfers${qs}`, { headers: getAuthHeaders() });
-      if (res.ok) {
-        const data = await res.json();
-        setTransfers(data.transfers ?? []);
-        setTotal(data.total ?? 0);
+      const res = await fetch(`${API_URL}/api/v1/transfers${qs}`, {
+        headers: getAuthHeaders(),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(
+          (err as { detail?: string }).detail || t("transfer.loadFailed")
+        );
       }
-    } catch {
-      // silent
+      const data = await res.json();
+      setTransfers(data.transfers ?? []);
+      setTotal(data.total ?? 0);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t("transfer.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, t]);
 
   const fetchFacilities = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/api/v1/hospitals`, { headers: getAuthHeaders() });
+      const res = await fetch(`${API_URL}/api/v1/hospitals`, {
+        headers: getAuthHeaders(),
+      });
       if (res.ok) {
         const data = await res.json();
-        setFacilities((data.hospitals ?? []).filter((f: Facility) => f.id !== facilityId));
+        setFacilities(
+          (data.hospitals ?? []).filter((f: Facility) => f.id !== facilityId)
+        );
       }
     } catch {
-      // silent
+      // non-blocking
     }
   }, [facilityId]);
 
@@ -110,52 +481,87 @@ const CaseTransfers: React.FC = () => {
     fetchTransfers();
   }, [fetchTransfers]);
 
-  const handleAccept = async (id: string) => {
-    setActionLoading(id);
-    try {
-      const res = await fetch(`${API_URL}/api/v1/transfers/${id}/accept`, {
-        method: "PUT",
-        headers: getAuthHeaders(),
-      });
-      if (res.ok) {
-        showNotification("success", "Transfer accepted");
-        fetchTransfers();
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showNotification("error", (err as { detail?: string }).detail || "Failed");
-      }
-    } catch {
-      showNotification("error", "Network error");
-    } finally {
-      setActionLoading(null);
-    }
-  };
+  // ── Real-time updates via shared socket ────────────────────
 
-  const handleReject = async (id: string) => {
-    setActionLoading(id);
-    try {
-      const res = await fetch(`${API_URL}/api/v1/transfers/${id}/reject`, {
-        method: "PUT",
-        headers: getAuthHeaders(),
-        body: JSON.stringify({ reason: "Rejected by admin" }),
-      });
-      if (res.ok) {
-        showNotification("success", "Transfer rejected");
-        fetchTransfers();
-      } else {
-        const err = await res.json().catch(() => ({}));
-        showNotification("error", (err as { detail?: string }).detail || "Failed");
+  const mergeTransfer = useCallback((incoming: Transfer) => {
+    setTransfers((prev) => {
+      if (prev.some((x) => x.id === incoming.id)) {
+        return prev.map((x) => (x.id === incoming.id ? { ...x, ...incoming } : x));
       }
-    } catch {
-      showNotification("error", "Network error");
-    } finally {
-      setActionLoading(null);
-    }
-  };
+      return [incoming, ...prev];
+    });
+  }, []);
+
+  useSocketEvent<Transfer>("new_transfer", (data) => {
+    announce(t("transfer.createdMsg"), "polite");
+    mergeTransfer(data);
+    setTotal((prev) => prev + 1);
+  });
+
+  useSocketEvent<Transfer>("transfer_incoming", (data) => {
+    announce(t("transfer.createdMsg"), "polite");
+    mergeTransfer(data);
+  });
+
+  useSocketEvent<Transfer>("transfer_updated", (data) => {
+    mergeTransfer(data);
+  });
+
+  // ── Actions ─────────────────────────────────────────────────
+
+  const doAction = useCallback(
+    async (
+      id: string,
+      path: string,
+      method: string,
+      body: unknown,
+      successMsg: string
+    ) => {
+      setActionLoading(id);
+      try {
+        const res = await fetch(`${API_URL}/api/v1/transfers/${id}${path}`, {
+          method,
+          headers: getAuthHeaders(),
+          ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+        });
+        if (res.ok) {
+          const updated = (await res.json()) as Transfer;
+          mergeTransfer(updated);
+          showNotification("success", successMsg);
+          announce(successMsg, "polite");
+        } else {
+          const err = await res.json().catch(() => ({}));
+          showNotification(
+            "error",
+            (err as { detail?: string }).detail || t("transfer.actionFailed")
+          );
+        }
+      } catch {
+        showNotification("error", t("transfer.networkError"));
+      } finally {
+        setActionLoading(null);
+      }
+    },
+    [mergeTransfer, showNotification, t]
+  );
+
+  const handleAccept = (id: string) =>
+    doAction(id, "/accept", "PUT", undefined, t("transfer.acceptedMsg"));
+
+  const handleReject = (id: string) =>
+    doAction(id, "/reject", "PUT", { reason: null }, t("transfer.rejectedMsg"));
+
+  const handleStatusChange = (id: string, status: string) =>
+    doAction(id, "/status", "PUT", { status }, t("transfer.updatedMsg"));
+
+  // ── Create ──────────────────────────────────────────────────
 
   const openCreateModal = () => {
     setSosId("");
     setAlertId("");
+    setPatientRef("");
+    setUrgency("");
+    setMedicalNotes("");
     setTargetFacilityId("");
     setTargetDept("");
     setReason("");
@@ -175,6 +581,9 @@ const CaseTransfers: React.FC = () => {
         reason: reason.trim() || undefined,
       };
       if (alertId.trim()) body.alert_id = alertId.trim();
+      if (patientRef.trim()) body.patient_ref = patientRef.trim();
+      if (urgency) body.urgency = urgency;
+      if (medicalNotes.trim()) body.medical_notes = medicalNotes.trim();
 
       const res = await fetch(`${API_URL}/api/v1/transfers`, {
         method: "POST",
@@ -182,268 +591,292 @@ const CaseTransfers: React.FC = () => {
         body: JSON.stringify(body),
       });
       if (res.ok) {
-        showNotification("success", "Transfer created");
+        const created = (await res.json()) as Transfer;
+        mergeTransfer(created);
+        setTotal((prev) => prev + 1);
+        showNotification("success", t("transfer.createdMsg"));
         setCreateOpen(false);
-        fetchTransfers();
       } else {
         const err = await res.json().catch(() => ({}));
-        showNotification("error", (err as { detail?: string }).detail || "Failed to create transfer");
+        showNotification(
+          "error",
+          (err as { detail?: string }).detail || t("transfer.actionFailed")
+        );
       }
     } catch {
-      showNotification("error", "Network error");
+      showNotification("error", t("transfer.networkError"));
     } finally {
       setCreating(false);
     }
   };
 
-  const isIncoming = (t: Transfer) => t.to_facility_id === facilityId;
+  // ── Board sections ──────────────────────────────────────────
+
+  const { incomingOpen, ownAndTracked } = useMemo(() => {
+    const incoming: Transfer[] = [];
+    const rest: Transfer[] = [];
+    for (const tr of transfers) {
+      if (tr.status === "pending" && tr.to_facility_id === facilityId && !isSuper) {
+        incoming.push(tr);
+      } else {
+        rest.push(tr);
+      }
+    }
+    return { incomingOpen: incoming, ownAndTracked: rest };
+  }, [transfers, facilityId, isSuper]);
+
+  const renderCard = (tr: Transfer) => (
+    <TransferCard
+      key={tr.id}
+      transfer={tr}
+      facilityId={facilityId}
+      isSuper={isSuper}
+      actionLoading={actionLoading}
+      onAccept={handleAccept}
+      onReject={handleReject}
+      onStatusChange={handleStatusChange}
+    />
+  );
+
+  // ── Render ──────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
-      {/* Notification */}
+      {/* Notification toast */}
       {notification && (
         <div
-          className={`fixed top-4 end-4 z-50 rounded-lg px-4 py-3 shadow-lg transition-all ${
+          role="status"
+          className={`fixed end-4 top-4 z-50 flex items-center gap-2 rounded-lg border px-4 py-3 shadow-2 ${
             notification.type === "success"
-              ? "bg-green-50 border border-green-200 text-green-800"
-              : "bg-red-50 border border-red-200 text-red-800"
+              ? "border-success bg-success-soft text-on-success-soft"
+              : "border-danger bg-danger-soft text-on-danger-soft"
           }`}
         >
-          <span className="text-sm font-medium">{notification.message}</span>
+          {notification.type === "success" ? (
+            <CircleCheck aria-hidden="true" className="h-4 w-4 shrink-0" />
+          ) : (
+            <CircleAlert aria-hidden="true" className="h-4 w-4 shrink-0" />
+          )}
+          <span className="text-sm font-semibold">{notification.message}</span>
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Case Transfers</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Transfer cases between departments — {total} transfer{total !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <button
-          onClick={openCreateModal}
-          className="inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-purple-700"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          New Transfer
-        </button>
-      </div>
+      <PageHeader
+        icon={<ArrowLeftRight />}
+        title={t("transfer.title")}
+        description={t("transfer.subtitle")}
+        actions={
+          <>
+            <Button variant="secondary" icon={<RefreshCw />} onClick={fetchTransfers}>
+              {t("common.refresh")}
+            </Button>
+            <Button icon={<Plus />} onClick={openCreateModal}>
+              {t("transfer.newTransfer")}
+            </Button>
+          </>
+        }
+      />
 
-      {/* Filters */}
-      <div className="flex items-center gap-2">
-        {["", "pending", "accepted", "rejected"].map((s) => (
+      {/* Status filter chips */}
+      <div
+        className="flex flex-wrap items-center gap-2"
+        role="group"
+        aria-label={t("transfer.filterLabel")}
+      >
+        {STATUS_FILTERS.map((s) => (
           <button
             key={s}
+            type="button"
             onClick={() => setStatusFilter(s)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+            aria-pressed={statusFilter === s}
+            className={`min-h-11 rounded-full border px-4 text-sm font-semibold transition-colors focus-visible:outline-3 focus-visible:outline-focus focus-visible:outline-offset-2 ${
               statusFilter === s
-                ? "bg-purple-600 text-white"
-                : "border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                ? "border-transparent bg-accent text-on-accent"
+                : "border-edge-strong bg-surface text-ink-muted hover:bg-surface-2 hover:text-ink"
             }`}
           >
-            {s === "" ? "All" : s.charAt(0).toUpperCase() + s.slice(1)}
+            {s === "" ? t("transfer.statusAll") : t(`transfer.status.${s}`, s)}
           </button>
         ))}
       </div>
 
-      {/* Transfer list */}
-      {loading ? (
-        <div className="flex h-32 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-purple-200 border-t-purple-600" />
-        </div>
-      ) : transfers.length === 0 ? (
-        <div className="rounded-xl border border-gray-200 bg-white px-4 py-12 text-center text-sm text-gray-400">
-          No transfers found
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {transfers.map((transfer) => {
-            const incoming = isIncoming(transfer);
-            const isPending = transfer.status === "pending";
-            return (
-              <div
-                key={transfer.id}
-                className={`rounded-xl border bg-white p-5 shadow-sm ${
-                  incoming && isPending
-                    ? "border-yellow-300"
-                    : "border-gray-200"
-                }`}
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex-1 space-y-2">
-                    {/* Direction badge */}
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          incoming
-                            ? "bg-green-50 text-green-700"
-                            : "bg-blue-50 text-blue-700"
-                        }`}
-                      >
-                        {incoming ? "Incoming" : "Outgoing"}
-                      </span>
-                      <span
-                        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          statusBadge[transfer.status] ?? "bg-gray-100 text-gray-600"
-                        }`}
-                      >
-                        {transfer.status}
-                      </span>
-                    </div>
+      {/* Result count */}
+      <p className="text-sm text-ink-muted" role="status">
+        {t("transfer.totalLabel", { count: total })}
+      </p>
 
-                    {/* Routing */}
-                    <div className="flex items-center gap-2 text-sm">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${deptBadge[transfer.from_department] ?? "bg-gray-100 text-gray-700"}`}>
-                        {DEPARTMENT_LABELS[transfer.from_department as DepartmentType] ?? transfer.from_department}
-                      </span>
-                      <svg className="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                      </svg>
-                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${deptBadge[transfer.to_department] ?? "bg-gray-100 text-gray-700"}`}>
-                        {DEPARTMENT_LABELS[transfer.to_department as DepartmentType] ?? transfer.to_department}
-                      </span>
-                    </div>
+      {/* Loading */}
+      {loading && <LoadingState label={t("transfer.loading")} />}
 
-                    {/* Details */}
-                    <div className="text-xs text-gray-500 space-y-0.5">
-                      <p>SOS: <span className="font-mono">{transfer.sos_request_id.slice(0, 8)}...</span></p>
-                      {transfer.reason && <p>Reason: {transfer.reason}</p>}
-                      {transfer.created_at && <p>{timeAgo(transfer.created_at)}</p>}
-                    </div>
+      {/* Error + retry */}
+      {error && !loading && (
+        <Card className="border-danger bg-danger-soft">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="flex items-center gap-2 text-sm font-semibold text-on-danger-soft">
+              <TriangleAlert aria-hidden="true" className="h-5 w-5 shrink-0" />
+              {error}
+            </p>
+            <Button variant="secondary" size="sm" onClick={fetchTransfers}>
+              {t("common.retry")}
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {/* Board */}
+      {!loading && !error && (
+        <>
+          {transfers.length === 0 ? (
+            <EmptyState
+              icon={<Inbox />}
+              title={t("transfer.empty")}
+              description={t("transfer.emptyDesc")}
+              action={
+                <Button variant="secondary" icon={<Plus />} onClick={openCreateModal}>
+                  {t("transfer.newTransfer")}
+                </Button>
+              }
+            />
+          ) : (
+            <div className="space-y-6">
+              {/* Section 1 — open requests from other facilities */}
+              {incomingOpen.length > 0 && (
+                <section aria-labelledby="transfers-incoming-heading" className="space-y-3">
+                  <div>
+                    <h2
+                      id="transfers-incoming-heading"
+                      className="text-base font-bold text-ink"
+                    >
+                      {t("transfer.boardIncoming")} ({incomingOpen.length})
+                    </h2>
+                    <p className="text-sm text-ink-muted">{t("transfer.boardIncomingDesc")}</p>
                   </div>
+                  {incomingOpen.map(renderCard)}
+                </section>
+              )}
 
-                  {/* Actions */}
-                  {incoming && isPending && (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleAccept(transfer.id)}
-                        disabled={actionLoading === transfer.id}
-                        className="rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
-                      >
-                        Accept
-                      </button>
-                      <button
-                        onClick={() => handleReject(transfer.id)}
-                        disabled={actionLoading === transfer.id}
-                        className="rounded-lg border border-red-300 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-50 disabled:opacity-50"
-                      >
-                        Reject
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              {/* Section 2 — own & tracked transfers */}
+              {ownAndTracked.length > 0 && (
+                <section aria-labelledby="transfers-own-heading" className="space-y-3">
+                  <div>
+                    <h2 id="transfers-own-heading" className="text-base font-bold text-ink">
+                      {t("transfer.boardMine")} ({ownAndTracked.length})
+                    </h2>
+                    <p className="text-sm text-ink-muted">{t("transfer.boardMineDesc")}</p>
+                  </div>
+                  {ownAndTracked.map(renderCard)}
+                </section>
+              )}
+            </div>
+          )}
+        </>
       )}
 
       {/* Create Transfer Modal */}
-      {createOpen && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4">
-          <div className="my-8 w-full max-w-lg rounded-xl bg-white shadow-xl">
-            <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-              <h3 className="text-lg font-semibold text-gray-900">Create Transfer</h3>
-              <button
-                onClick={() => setCreateOpen(false)}
-                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-              >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <form onSubmit={handleCreate} className="p-6 space-y-4">
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">SOS Request ID *</label>
-                <input
-                  type="text"
-                  value={sosId}
-                  onChange={(e) => setSosId(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  placeholder="UUID of the SOS request"
-                  required
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Alert ID (optional)</label>
-                <input
-                  type="text"
-                  value={alertId}
-                  onChange={(e) => setAlertId(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  placeholder="UUID of the alert"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Target Department *</label>
-                <select
-                  value={targetDept}
-                  onChange={(e) => {
-                    setTargetDept(e.target.value);
-                    setTargetFacilityId("");
-                  }}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  required
-                >
-                  <option value="">Select department...</option>
-                  <option value="hospital">Hospital</option>
-                  <option value="police">Police</option>
-                  <option value="civil_defense">Civil Defense</option>
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Target Facility *</label>
-                <select
-                  value={targetFacilityId}
-                  onChange={(e) => setTargetFacilityId(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  required
-                >
-                  <option value="">Select facility...</option>
-                  {facilities
-                    .filter((f) => !targetDept || f.department_type === targetDept)
-                    .map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name} ({DEPARTMENT_LABELS[f.department_type as DepartmentType] ?? f.department_type})
-                      </option>
-                    ))}
-                </select>
-              </div>
-              <div>
-                <label className="mb-1 block text-sm font-medium text-gray-700">Reason</label>
-                <textarea
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
-                  rows={3}
-                  placeholder="Why is this case being transferred?"
-                />
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setCreateOpen(false)}
-                  disabled={creating}
-                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={creating || !sosId.trim() || !targetFacilityId || !targetDept}
-                  className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 disabled:opacity-50"
-                >
-                  {creating ? "Creating..." : "Create Transfer"}
-                </button>
-              </div>
-            </form>
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title={t("transfer.createTitle")}
+        description={t("transfer.createDescription")}
+      >
+        <form onSubmit={handleCreate} className="flex flex-col gap-4">
+          <Input
+            label={t("transfer.sosId")}
+            required
+            type="text"
+            value={sosId}
+            onChange={(e) => setSosId(e.target.value)}
+            placeholder={t("transfer.sosIdPlaceholder")}
+          />
+          <Input
+            label={t("transfer.alertId")}
+            type="text"
+            value={alertId}
+            onChange={(e) => setAlertId(e.target.value)}
+            placeholder={t("transfer.alertIdPlaceholder")}
+          />
+          <Input
+            label={t("transfer.patientRef")}
+            type="text"
+            value={patientRef}
+            onChange={(e) => setPatientRef(e.target.value)}
+            placeholder={t("transfer.patientRefPlaceholder")}
+          />
+          <Select
+            label={t("aid.urgency")}
+            value={urgency}
+            onChange={(e) => setUrgency(e.target.value)}
+          >
+            <option value="">{t("transfer.selectUrgency")}</option>
+            {["low", "medium", "high", "critical"].map((u) => (
+              <option key={u} value={u}>
+                {t(`aid.urg.${u}`)}
+              </option>
+            ))}
+          </Select>
+          <Select
+            label={t("transfer.targetDept")}
+            required
+            value={targetDept}
+            onChange={(e) => {
+              setTargetDept(e.target.value);
+              setTargetFacilityId("");
+            }}
+          >
+            <option value="">{t("transfer.selectDept")}</option>
+            <option value="hospital">{t("transfer.dept.hospital")}</option>
+            <option value="police">{t("transfer.dept.police")}</option>
+            <option value="civil_defense">{t("transfer.dept.civil_defense")}</option>
+          </Select>
+          <Select
+            label={t("transfer.targetFacility")}
+            required
+            value={targetFacilityId}
+            onChange={(e) => setTargetFacilityId(e.target.value)}
+          >
+            <option value="">{t("transfer.selectFacility")}</option>
+            {facilities
+              .filter((f) => !targetDept || f.department_type === targetDept)
+              .map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name} ({t(`transfer.dept.${f.department_type}`, f.department_type)})
+                </option>
+              ))}
+          </Select>
+          <Textarea
+            label={t("transfer.reason")}
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            placeholder={t("transfer.reasonPlaceholder")}
+          />
+          <Textarea
+            label={t("transfer.notes")}
+            value={medicalNotes}
+            onChange={(e) => setMedicalNotes(e.target.value)}
+            rows={3}
+            placeholder={t("transfer.notesPlaceholder")}
+          />
+          <div className="flex justify-end gap-3 pt-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={creating}
+              onClick={() => setCreateOpen(false)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              type="submit"
+              icon={<Send />}
+              loading={creating}
+              disabled={creating || !sosId.trim() || !targetFacilityId || !targetDept}
+            >
+              {t("transfer.create")}
+            </Button>
           </div>
-        </div>
-      )}
+        </form>
+      </Modal>
     </div>
   );
 };
